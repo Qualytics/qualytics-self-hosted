@@ -29,6 +29,7 @@ type: Opaque
 data:
   RABBITMQ_ERLANG_COOKIE: V0lXVkhDRFRDSVVBV0FOTE1RQVc=
 
+{{- if .Values.rabbitmq.pvc.enabled }}
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -54,7 +55,8 @@ spec:
   {{- end }}
   resources:
     requests:
-      storage: 10Gi
+      storage: {{ .Values.rabbitmq.pvc.storageSize }}
+{{- end }}
 
 ---
 apiVersion: apps/v1
@@ -147,7 +149,7 @@ spec:
           mountPath: /etc/rabbitmq/tls/
           readOnly: true
         {{- end }}
-        - name: rabbitmq-data-pvc
+        - name: rabbitmq-data
           mountPath: /var/lib/rabbitmq
           readOnly: false
         - name: config-file
@@ -160,9 +162,14 @@ spec:
         secret:
           secretName: rabbitmq-tls
       {{- end }}
-      - name: rabbitmq-data-pvc
+      {{- if .Values.rabbitmq.pvc.enabled }}
+      - name: rabbitmq-data
         persistentVolumeClaim:
           claimName: rabbitmq-data-claim
+      {{- else }}
+      - name: rabbitmq-data
+        emptyDir: {}
+      {{- end }}
       - name: config-file
         emptyDir: {}
       - name: plugins-file

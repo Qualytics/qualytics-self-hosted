@@ -8,9 +8,59 @@ tests:
       - hasDocuments:
           count: 5
 
-  # Basic document checks  
+  # Basic document checks
   - it: should create rabbitmq StatefulSet
     asserts:
       - isKind:
           of: StatefulSet
         documentIndex: 3
+
+  # PVC vs emptyDir tests
+  - it: should create PVC and use persistentVolumeClaim when pvc.enabled is true (default)
+    set:
+      rabbitmq.pvc.enabled: true
+    asserts:
+      # PVC resource should exist
+      - isKind:
+          of: PersistentVolumeClaim
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: "rabbitmq-data-claim"
+        documentIndex: 2
+      # StatefulSet volume should use persistentVolumeClaim
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: rabbitmq-data
+            persistentVolumeClaim:
+              claimName: rabbitmq-data-claim
+        documentIndex: 3
+
+  - it: should NOT create PVC and use emptyDir when pvc.enabled is false
+    set:
+      rabbitmq.pvc.enabled: false
+      certmanager.enabled: false
+    asserts:
+      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC, no Certificate)
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: ConfigMap
+        documentIndex: 0
+      - isKind:
+          of: Secret
+        documentIndex: 1
+      - isKind:
+          of: StatefulSet
+        documentIndex: 2
+      - isKind:
+          of: Service
+        documentIndex: 3
+      # StatefulSet volume should use emptyDir
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: rabbitmq-data
+            emptyDir: {}
+        documentIndex: 2

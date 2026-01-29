@@ -101,13 +101,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260114-2cd028d"
+    controlplaneImageTag: "20260129-3f3d018"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260119-698c83a"
+    dataplaneImageTag: "20260129-6adbb13"
 frontendImage:
   image:
-    frontendImageTag: "20260114-9243c66"
+    frontendImageTag: "20260129-75702c6"
 
 # Storage classes
 storageClass:
@@ -286,7 +286,9 @@ postgres:
 # RabbitMQ
 #--------------------------------------------------------------------------------
 rabbitmq:
+  # Set pvc.enabled to false to use emptyDir (node-local disk) instead of PVC
   pvc:
+    enabled: true
     storageSize: "10Gi"
   image:
     imageUrl: "rabbitmq"
