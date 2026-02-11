@@ -101,13 +101,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260207-93bfe9e"
+    controlplaneImageTag: "20260211-c2cd6f1"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260207-5784379"
+    dataplaneImageTag: "20260211-45c42a5"
 frontendImage:
   image:
-    frontendImageTag: "20260207-ee96065"
+    frontendImageTag: "20260211-6e0c1c6"
 
 # Storage classes
 storageClass:
