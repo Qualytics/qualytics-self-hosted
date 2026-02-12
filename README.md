@@ -48,21 +48,17 @@ For production workloads with large data volumes, we recommend separate node gro
 
 #### Suggested Instance Types
 
-The table below shows **suggested** instance types for a standard production deployment. These are recommendations based on typical workloads—your actual requirements may vary based on data volume and processing needs.
+The table below shows **suggested** instance types for a standard **Medium-tier** production deployment, suitable for most workloads up to 10 TB of data under management.
 
 |          |          Application Nodes          |               Spark Driver Nodes                |               Spark Executor Nodes               |
 |----------|:-----------------------------------:|:-----------------------------------------------:|:------------------------------------------------:|
 | Label    | appNodes=true                       | driverNodes=true                                | executorNodes=true                               |
 | Scaling  | Autoscaling (1 node on-demand)      | Autoscaling (1 node on-demand)                  | Autoscaling (1 - 12 nodes spot)                  |
 | EKS      | m8g.2xlarge (8 vCPUs, 32 GB)        | r8g.2xlarge (8 vCPUs, 64 GB)                    | r8gd.2xlarge (8 vCPUs, 64 GB, 474 GB SSD)        |
-| GKE      | n4-standard-8 (8 vCPUs, 32 GB)      | n4-highmem-8 (8 vCPUs, 64 GB)                   | n2-highmem-8 + Local SSD (8 vCPUs, 64 GB) ¹      |
+| GKE      | n4-standard-8 (8 vCPUs, 32 GB)      | n4-highmem-8 (8 vCPUs, 64 GB)                   | n2-highmem-8 + Local SSD (8 vCPUs, 64 GB)        |
 | AKS      | Standard_D8s_v6 (8 vCPUs, 32 GB)    | Standard_E8s_v6 (8 vCPUs, 64 GB)                | Standard_E8ds_v5 (8 vCPUs, 64 GB, 300 GB SSD)    |
 
-¹ GKE executor nodes: Attach local SSDs via node pool config (e.g., `--local-nvme-ssd-block count=2` for 750 GB). The N4 series does not support local SSD attachments, so N2 is recommended for executors.
-
-> **Note:** Local SSD storage on executor nodes is recommended for optimal Spark performance but not mandatory. Spark will use remote storage for shuffle and scratch data when local SSD is unavailable.
-
-Contact your [Qualytics account manager](mailto://hello@qualytics.ai) to discuss the right infrastructure sizing for your specific data volumes and processing requirements.
+For deployments with different data volumes, the [Cluster Sizing Guide](./docs/CLUSTER_SIZING.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto://hello@qualytics.ai) for sizing guidance.
 
 
 #### Docker Registry Secrets
@@ -214,4 +210,5 @@ kubectl logs -f pod qualytics-spark-driver -n qualytics
 
 ## Additional Documentation
 
+- [Cluster Sizing Guide](./docs/CLUSTER_SIZING.md) — Choose the right cluster size based on your data volume
 - [Qualytics UserGuide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
