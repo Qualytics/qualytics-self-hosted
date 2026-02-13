@@ -58,7 +58,7 @@ The table below shows **suggested** instance types for a standard **Medium-tier*
 | GKE      | n4-standard-8 (8 vCPUs, 32 GB)      | n4-highmem-8 (8 vCPUs, 64 GB)                   | n2-highmem-8 + Local SSD (8 vCPUs, 64 GB)        |
 | AKS      | Standard_D8s_v6 (8 vCPUs, 32 GB)    | Standard_E8s_v6 (8 vCPUs, 64 GB)                | Standard_E8ds_v5 (8 vCPUs, 64 GB, 300 GB SSD)    |
 
-For deployments with different data volumes, the [Cluster Sizing Guide](./docs/CLUSTER_SIZING.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto://hello@qualytics.ai) for sizing guidance.
+For deployments with different data volumes, the [Cluster Sizing Guide](./docs/cluster-sizing.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto://hello@qualytics.ai) for sizing guidance.
 
 
 #### Docker Registry Secrets
@@ -210,5 +210,5 @@ kubectl logs -f pod qualytics-spark-driver -n qualytics
 
 ## Additional Documentation
 
-- [Cluster Sizing Guide](./docs/CLUSTER_SIZING.md) — Choose the right cluster size based on your data volume
+- [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Qualytics UserGuide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
