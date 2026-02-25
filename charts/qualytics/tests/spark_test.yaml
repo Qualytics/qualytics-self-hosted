@@ -20,6 +20,12 @@ tests:
           path: spec.mainClass
           value: io.qualytics.dataplane.SparkMothership
 
+  - it: should have helm hook annotations for post-install ordering
+    asserts:
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+
   # Platform-specific configurations (template.values.yaml: global.platform)
   - it: should configure AWS platform volumes correctly
     set:
