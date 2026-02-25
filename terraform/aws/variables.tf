@@ -146,14 +146,18 @@ variable "executor_capacity_type" {
 }
 
 #-------------------------------------------------------------------------------
-# Node Configuration Options
+# Cluster Authentication
 #-------------------------------------------------------------------------------
 
-variable "enable_node_taints" {
-  description = "Enable taints on node groups for dedicated workloads (requires matching tolerations in values.yaml)"
-  type        = bool
-  default     = false
+variable "cluster_admin_arns" {
+  description = "List of IAM principal ARNs (roles or users) to grant cluster admin access"
+  type        = list(string)
+  default     = []
 }
+
+#-------------------------------------------------------------------------------
+# Node Configuration Options
+#-------------------------------------------------------------------------------
 
 variable "enable_nvme_setup" {
   description = "Enable NVMe instance store setup for executor nodes"

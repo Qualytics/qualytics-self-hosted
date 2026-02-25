@@ -82,11 +82,18 @@ executor_node_desired_size = 1
 executor_capacity_type = "SPOT"
 
 #-------------------------------------------------------------------------------
-# Node Configuration
+# Cluster Authentication
 #-------------------------------------------------------------------------------
 
-# Enable taints to ensure workloads run on appropriate nodes (requires matching tolerations in values.yaml)
-enable_node_taints = false
+# IAM roles/users to grant cluster admin access
+# cluster_admin_arns = [
+#   "arn:aws:iam::123456789012:role/my-admin-role",
+#   "arn:aws:iam::123456789012:user/my-user",
+# ]
+
+#-------------------------------------------------------------------------------
+# Node Configuration
+#-------------------------------------------------------------------------------
 
 # Enable NVMe setup script for executor nodes with local SSDs
 enable_nvme_setup = true
