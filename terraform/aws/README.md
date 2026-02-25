@@ -103,7 +103,7 @@ See `variables.tf` for all available configuration options, including:
 - Node group sizing and instance types
 - VPC CIDR configuration
 - Kubernetes version
-- Node taints and labels
+- Cluster authentication (IAM access entries)
 
 ## Helm Values Configuration
 
@@ -121,27 +121,6 @@ driverNodeSelector:
 
 executorNodeSelector:
   executorNodes: "true"
-```
-
-If you enable node taints (`enable_node_taints = true`), also add tolerations:
-
-```yaml
-tolerations:
-  appNodeTolerations:
-    - key: appNodes
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
-  driverNodeTolerations:
-    - key: driverNodes
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
-  executorNodeTolerations:
-    - key: executorNodes
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
 ```
 
 ## Cleanup
