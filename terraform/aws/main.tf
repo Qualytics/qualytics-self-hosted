@@ -168,6 +168,20 @@ module "eks" {
   # Cluster access configuration
   enable_cluster_creator_admin_permissions = true
 
+  access_entries = {
+    for idx, arn in var.cluster_admin_arns : "admin-${idx}" => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+
   cluster_addons = {
     coredns = {
       most_recent = true
@@ -202,14 +216,6 @@ module "eks" {
         appNodes = "true"
       }
 
-      taints = var.enable_node_taints ? [
-        {
-          key    = "appNodes"
-          value  = "true"
-          effect = "NO_SCHEDULE"
-        }
-      ] : []
-
       tags = merge(local.tags, {
         "k8s.io/cluster-autoscaler/enabled"         = "true"
         "k8s.io/cluster-autoscaler/${local.name}"   = "owned"
@@ -233,14 +239,6 @@ module "eks" {
         driverNodes = "true"
       }
 
-      taints = var.enable_node_taints ? [
-        {
-          key    = "driverNodes"
-          value  = "true"
-          effect = "NO_SCHEDULE"
-        }
-      ] : []
-
       tags = merge(local.tags, {
         "k8s.io/cluster-autoscaler/enabled"         = "true"
         "k8s.io/cluster-autoscaler/${local.name}"   = "owned"
@@ -263,14 +261,6 @@ module "eks" {
       labels = {
         executorNodes = "true"
       }
-
-      taints = var.enable_node_taints ? [
-        {
-          key    = "executorNodes"
-          value  = "true"
-          effect = "NO_SCHEDULE"
-        }
-      ] : []
 
       # Pre-bootstrap commands to format and mount NVMe drives
       pre_bootstrap_user_data = var.enable_nvme_setup ? local.nvme_setup_script : ""
