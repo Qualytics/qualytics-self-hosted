@@ -177,6 +177,13 @@ spec:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
         paths:
+          - path: /(\.well-known.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ .Release.Name }}-api-service
+                port:
+                  number: {{ .Values.controlplane.ingress.servicePort }}
           - path: {{ .Values.frontend.ingress.path | quote }}
             pathType: ImplementationSpecific
             backend:

@@ -175,6 +175,11 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: auth0_organization
+          - name: AUTH0_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: auth0_spa_client_id
           {{- end }}
           - name: RABBIT_MQ_HOST
             value: "{{ .Release.Name }}-rabbitmq"

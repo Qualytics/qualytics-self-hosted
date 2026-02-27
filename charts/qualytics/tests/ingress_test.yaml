@@ -107,6 +107,14 @@ tests:
         documentIndex: 2
       - equal:
           path: spec.rules[0].http.paths[0].path
+          value: "/(\\.well-known.*)"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].http.paths[0].pathType
+          value: "ImplementationSpecific"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].http.paths[1].path
           value: "/?(.*)"
         documentIndex: 2
       # Verify OWASP rules are enabled for frontend

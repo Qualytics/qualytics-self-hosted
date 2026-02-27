@@ -198,6 +198,18 @@ tests:
             value: "false"
         documentIndex: 0
 
+  - it: should set AUTH0_CLIENT_ID from secret
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH0_CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: auth0_spa_client_id
+        documentIndex: 0
+
   - it: should set APP_DEPLOYMENT_MODE to kubernetes by default
     asserts:
       - contains:
