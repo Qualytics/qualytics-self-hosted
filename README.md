@@ -256,6 +256,7 @@ kubectl logs -f pod qualytics-spark-driver -n qualytics
 ## Additional Documentation
 
 - [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
+- [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
 - [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) — Configure OIDC authentication with your enterprise IdP

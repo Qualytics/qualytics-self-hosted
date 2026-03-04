@@ -227,6 +227,8 @@ curl -I https://<your-dns-record>/api/login
 
 For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's authorization endpoint. For Auth0, the frontend handles the login redirect.
 
+> **Next step:** After deployment and authentication are working, your instance has a 31-day grace period. See [License Management](./license-management.md) to activate your license before the grace period ends.
+
 ---
 
 ## Troubleshooting
@@ -249,4 +251,5 @@ For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's
 - [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) — Detailed OIDC setup with IdP-specific examples
 - [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Auth0 setup and request workflow
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
+- [License Management](./license-management.md) — Activate and renew your deployment license
 - [Cluster Sizing Guide](./cluster-sizing.md) — Choose the right cluster configuration
