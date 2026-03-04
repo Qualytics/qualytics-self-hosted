@@ -91,6 +91,13 @@ spec:
           {{- if ( eq .Values.global.authType "OIDC" ) }}
           - name: API_AUTH
             value: OIDC
+          {{- if .Values.secrets.oidc.oidc_discovery_url }}
+          - name: OIDC_DISCOVERY_URL
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_discovery_url
+          {{- end }}
           - name: OIDC_REDIRECT_URL
             value: {{ printf "https://%s$(API_ROOT_PATH)/callback" .Values.global.dnsRecord }}
           - name: OIDC_SCOPES
@@ -98,21 +105,27 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_scopes
+          {{- if .Values.secrets.oidc.oidc_authorization_endpoint }}
           - name: OIDC_AUTHORIZATION_ENDPOINT
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_authorization_endpoint
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_token_endpoint }}
           - name: OIDC_TOKEN_ENDPOINT
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_token_endpoint
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_userinfo_endpoint }}
           - name: OIDC_USERINFO_ENDPOINT
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_userinfo_endpoint
+          {{- end }}
           - name: OIDC_CLIENT_ID
             valueFrom:
               secretKeyRef:

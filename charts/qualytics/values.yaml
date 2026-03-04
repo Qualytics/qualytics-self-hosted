@@ -101,7 +101,7 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260227-08eac9c"
+    controlplaneImageTag: "20260304-02f94bf"
 dataplaneImage:
   image:
     dataplaneImageTag: "20260227-88a5df2"
@@ -149,19 +149,26 @@ secrets:
     auth0_organization: org_changeme
     auth0_spa_client_id: spa_client_id
   oidc: # required for authType OIDC
-    oidc_scopes: oidc_scopes
-    oidc_authorization_endpoint: oidc_authorization_endpoint
-    oidc_token_endpoint: oidc_token_endpoint
-    oidc_userinfo_endpoint: oidc_userinfo_endpoint
-    oidc_client_id: oidc_client_id
-    oidc_client_secret: oidc_client_secret
-    oidc_user_id_key: oidc_user_id_key
-    oidc_user_email_key: oidc_user_email_key
-    oidc_user_name_key: oidc_user_name_key
-    oidc_user_fname_key: oidc_user_fname_key
-    oidc_user_lname_key: oidc_user_lname_key
-    oidc_user_picture_key: oidc_user_picture_key
-    oidc_user_provider_key: oidc_user_provider_key
+    # Discovery URL (recommended) — auto-discovers authorization_endpoint, token_endpoint,
+    # userinfo_endpoint, jwks_uri, and issuer from the IdP's .well-known/openid-configuration.
+    # When set, the 3 endpoint fields below become optional (used as fallbacks only).
+    oidc_discovery_url: ""
+    oidc_scopes: "openid,email,profile"
+    # Endpoint overrides — leave empty when using oidc_discovery_url
+    oidc_authorization_endpoint: ""
+    oidc_token_endpoint: ""
+    oidc_userinfo_endpoint: ""
+    # OAuth2 client credentials (required)
+    oidc_client_id: ""
+    oidc_client_secret: ""
+    # Claims mapping — OIDC-standard defaults work for most IdPs
+    oidc_user_id_key: "sub"
+    oidc_user_email_key: "email"
+    oidc_user_name_key: "name"
+    oidc_user_fname_key: "given_name"
+    oidc_user_lname_key: "family_name"
+    oidc_user_picture_key: "picture"
+    oidc_user_provider_key: "iss"
     oidc_allow_insecure_transport: false
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:

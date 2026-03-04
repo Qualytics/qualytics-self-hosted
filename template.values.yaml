@@ -11,20 +11,46 @@ global:
   platform: "aws"
   # Your DNS record (will be provided by Qualytics)
   dnsRecord: "changeme.qualytics.io"
-  # Authentication type: AUTH0 (recommended) or OIDC
+  # Authentication type: AUTH0 or OIDC (recommended for self-hosted)
   authType: "AUTH0"
 
 #--------------------------------------------------------------------------------
 # Authentication Secrets (REQUIRED)
+# Choose ONE of the following: Auth0 OR OIDC
+# See: https://userguide.qualytics.io/deployments/oidc-configuration/
+# See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
-  # Auth0 configuration (provided by Qualytics account manager)
+  # --- Option A: Auth0 (managed by Qualytics) ---
+  # Values provided by your Qualytics account manager
   auth0:
     auth0_domain: auth.qualytics.io
     auth0_audience: changeme-api
     auth0_organization: org_changeme
     auth0_spa_client_id: spa_client_id
-  
+
+  # --- Option B: OIDC (direct IdP integration, recommended for self-hosted) ---
+  # Uncomment and configure if using authType: "OIDC"
+  # oidc:
+  #   # Discovery URL (recommended) — auto-discovers endpoints from your IdP.
+  #   # When set, authorization_endpoint, token_endpoint, userinfo_endpoint,
+  #   # jwks_uri, and issuer are discovered automatically.
+  #   # Examples:
+  #   #   Okta:     https://<your-org>.okta.com/.well-known/openid-configuration
+  #   #   Entra ID: https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
+  #   #   Google:   https://accounts.google.com/.well-known/openid-configuration
+  #   #   Keycloak: https://<host>/realms/<realm>/.well-known/openid-configuration
+  #   oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
+  #   oidc_scopes: "openid,email,profile"
+  #   oidc_client_id: "your-client-id"
+  #   oidc_client_secret: "your-client-secret"
+  #   # Claims mapping defaults (sub, email, name, given_name, family_name, picture, iss)
+  #   # work for most IdPs — only override if your IdP uses non-standard claim names.
+  #   # Endpoint overrides (optional when using discovery URL):
+  #   # oidc_authorization_endpoint: ""
+  #   # oidc_token_endpoint: ""
+  #   # oidc_userinfo_endpoint: ""
+
   # System secrets (CHANGE THESE!)
   auth:
     jwt_signing_secret: ChangeMe!

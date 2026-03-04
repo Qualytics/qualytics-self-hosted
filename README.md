@@ -16,7 +16,7 @@ Before deploying Qualytics, ensure you have:
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
 - Docker registry credentials from your Qualytics account manager
-- Auth0 configuration details from your Qualytics account manager
+- Authentication configuration — either OIDC credentials from your IdP (recommended) or Auth0 credentials from your Qualytics account manager
 
 ## How should I use this chart?
 
@@ -90,8 +90,44 @@ The `template.values.yaml` file contains essential configurations with sensible 
      dnsRecord: "your-company.qualytics.io"  # or your custom domain
    ```
 
-2. **Auth0 Settings** (provided by your Qualytics account manager):
+2. **Authentication** — choose one of the following:
+
+   **Option A: OIDC — Direct IdP Integration (Recommended)**
+
+   Set `global.authType` to `OIDC` and configure your Identity Provider credentials. Register Qualytics as a Web Application in your IdP with `https://<your-domain>/api/callback` as the redirect URI, Authorization Code grant type, and at minimum `openid` scope.
+
    ```yaml
+   global:
+     authType: "OIDC"
+
+   secrets:
+     oidc:
+       oidc_scopes: "openid,email,profile"
+       oidc_authorization_endpoint: "https://your-idp.example.com/oauth2/authorize"
+       oidc_token_endpoint: "https://your-idp.example.com/oauth2/token"
+       oidc_userinfo_endpoint: "https://your-idp.example.com/oauth2/userinfo"
+       oidc_client_id: "your-client-id"
+       oidc_client_secret: "your-client-secret"
+       oidc_user_id_key: "sub"
+       oidc_user_email_key: "email"
+       oidc_user_name_key: "name"
+       oidc_user_fname_key: "given_name"
+       oidc_user_lname_key: "family_name"
+       oidc_user_picture_key: "picture"
+       oidc_user_provider_key: "auth_provider"
+       oidc_allow_insecure_transport: false
+   ```
+
+   > See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for detailed instructions including IdP-specific examples for Okta, Azure AD (Entra ID), Keycloak, and Google Workspace.
+
+   **Option B: Auth0 — Managed by Qualytics**
+
+   Contact your [Qualytics account manager](mailto://hello@qualytics.ai) to request Auth0 resources, then configure the provided values:
+
+   ```yaml
+   global:
+     authType: "AUTH0"
+
    secrets:
      auth0:
        auth0_audience: your-api-audience
@@ -99,11 +135,13 @@ The `template.values.yaml` file contains essential configurations with sensible 
        auth0_spa_client_id: your-spa-client-id
    ```
 
+   > See the [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) for details on how to request Auth0 resources from Qualytics.
+
 3. **Security Secrets** (generate secure random values):
    ```yaml
    secrets:
      auth:
-       jwt_signing_secret: your-secure-jwt-secret
+       jwt_signing_secret: your-secure-jwt-secret     # min 32 chars, generate with: openssl rand -base64 32
      postgres:
        secrets_passphrase: your-secure-passphrase
      rabbitmq:
@@ -172,7 +210,14 @@ Contact your [account manager](mailto://hello@qualytics.ai) for assistance with 
 
 ## Can I run a fully "air-gapped" deployment?
 
-Yes. The only egress requirement for a standard self-hosted Qualytics deployment is to https://auth.qualytics.io which provides Auth0-powered federated authentication. This is recommended for ease of installation and support, but not a strict requirement. If you require a fully private deployment with no access to the public internet, you can instead configure an OpenID Connect (OIDC) integration with your enterprise identity provider (IdP). Simply contact your Qualytics account manager for more details.
+Yes. The only egress requirement for a standard self-hosted Qualytics deployment is to https://auth.qualytics.io which provides Auth0-powered federated authentication. This is recommended for ease of installation and support, but not a strict requirement. If you require a fully private deployment with no access to the public internet, you can instead configure an OpenID Connect (OIDC) integration with your enterprise identity provider (IdP).
+
+To set up OIDC for an air-gapped deployment:
+1. Set `global.authType: "OIDC"` in your `values.yaml`
+2. Configure your enterprise IdP credentials under `secrets.oidc`
+3. Import Qualytics container images into your private registry
+
+See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for step-by-step instructions.
 
 ## Troubleshooting
 
@@ -210,5 +255,9 @@ kubectl logs -f pod qualytics-spark-driver -n qualytics
 
 ## Additional Documentation
 
+- [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
-- [Qualytics UserGuide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
+- [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
+- [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) — Configure OIDC authentication with your enterprise IdP
+- [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Configure Auth0 authentication (managed by Qualytics)
+- [Qualytics UserGuide](https://userguide.qualytics.io/) — Full platform documentation
