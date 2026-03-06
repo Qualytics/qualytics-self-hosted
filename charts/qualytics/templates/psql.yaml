@@ -1,4 +1,3 @@
-{{- if ( eq .Values.postgres.enabled true ) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +6,9 @@ metadata:
     app: {{ .Release.Name }}-psql
 spec:
   replicas: 0
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-psql
   template:
     metadata:
       name: {{ .Release.Name }}-psql
@@ -31,20 +33,28 @@ spec:
             - /bin/bash
             - -c
             - |
-              sleep 60m
+              sleep infinity
+          {{- if not .Values.postgres.enabled }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: qualytics-creds
+                  key: connection_url
+          {{- end }}
+          {{- if .Values.postgres.enabled }}
           volumeMounts:
             - name: postgres-snapshots-pvc
               mountPath: /mnt/postgres/data
+          {{- end }}
           resources:
             requests:
               memory: 100Mi
               cpu: 100m
       restartPolicy: Always
+      {{- if .Values.postgres.enabled }}
       volumes:
         - name: postgres-snapshots-pvc
           persistentVolumeClaim:
             claimName: postgres-snapshots-claim
-  selector:
-    matchLabels:
-      app: {{ .Release.Name }}-psql
-  {{- end }}
+      {{- end }}

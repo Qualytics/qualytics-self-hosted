@@ -2,16 +2,19 @@ suite: test psql deployment
 templates:
   - psql.yaml
 tests:
-  - it: should not render psql when postgres is disabled
-    set:
-      postgres.enabled: false
-    asserts:
-      - hasDocuments:
-          count: 0
-
   - it: should render psql deployment when postgres is enabled
     set:
       postgres.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Deployment
+        documentIndex: 0
+
+  - it: should render psql deployment when postgres is disabled (external)
+    set:
+      postgres.enabled: false
     asserts:
       - hasDocuments:
           count: 1
@@ -56,7 +59,7 @@ tests:
           value: "-c"
         documentIndex: 0
 
-  - it: should mount backup volume
+  - it: should mount backup volume when postgres is enabled
     set:
       postgres.enabled: true
     asserts:
@@ -66,6 +69,45 @@ tests:
             name: "postgres-snapshots-pvc"
             persistentVolumeClaim:
               claimName: "postgres-snapshots-claim"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: "postgres-snapshots-pvc"
+            mountPath: "/mnt/postgres/data"
+        documentIndex: 0
+
+  - it: should not mount volumes when postgres is disabled (external)
+    set:
+      postgres.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.volumes
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts
+        documentIndex: 0
+
+  - it: should inject DATABASE_URL from qualytics-creds secret when postgres is disabled (external)
+    set:
+      postgres.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: connection_url
+        documentIndex: 0
+
+  - it: should not inject DATABASE_URL when postgres is enabled
+    set:
+      postgres.enabled: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].env
         documentIndex: 0
 
   - it: should have correct node selector when configured
