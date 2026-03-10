@@ -1,4 +1,4 @@
-# Qualytics Docker Images - v2026.2.13
+# Qualytics Docker Images - v2026.3.6
 
 Complete list of Docker images required for a Qualytics self-hosted deployment. These images must be pulled and uploaded to your private container registry before installation.
 
@@ -8,9 +8,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag |
 |---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260213-136e8c1` |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260213-60de4a5` |
-| Frontend | `qualyticsai/frontend` | `20260213-f98485c` |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260306-05b3856` |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260306-a35dfd4` |
+| Frontend | `qualyticsai/frontend` | `20260306-0d2e19d` |
 
 ### Pull commands
 
@@ -19,9 +19,9 @@ An authentication token will be provided separately via secure message.
 ```bash
 docker login -u qualyticsai -p <token>
 
-docker pull qualyticsai/controlplane:20260213-136e8c1
-docker pull qualyticsai/dataplane:20260213-60de4a5
-docker pull qualyticsai/frontend:20260213-f98485c
+docker pull qualyticsai/controlplane:20260306-05b3856
+docker pull qualyticsai/dataplane:20260306-a35dfd4
+docker pull qualyticsai/frontend:20260306-0d2e19d
 ```
 
 ## Infrastructure Images
@@ -52,42 +52,42 @@ docker pull postgres:17
 
 | Component | Image |
 |---|---|
-| Controller | `ghcr.io/kubeflow/spark-operator/controller:2.3.0` |
-| Kubectl hook | `ghcr.io/kubeflow/spark-operator/kubectl:2.3.0` |
+| Controller | `ghcr.io/kubeflow/spark-operator/controller:2.4.0` |
+| Kubectl hook | `ghcr.io/kubeflow/spark-operator/kubectl:2.4.0` |
 
 ```bash
-docker pull ghcr.io/kubeflow/spark-operator/controller:2.3.0
-docker pull ghcr.io/kubeflow/spark-operator/kubectl:2.3.0
+docker pull ghcr.io/kubeflow/spark-operator/controller:2.4.0
+docker pull ghcr.io/kubeflow/spark-operator/kubectl:2.4.0
 ```
 
 ### Ingress NGINX (Optional - when `nginx.enabled: true`)
 
 | Component | Image |
 |---|---|
-| Controller | `registry.k8s.io/ingress-nginx/controller:v1.12.4` |
-| Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.0` |
+| Controller | `registry.k8s.io/ingress-nginx/controller:v1.14.2` |
+| Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.6` |
 
 ```bash
-docker pull registry.k8s.io/ingress-nginx/controller:v1.12.4
-docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.0
+docker pull registry.k8s.io/ingress-nginx/controller:v1.14.2
+docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.6
 ```
 
 ### Cert-Manager (Optional - when `certmanager.enabled: true`)
 
 | Component | Image |
 |---|---|
-| Controller | `quay.io/jetstack/cert-manager-controller:v1.18.2` |
-| Webhook | `quay.io/jetstack/cert-manager-webhook:v1.18.2` |
-| CA Injector | `quay.io/jetstack/cert-manager-cainjector:v1.18.2` |
-| ACME Solver | `quay.io/jetstack/cert-manager-acmesolver:v1.18.2` |
-| Startup API Check | `quay.io/jetstack/cert-manager-startupapicheck:v1.18.2` |
+| Controller | `quay.io/jetstack/cert-manager-controller:v1.19.2` |
+| Webhook | `quay.io/jetstack/cert-manager-webhook:v1.19.2` |
+| CA Injector | `quay.io/jetstack/cert-manager-cainjector:v1.19.2` |
+| ACME Solver | `quay.io/jetstack/cert-manager-acmesolver:v1.19.2` |
+| Startup API Check | `quay.io/jetstack/cert-manager-startupapicheck:v1.19.2` |
 
 ```bash
-docker pull quay.io/jetstack/cert-manager-controller:v1.18.2
-docker pull quay.io/jetstack/cert-manager-webhook:v1.18.2
-docker pull quay.io/jetstack/cert-manager-cainjector:v1.18.2
-docker pull quay.io/jetstack/cert-manager-acmesolver:v1.18.2
-docker pull quay.io/jetstack/cert-manager-startupapicheck:v1.18.2
+docker pull quay.io/jetstack/cert-manager-controller:v1.19.2
+docker pull quay.io/jetstack/cert-manager-webhook:v1.19.2
+docker pull quay.io/jetstack/cert-manager-cainjector:v1.19.2
+docker pull quay.io/jetstack/cert-manager-acmesolver:v1.19.2
+docker pull quay.io/jetstack/cert-manager-startupapicheck:v1.19.2
 ```
 
 ## Re-tagging for a Private Registry
@@ -98,9 +98,9 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260213-136e8c1 $REGISTRY/qualyticsai/controlplane:20260213-136e8c1
-docker tag qualyticsai/dataplane:20260213-60de4a5 $REGISTRY/qualyticsai/dataplane:20260213-60de4a5
-docker tag qualyticsai/frontend:20260213-f98485c $REGISTRY/qualyticsai/frontend:20260213-f98485c
+docker tag qualyticsai/controlplane:20260306-05b3856 $REGISTRY/qualyticsai/controlplane:20260306-05b3856
+docker tag qualyticsai/dataplane:20260306-a35dfd4 $REGISTRY/qualyticsai/dataplane:20260306-a35dfd4
+docker tag qualyticsai/frontend:20260306-0d2e19d $REGISTRY/qualyticsai/frontend:20260306-0d2e19d
 
 # Infrastructure images
 docker tag rabbitmq:4.0-management $REGISTRY/rabbitmq:4.0-management
@@ -110,9 +110,9 @@ docker tag busybox:latest $REGISTRY/busybox:latest
 docker tag postgres:17 $REGISTRY/postgres:17
 
 # Push all
-docker push $REGISTRY/qualyticsai/controlplane:20260213-136e8c1
-docker push $REGISTRY/qualyticsai/dataplane:20260213-60de4a5
-docker push $REGISTRY/qualyticsai/frontend:20260213-f98485c
+docker push $REGISTRY/qualyticsai/controlplane:20260306-05b3856
+docker push $REGISTRY/qualyticsai/dataplane:20260306-a35dfd4
+docker push $REGISTRY/qualyticsai/frontend:20260306-0d2e19d
 docker push $REGISTRY/rabbitmq:4.0-management
 docker push $REGISTRY/busybox:latest
 
@@ -135,7 +135,7 @@ kubectl create secret docker-registry regcred -n qualytics \
   --docker-password=<token>
 ```
 
-### 2. Install Qualytics v2026.2.13
+### 2. Install Qualytics v2026.3.6
 
 ```bash
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
@@ -143,7 +143,7 @@ helm repo update
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
-  --version 2026.2.13 \
+  --version 2026.3.6 \
   -f values.yaml \
   --timeout=20m
 ```
