@@ -55,6 +55,10 @@ api_server_authorized_ip_ranges = []
 # AKS SKU tier (Free or Standard). Standard recommended for production SLA.
 sku_tier = "Standard"
 
+# Availability zone to pin all node pools to (e.g. '1', '2', '3')
+# Prevents Azure Managed Disk zone mismatch when nodes are recycled into a different zone
+node_group_az = "1"
+
 #-------------------------------------------------------------------------------
 # Application Nodes
 # For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager
