@@ -131,6 +131,8 @@ resource "azurerm_kubernetes_cluster" "qualytics" {
 ################################################################################
 # Application Node Pool
 # For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager
+# Pinned to a single zone to prevent Azure Managed Disk AZ mismatch:
+# Managed Disks are zone-locked, so replacement nodes must come up in the same zone.
 ################################################################################
 
 resource "azurerm_kubernetes_cluster_node_pool" "app" {
@@ -139,6 +141,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "app" {
   vm_size               = var.app_node_vm_size
   vnet_subnet_id        = azurerm_subnet.aks.id
   os_disk_size_gb       = var.app_node_os_disk_size_gb
+  zones                 = [var.node_group_az]
 
   auto_scaling_enabled = true
   min_count            = var.app_node_min_count
@@ -164,6 +167,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "driver" {
   vm_size               = var.driver_node_vm_size
   vnet_subnet_id        = azurerm_subnet.aks.id
   os_disk_size_gb       = var.driver_node_os_disk_size_gb
+  zones                 = [var.node_group_az]
 
   auto_scaling_enabled = true
   min_count            = var.driver_node_min_count
@@ -190,6 +194,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "executor" {
   vm_size               = var.executor_node_vm_size
   vnet_subnet_id        = azurerm_subnet.aks.id
   os_disk_size_gb       = var.executor_node_os_disk_size_gb
+  zones                 = [var.node_group_az]
 
   auto_scaling_enabled = true
   min_count            = var.executor_node_min_count

@@ -82,6 +82,12 @@ variable "sku_tier" {
   default     = "Standard"
 }
 
+variable "node_group_az" {
+  description = "Availability zone to pin node pools to (e.g. '1', '2', '3'). Prevents Azure Managed Disk zone mismatch when nodes are recycled into a different zone."
+  type        = string
+  default     = "1"
+}
+
 #-------------------------------------------------------------------------------
 # Application Node Pool Configuration
 #-------------------------------------------------------------------------------
