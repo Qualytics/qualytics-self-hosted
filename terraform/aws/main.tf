@@ -64,6 +64,14 @@ locals {
   vpc_cidr = var.vpc_cidr
   azs      = slice(data.aws_availability_zones.available.names, 0, 3)
 
+  # Single-AZ subnet for node groups to prevent EBS volume/AZ mismatch on node recycle
+  node_group_az = "${var.aws_region}${var.node_group_az_suffix}"
+  node_group_subnet_ids = [
+    module.vpc.private_subnets[
+      index(module.vpc.azs, local.node_group_az)
+    ]
+  ]
+
   tags = merge(var.default_tags, {
     Cluster = local.name
   })
@@ -204,6 +212,9 @@ module "eks" {
       name            = "${local.name}-app"
       use_name_prefix = false
 
+      # Pin to single AZ to prevent EBS volume attachment failures on node recycle
+      subnet_ids = local.node_group_subnet_ids
+
       instance_types = var.app_node_instance_types
       capacity_type  = "ON_DEMAND"
       ami_type       = local.app_is_graviton ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD"
@@ -227,6 +238,9 @@ module "eks" {
       name            = "${local.name}-driver"
       use_name_prefix = false
 
+      # Pin to single AZ to prevent EBS volume attachment failures on node recycle
+      subnet_ids = local.node_group_subnet_ids
+
       instance_types = var.driver_node_instance_types
       capacity_type  = "ON_DEMAND"
       ami_type       = local.driver_is_graviton ? "AL2023_ARM_64_STANDARD" : "AL2023_x86_64_STANDARD"
@@ -249,6 +263,9 @@ module "eks" {
     exec = {
       name            = "${local.name}-exec"
       use_name_prefix = false
+
+      # Pin to single AZ to prevent EBS volume attachment failures on node recycle
+      subnet_ids = local.node_group_subnet_ids
 
       instance_types = var.executor_node_instance_types
       capacity_type  = var.executor_capacity_type

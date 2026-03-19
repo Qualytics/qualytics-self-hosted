@@ -38,6 +38,10 @@ single_nat_gateway = true
 # Enable public access to the cluster API endpoint
 cluster_endpoint_public_access = true
 
+# AZ suffix to pin node groups to a single availability zone
+# Prevents EBS volume attachment failures when nodes are recycled into a different AZ
+node_group_az_suffix = "a"
+
 #-------------------------------------------------------------------------------
 # Application Nodes
 # For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager

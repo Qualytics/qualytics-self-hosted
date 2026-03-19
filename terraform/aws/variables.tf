@@ -55,6 +55,12 @@ variable "cluster_endpoint_public_access" {
   default     = true
 }
 
+variable "node_group_az_suffix" {
+  description = "AZ suffix (e.g. 'a', 'b') to pin node groups to a single availability zone. Prevents EBS volume attachment failures when nodes are recycled into a different AZ."
+  type        = string
+  default     = "a"
+}
+
 #-------------------------------------------------------------------------------
 # Application Node Group Configuration
 #-------------------------------------------------------------------------------
