@@ -114,12 +114,14 @@ metadata:
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
+    # Allow up to 20MB request body (aligns with ModSecurity SecRequestBodyLimit)
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
     # Enable buffering for regular endpoints
     nginx.ingress.kubernetes.io/proxy-buffering: "on"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "128k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
-    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "0"
+    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "10m"
     # Enable OWASP Core Rules for regular API endpoints
     nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
     nginx.ingress.kubernetes.io/modsecurity-snippet: |
@@ -161,7 +163,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "128k"
     nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
-    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "0"
+    nginx.ingress.kubernetes.io/proxy-max-temp-file-size: "10m"
     nginx.ingress.kubernetes.io/rewrite-target: /$1
     # Enable OWASP Core Rules for frontend
     nginx.ingress.kubernetes.io/enable-owasp-core-rules: "true"
