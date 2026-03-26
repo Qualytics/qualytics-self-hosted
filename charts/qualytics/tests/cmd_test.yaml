@@ -228,6 +228,32 @@ tests:
             name: SMTP_SENDER_EMAIL
         documentIndex: 0
 
+  # OIDC token auth method
+  - it: should include OIDC_TOKEN_AUTH_METHOD when set
+    set:
+      global.authType: "OIDC"
+      secrets.oidc.oidc_token_auth_method: "client_secret_basic"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_TOKEN_AUTH_METHOD
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_token_auth_method
+        documentIndex: 0
+
+  - it: should omit OIDC_TOKEN_AUTH_METHOD when not set
+    set:
+      global.authType: "OIDC"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_TOKEN_AUTH_METHOD
+        documentIndex: 0
+
   - it: should set AUTH0_CLIENT_ID from secret
     asserts:
       - contains:

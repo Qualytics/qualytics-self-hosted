@@ -105,24 +105,25 @@ secrets:
 
 The Helm chart creates a Kubernetes Secret (`qualytics-creds`) and injects values as environment variables into the controlplane pods (API and CMD deployments).
 
-| Helm Value (`secrets.oidc.*`) | Environment Variable | Source |
-|-------------------------------|---------------------|--------|
-| `oidc_discovery_url` | `OIDC_DISCOVERY_URL` | Secret (if set) |
-| `oidc_scopes` | `OIDC_SCOPES` | Secret |
-| `oidc_authorization_endpoint` | `OIDC_AUTHORIZATION_ENDPOINT` | Secret |
-| `oidc_token_endpoint` | `OIDC_TOKEN_ENDPOINT` | Secret |
-| `oidc_userinfo_endpoint` | `OIDC_USERINFO_ENDPOINT` | Secret |
-| `oidc_client_id` | `OIDC_CLIENT_ID` | Secret |
-| `oidc_client_secret` | `OIDC_CLIENT_SECRET` | Secret |
-| `oidc_user_id_key` | `OIDC_USER_ID_KEY` | Secret |
-| `oidc_user_email_key` | `OIDC_USER_EMAIL_KEY` | Secret |
-| `oidc_user_name_key` | `OIDC_USER_NAME_KEY` | Secret |
-| `oidc_user_fname_key` | `OIDC_USER_FNAME_KEY` | Secret |
-| `oidc_user_lname_key` | `OIDC_USER_LNAME_KEY` | Secret |
-| `oidc_user_picture_key` | `OIDC_USER_PICTURE_KEY` | Secret |
-| `oidc_user_provider_key` | `OIDC_USER_PROVIDER_KEY` | Secret |
-| `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | Direct value |
-| `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | Direct value (if set) |
+| Helm Value (`secrets.oidc.*`) | Environment Variable | Source | Description |
+|-------------------------------|---------------------|--------|-------------|
+| `oidc_scopes` | `OIDC_SCOPES` | Secret | Required. Comma-separated OAuth2 scopes (e.g., `openid,email,profile`). |
+| `oidc_client_id` | `OIDC_CLIENT_ID` | Secret | Required. OAuth2 client ID registered with your IdP. |
+| `oidc_client_secret` | `OIDC_CLIENT_SECRET` | Secret | Required. OAuth2 client secret registered with your IdP. |
+| `oidc_discovery_url` | `OIDC_DISCOVERY_URL` | Secret (if set) | Optional. OpenID Connect discovery URL; auto-discovers endpoints, JWKS, and issuer. |
+| `oidc_authorization_endpoint` | `OIDC_AUTHORIZATION_ENDPOINT` | Secret | Optional when using discovery URL. IdP authorization endpoint. |
+| `oidc_token_endpoint` | `OIDC_TOKEN_ENDPOINT` | Secret | Optional when using discovery URL. IdP token endpoint. |
+| `oidc_userinfo_endpoint` | `OIDC_USERINFO_ENDPOINT` | Secret | Optional when using discovery URL. IdP userinfo endpoint. |
+| `oidc_token_auth_method` | `OIDC_TOKEN_AUTH_METHOD` | Secret | Optional. `client_secret_post` (default) or `client_secret_basic`. Auto-detected from discovery. Set for IdPs that only accept Basic auth. |
+| `oidc_user_id_key` | `OIDC_USER_ID_KEY` | Secret | Optional. Claim name for the user ID. Default: `sub`. |
+| `oidc_user_email_key` | `OIDC_USER_EMAIL_KEY` | Secret | Optional. Claim name for the user email. Default: `email`. |
+| `oidc_user_name_key` | `OIDC_USER_NAME_KEY` | Secret | Optional. Claim name for the user display name. Default: `name`. |
+| `oidc_user_fname_key` | `OIDC_USER_FNAME_KEY` | Secret | Optional. Claim name for the user first name. Default: `given_name`. |
+| `oidc_user_lname_key` | `OIDC_USER_LNAME_KEY` | Secret | Optional. Claim name for the user last name. Default: `family_name`. |
+| `oidc_user_picture_key` | `OIDC_USER_PICTURE_KEY` | Secret | Optional. Claim name for the user avatar URL. Default: `picture`. |
+| `oidc_user_provider_key` | `OIDC_USER_PROVIDER_KEY` | Secret | Optional. Claim name for the identity provider. Default: `iss`. |
+| `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | Direct value | Optional. Allow HTTP (non-TLS) for OIDC endpoints. Default: `false`. |
+| `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | Direct value (if set) | Optional. URL to a custom PEM certificate for token signature validation. |
 
 Additionally, these are set automatically by the Helm chart:
 

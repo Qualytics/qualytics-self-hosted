@@ -101,7 +101,7 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260325-a789e8e"
+    controlplaneImageTag: "20260326-612fbce"
 dataplaneImage:
   image:
     dataplaneImageTag: "20260325-75ff421"
@@ -158,6 +158,10 @@ secrets:
     oidc_authorization_endpoint: ""
     oidc_token_endpoint: ""
     oidc_userinfo_endpoint: ""
+    # Token endpoint auth method — auto-detected from discovery doc if empty.
+    # Set to "client_secret_basic" for IdPs that only accept Basic auth.
+    # Set to "client_secret_post" for IdPs that reject duplicate credentials (e.g., Okta).
+    oidc_token_auth_method: ""
     # OAuth2 client credentials (required)
     oidc_client_id: ""
     oidc_client_secret: ""

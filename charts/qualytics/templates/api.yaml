@@ -126,6 +126,13 @@ spec:
                 name: qualytics-creds
                 key: oidc_userinfo_endpoint
           {{- end }}
+          {{- if .Values.secrets.oidc.oidc_token_auth_method }}
+          - name: OIDC_TOKEN_AUTH_METHOD
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_token_auth_method
+          {{- end }}
           - name: OIDC_CLIENT_ID
             valueFrom:
               secretKeyRef:

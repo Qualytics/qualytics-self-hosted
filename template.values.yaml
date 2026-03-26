@@ -38,6 +38,10 @@ secrets:
     oidc_client_secret: "your-client-secret"
     # Claims mapping defaults (sub, email, name, given_name, family_name, picture, iss)
     # work for most IdPs — only override if your IdP uses non-standard claim names.
+    # Token auth method — auto-detected from discovery doc if empty.
+    # Set to "client_secret_basic" for IdPs that only accept Basic auth.
+    # Set to "client_secret_post" for IdPs that reject duplicate credentials (e.g., Okta).
+    # oidc_token_auth_method: ""
     # Endpoint overrides (optional when using discovery URL):
     # oidc_authorization_endpoint: ""
     # oidc_token_endpoint: ""
