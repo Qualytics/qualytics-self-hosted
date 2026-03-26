@@ -224,6 +224,32 @@ tests:
             name: OIDC_TOKEN_AUTH_METHOD
         documentIndex: 0
 
+  # OIDC JWT TTL
+  - it: should include OIDC_JWT_TTL_MINUTES when set
+    set:
+      global.authType: "OIDC"
+      secrets.oidc.oidc_jwt_ttl_minutes: 120
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_JWT_TTL_MINUTES
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_jwt_ttl_minutes
+        documentIndex: 0
+
+  - it: should omit OIDC_JWT_TTL_MINUTES when not set
+    set:
+      global.authType: "OIDC"
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_JWT_TTL_MINUTES
+        documentIndex: 0
+
   - it: should set AUTH0_CLIENT_ID from secret
     asserts:
       - contains:

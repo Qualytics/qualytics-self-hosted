@@ -180,6 +180,13 @@ spec:
                 key: oidc_user_provider_key
           - name: OIDC_ALLOW_INSECURE_HTTP
             value: {{ .Values.secrets.oidc.oidc_allow_insecure_transport | quote }}
+          {{- if .Values.secrets.oidc.oidc_jwt_ttl_minutes }}
+          - name: OIDC_JWT_TTL_MINUTES
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_jwt_ttl_minutes
+          {{- end }}
           {{- if .Values.secrets.oidc.oidc_signer_pem_url }}
           - name: OIDC_SIGNER_PEM_URL
             value: {{ .Values.secrets.oidc.oidc_signer_pem_url | quote }}

@@ -174,6 +174,7 @@ secrets:
     oidc_user_picture_key: "picture"
     oidc_user_provider_key: "iss"
     oidc_allow_insecure_transport: false
+    # oidc_jwt_ttl_minutes: 60
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:
     jwt_signing_secret: ChangeMe!
