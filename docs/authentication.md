@@ -62,6 +62,7 @@ secrets:
 | `oidc_user_picture_key` | `picture` | " |
 | `oidc_user_provider_key` | `iss` | " |
 | `oidc_allow_insecure_transport` | `false` | Development only (allows HTTP) |
+| `oidc_jwt_ttl_minutes` | *(unset — controlplane default)* | Override JWT session TTL in minutes |
 
 **Common discovery URLs:**
 
@@ -123,6 +124,7 @@ The Helm chart creates a Kubernetes Secret (`qualytics-creds`) and injects value
 | `oidc_user_picture_key` | `OIDC_USER_PICTURE_KEY` | Secret | Optional. Claim name for the user avatar URL. Default: `picture`. |
 | `oidc_user_provider_key` | `OIDC_USER_PROVIDER_KEY` | Secret | Optional. Claim name for the identity provider. Default: `iss`. |
 | `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | Direct value | Optional. Allow HTTP (non-TLS) for OIDC endpoints. Default: `false`. |
+| `oidc_jwt_ttl_minutes` | `OIDC_JWT_TTL_MINUTES` | Secret (if set) | Optional. JWT session lifetime in minutes. Omit to use the controlplane default. |
 | `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | Direct value (if set) | Optional. URL to a custom PEM certificate for token signature validation. |
 
 Additionally, these are set automatically by the Helm chart:
@@ -243,7 +245,7 @@ For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's
 | Auth0 connection timeout | No egress to auth.qualytics.io | Ensure firewall allows outbound HTTPS to `auth.qualytics.io` |
 | User attributes missing | Claims mapping mismatch | Adjust `oidc_user_*_key` values to match your IdP's claim names |
 | Discovery URL not working | IdP unreachable at startup | Ensure the pod can reach `oidc_discovery_url` over HTTPS. Check `kubectl logs` for discovery fetch errors. Individual endpoint fields are used as fallbacks. |
-| Sessions expire too quickly | Default 30-min JWT TTL | This is controlled by the controlplane (`OIDC_JWT_TTL_MINUTES`). Contact Qualytics support if adjustment is needed. |
+| Sessions expire too quickly | Default JWT TTL too short | Set `secrets.oidc.oidc_jwt_ttl_minutes` in `values.yaml` to the desired session duration in minutes (e.g., `480` for 8 hours). |
 
 ---
 
