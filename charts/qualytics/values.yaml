@@ -82,6 +82,11 @@ ingress:
   enabled: false
   cors: false
   maxRequestsPerSecondPerIP: 10
+  # Concurrent open connections allowed per IP before returning 429.
+  # Complements maxRequestsPerSecondPerIP: the rps limit handles sustained rate,
+  # while this caps the burst of simultaneous connections from a single client
+  # (e.g. a browser page load or a bulk-calling script) before pods are saturated.
+  maxConnectionsPerIP: 20
 
 #--------------------------------------------------------------------------------
 # Global values
@@ -101,13 +106,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260326-612fbce"
+    controlplaneImageTag: "20260327-439a375"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260325-75ff421"
+    dataplaneImageTag: "20260327-c29be62"
 frontendImage:
   image:
-    frontendImageTag: "20260325-2707732"
+    frontendImageTag: "20260327-946efb4"
 
 # Storage classes
 storageClass:

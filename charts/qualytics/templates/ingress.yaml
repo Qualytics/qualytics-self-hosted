@@ -65,10 +65,20 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Higher priority to match before regular API ingress
     nginx.ingress.kubernetes.io/priority: "100"
-    # Rate limiting for API endpoints
+    # Rate limiting for API endpoints: rps controls sustained rate, connections caps concurrency.
+    # Both return 429 so clients back off before exhausting upstream pods.
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
-    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
+    nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
+    # Never mark upstream pods as unavailable due to transient errors; always try a live pod.
+    # Without this, a wave of 503s from capacity-limited pods causes nginx to remove all backends,
+    # turning subsequent 503 upstreams into immediate 503s with an empty upstream list.
+    nginx.ingress.kubernetes.io/upstream-max-fails: "0"
+    nginx.ingress.kubernetes.io/upstream-fail-timeout: "0"
+    # Retry on upstream 503 (capacity exhaustion) before giving up
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_503"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
     # Disable buffering for streaming
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
     nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
@@ -110,10 +120,20 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
-    # Rate limiting for API endpoints
+    # Rate limiting for API endpoints: rps controls sustained rate, connections caps concurrency.
+    # Both return 429 so clients back off before exhausting upstream pods.
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
-    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
+    nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
+    # Never mark upstream pods as unavailable due to transient errors; always try a live pod.
+    # Without this, a wave of 503s from capacity-limited pods causes nginx to remove all backends,
+    # turning subsequent 503 upstreams into immediate 503s with an empty upstream list.
+    nginx.ingress.kubernetes.io/upstream-max-fails: "0"
+    nginx.ingress.kubernetes.io/upstream-fail-timeout: "0"
+    # Retry on upstream 503 (capacity exhaustion) before giving up
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_503"
+    nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
     # Allow up to 20MB request body (aligns with ModSecurity SecRequestBodyLimit)
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
     # Enable buffering for regular endpoints
