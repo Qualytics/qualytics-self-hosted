@@ -122,6 +122,177 @@ tests:
           value: RELEASE-NAME-postgres-snapshotter
         documentIndex: 4
 
+  # Resource limits
+  - it: should have default memory limit at 2x requests for Postgres
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 10Gi
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 20Gi
+        documentIndex: 2
+
+  - it: should NOT set CPU limits on Postgres
+    set:
+      postgres.enabled: true
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 2
+
+  - it: should allow custom memory limit override without changing requests for Postgres
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "10Gi"
+      postgres.resources.limits.memory: "30Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 10Gi
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 30Gi
+        documentIndex: 2
+
+  # PriorityClass
+  - it: should have qualytics-critical priorityClassName for Postgres
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-critical
+        documentIndex: 2
+
+  # CronJob resource limits
+  - it: should have memory requests and limits on snapshotter CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        documentIndex: 4
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+        documentIndex: 4
+
+  - it: should have CPU requests but NO CPU limits on snapshotter CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+        documentIndex: 4
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 4
+
+  - it: should have memory requests and limits on maintenance CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.memory
+          value: 512Mi
+        documentIndex: 5
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+        documentIndex: 5
+
+  - it: should have CPU requests but NO CPU limits on maintenance CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.requests.cpu
+          value: 250m
+        documentIndex: 5
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 5
+
+  - it: should have qualytics-standard priorityClassName on snapshotter CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+          value: qualytics-standard
+        documentIndex: 4
+
+  - it: should have qualytics-standard priorityClassName on maintenance CronJob
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+          value: qualytics-standard
+        documentIndex: 5
+
+  # Postgres memory calculations
+  - it: should calculate shared_buffers as 40% of 10Gi memory
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "10Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "shared_buffers=4080MB"
+        documentIndex: 2
+
+  - it: should calculate effective_cache_size as 75% of 10Gi memory
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "10Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "effective_cache_size=7650MB"
+        documentIndex: 2
+
+  - it: should calculate work_mem as 2% of 10Gi memory
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "10Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "work_mem=204MB"
+        documentIndex: 2
+
+  - it: should calculate maintenance_work_mem as 10% of 10Gi memory
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "10Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "maintenance_work_mem=1020MB"
+        documentIndex: 2
+
+  - it: should recalculate memory settings at 16Gi
+    set:
+      postgres.enabled: true
+      postgres.resources.requests.memory: "16Gi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "shared_buffers=6520MB"
+        documentIndex: 2
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: "effective_cache_size=12225MB"
+        documentIndex: 2
+
   # PostgreSQL disabled
   - it: should not create postgres resources when disabled
     set:

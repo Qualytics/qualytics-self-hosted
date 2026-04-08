@@ -16,6 +16,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      priorityClassName: qualytics-standard
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -32,12 +33,28 @@ spec:
         args: ["python /app/hub_api.py"]
         resources:
           requests:
-            {{- with .Values.controlplane.resources }}
-            memory: {{ .memory }}
-            cpu: {{ .cpu }}
-            {{- end }}
+            memory: {{ .Values.controlplane.resources.requests.memory }}
+            cpu: {{ .Values.controlplane.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.controlplane.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.controlplane.ingress.servicePort }}
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: {{ .Values.controlplane.ingress.servicePort }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: {{ .Values.controlplane.ingress.servicePort }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
         env:
           - name: APP_AUTO_RELOAD
             value: "False"

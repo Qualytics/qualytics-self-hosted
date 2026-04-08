@@ -81,6 +81,7 @@ spec:
       terminationGracePeriodSeconds: 10
       imagePullSecrets:
         - name: regcred
+      priorityClassName: qualytics-critical
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -103,13 +104,13 @@ spec:
           - max_pred_locks_per_transaction=128  # Higher for serializable transactions
           # Memory settings
           - -c
-          - shared_buffers={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.memory)) 1024) 100 | mul 40 }}MB  # 40% of total memory
+          - shared_buffers={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.requests.memory)) 1024) 100 | mul 40 }}MB  # 40% of total memory
           - -c
-          - effective_cache_size={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.memory)) 1024) 100 | mul 75 }}MB  # 75% of total memory
+          - effective_cache_size={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.requests.memory)) 1024) 100 | mul 75 }}MB  # 75% of total memory
           - -c
-          - work_mem={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.memory)) 1024) 100 | mul 2 }}MB  # 2% of total memory
+          - work_mem={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.requests.memory)) 1024) 100 | mul 2 }}MB  # 2% of total memory
           - -c
-          - maintenance_work_mem={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.memory)) 1024) 100 | mul 10 }}MB  # 10% of total memory
+          - maintenance_work_mem={{ div (mul (int (trimSuffix "Gi" .Values.postgres.resources.requests.memory)) 1024) 100 | mul 10 }}MB  # 10% of total memory
           # SSD-optimized I/O settings
           - -c
           - effective_io_concurrency=1000
@@ -180,10 +181,10 @@ spec:
             value: /mnt/data/pgdata
         resources:
           requests:
-            {{- with .Values.postgres.resources }}
-            memory: {{ .memory }}
-            cpu: {{ .cpu }}
-            {{- end }}
+            memory: {{ .Values.postgres.resources.requests.memory }}
+            cpu: {{ .Values.postgres.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.postgres.resources.limits.memory }}
         volumeMounts:
         - name: postgres-data-pvc
           mountPath: /mnt/data
@@ -248,6 +249,7 @@ spec:
         spec:
           imagePullSecrets:
             - name: regcred
+          priorityClassName: qualytics-standard
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}
@@ -268,6 +270,12 @@ spec:
               value: postgresql://$(POSTGRES_CONNECTION_URL)
             image: "{{ tpl .Values.postgres.image.imageUrl . }}:{{ .Values.postgres.image.imageTag }}"
             imagePullPolicy: IfNotPresent
+            resources:
+              requests:
+                memory: {{ .Values.postgres.cronjobs.snapshotter.resources.requests.memory }}
+                cpu: {{ .Values.postgres.cronjobs.snapshotter.resources.requests.cpu }}
+              limits:
+                memory: {{ .Values.postgres.cronjobs.snapshotter.resources.limits.memory }}
             command:
             - "/bin/sh"
             - "-c"
@@ -308,6 +316,7 @@ spec:
         spec:
           imagePullSecrets:
             - name: regcred
+          priorityClassName: qualytics-standard
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}
@@ -328,6 +337,12 @@ spec:
               value: postgresql://$(POSTGRES_CONNECTION_URL)
             image: "{{ tpl .Values.postgres.image.imageUrl . }}:{{ .Values.postgres.image.imageTag }}"
             imagePullPolicy: IfNotPresent
+            resources:
+              requests:
+                memory: {{ .Values.postgres.cronjobs.maintenance.resources.requests.memory }}
+                cpu: {{ .Values.postgres.cronjobs.maintenance.resources.requests.cpu }}
+              limits:
+                memory: {{ .Values.postgres.cronjobs.maintenance.resources.limits.memory }}
             command:
             - "/bin/sh"
             - "-c"

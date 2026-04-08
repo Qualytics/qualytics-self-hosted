@@ -22,6 +22,49 @@ tests:
           value: Recreate
         documentIndex: 0
 
+  # Health probes
+  - it: should configure readiness probe with kill signal via bash
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
+          value: "/bin/bash"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[1]
+          value: "-c"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          value: "kill -0 1"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+
+  - it: should configure liveness probe with RabbitMQ health check
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
+          value: "python"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[1]
+          value: "-c"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          value: "from app.helpers.networking import is_rabbit_ok; exit(0 if is_rabbit_ok() else 1)"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 10
+        documentIndex: 0
+
   - it: should configure CMD deployment with correct replicas
     set:
       cmd.replicas: 1
@@ -58,18 +101,58 @@ tests:
         documentIndex: 0
 
   # Resource configuration
-  - it: should set resource requests
-    set:
-      controlplaneCmd.resources.memory: "2Gi"
-      controlplaneCmd.resources.cpu: "500m"
+  - it: should set default resource requests and limits for CMD
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "2Gi"
+          value: "6Gi"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
-          value: "500m"
+          value: "2000m"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "12Gi"
+        documentIndex: 0
+
+  - it: should have default memory limit at 2x requests for CMD
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "6Gi"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "12Gi"
+        documentIndex: 0
+
+  - it: should NOT set CPU limits on CMD
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 0
+
+  - it: should allow custom memory limit override without changing requests for CMD
+    set:
+      controlplaneCmd.resources.requests.memory: "6Gi"
+      controlplaneCmd.resources.limits.memory: "16Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "6Gi"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "16Gi"
+        documentIndex: 0
+
+  # PriorityClass
+  - it: should have qualytics-standard priorityClassName for CMD
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-standard
         documentIndex: 0
 
   # Node selector configuration

@@ -1,0 +1,84 @@
+suite: test priority classes
+templates:
+  - priority-classes.yaml
+tests:
+  - it: should render two PriorityClass resources
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should create qualytics-critical PriorityClass with correct values
+    asserts:
+      - isKind:
+          of: PriorityClass
+        documentIndex: 0
+      - equal:
+          path: apiVersion
+          value: scheduling.k8s.io/v1
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: qualytics-critical
+        documentIndex: 0
+      - equal:
+          path: value
+          value: 1000000
+        documentIndex: 0
+      - equal:
+          path: globalDefault
+          value: false
+        documentIndex: 0
+      - isNotNull:
+          path: description
+        documentIndex: 0
+
+  - it: should create qualytics-standard PriorityClass with correct values
+    asserts:
+      - isKind:
+          of: PriorityClass
+        documentIndex: 1
+      - equal:
+          path: apiVersion
+          value: scheduling.k8s.io/v1
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: qualytics-standard
+        documentIndex: 1
+      - equal:
+          path: value
+          value: 100
+        documentIndex: 1
+      - equal:
+          path: globalDefault
+          value: false
+        documentIndex: 1
+      - isNotNull:
+          path: description
+        documentIndex: 1
+
+  - it: should have critical value greater than standard value
+    asserts:
+      - equal:
+          path: value
+          value: 1000000
+        documentIndex: 0
+      - equal:
+          path: value
+          value: 100
+        documentIndex: 1
+
+  - it: should render PriorityClasses regardless of postgres.enabled
+    set:
+      postgres.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: qualytics-critical
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: qualytics-standard
+        documentIndex: 1

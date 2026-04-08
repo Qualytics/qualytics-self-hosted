@@ -17,6 +17,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      priorityClassName: qualytics-standard
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -51,6 +52,8 @@ spec:
             requests:
               memory: 100Mi
               cpu: 100m
+            limits:
+              memory: 200Mi
       restartPolicy: Always
       {{- if .Values.postgres.enabled }}
       volumes:

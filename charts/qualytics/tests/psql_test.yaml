@@ -120,3 +120,29 @@ tests:
           path: spec.template.spec.nodeSelector.appNodes
           value: "true"
         documentIndex: 0
+
+  # Resource limits
+  - it: should have default memory limit at 2x requests for psql
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 100Mi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 200Mi
+        documentIndex: 0
+
+  - it: should NOT set CPU limits on psql
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 0
+
+  # PriorityClass
+  - it: should have qualytics-standard priorityClassName for psql
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-standard
+        documentIndex: 0

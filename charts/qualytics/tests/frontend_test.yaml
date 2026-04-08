@@ -13,6 +13,37 @@ tests:
           value: RELEASE-NAME-frontend
         documentIndex: 0
 
+  # Strategy configuration
+  - it: should use Recreate strategy for frontend
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 0
+
+  # Health probes
+  - it: should configure readiness probe on frontend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+
+  - it: should configure liveness probe on frontend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+
   - it: should create frontend service
     asserts:
       - isKind:
@@ -84,4 +115,44 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent
+        documentIndex: 0
+
+  # Resource limits
+  - it: should have default memory limit at 2x requests for frontend
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 512Mi
+        documentIndex: 0
+
+  - it: should NOT set CPU limits on frontend
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 0
+
+  - it: should allow custom memory limit override without changing requests for frontend
+    set:
+      frontend.resources.requests.memory: "256Mi"
+      frontend.resources.limits.memory: "1Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 256Mi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 1Gi
+        documentIndex: 0
+
+  # PriorityClass
+  - it: should have qualytics-standard priorityClassName for frontend
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-standard
         documentIndex: 0

@@ -16,6 +16,7 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      priorityClassName: qualytics-standard
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -32,8 +33,30 @@ spec:
         args: [ "python /app/hub_cmd.py" ]
         resources:
           requests:
-            memory: {{ .Values.controlplaneCmd.resources.memory | quote }}
-            cpu: {{ .Values.controlplaneCmd.resources.cpu| quote }}
+            memory: {{ .Values.controlplaneCmd.resources.requests.memory | quote }}
+            cpu: {{ .Values.controlplaneCmd.resources.requests.cpu | quote }}
+          limits:
+            memory: {{ .Values.controlplaneCmd.resources.limits.memory | quote }}
+        readinessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - "kill -0 1"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          exec:
+            command:
+              - python
+              - -c
+              - "from app.helpers.networking import is_rabbit_ok; exit(0 if is_rabbit_ok() else 1)"
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
         env:
           - name: APP_AUTO_RELOAD
             value: "False"

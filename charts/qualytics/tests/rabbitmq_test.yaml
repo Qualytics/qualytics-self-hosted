@@ -64,3 +64,43 @@ tests:
             name: rabbitmq-data
             emptyDir: {}
         documentIndex: 2
+
+  # Resource limits
+  - it: should have default memory limit at 2x requests for RabbitMQ
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+        documentIndex: 3
+
+  - it: should NOT set CPU limits on RabbitMQ
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 3
+
+  - it: should allow custom memory limit override without changing requests for RabbitMQ
+    set:
+      rabbitmq.resources.requests.memory: "1Gi"
+      rabbitmq.resources.limits.memory: "4Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        documentIndex: 3
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
+        documentIndex: 3
+
+  # PriorityClass
+  - it: should have qualytics-critical priorityClassName for RabbitMQ
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-critical
+        documentIndex: 3
