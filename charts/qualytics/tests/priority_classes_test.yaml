@@ -29,7 +29,7 @@ tests:
         documentIndex: 0
       - equal:
           path: value
-          value: 1000000
+          value: 100
         documentIndex: 0
       - equal:
           path: globalDefault
@@ -54,7 +54,7 @@ tests:
         documentIndex: 1
       - equal:
           path: value
-          value: 100
+          value: 10
         documentIndex: 1
       - equal:
           path: globalDefault
@@ -68,11 +68,11 @@ tests:
     asserts:
       - equal:
           path: value
-          value: 1000000
+          value: 100
         documentIndex: 0
       - equal:
           path: value
-          value: 100
+          value: 10
         documentIndex: 1
 
   - it: should respect custom criticalValue

@@ -125,8 +125,8 @@ storageClass:
 # Priority classes
 priorityClasses:
   create: true
-  criticalValue: 1000000
-  standardValue: 100
+  criticalValue: 100
+  standardValue: 10
 
 # Node scheduling
 appNodeSelector: {}
