@@ -104,3 +104,21 @@ tests:
           path: spec.template.spec.priorityClassName
           value: qualytics-critical
         documentIndex: 3
+
+  - it: should NOT have priorityClassName on RabbitMQ when priorityClasses.enabled is false
+    set:
+      priorityClasses.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.priorityClassName
+        documentIndex: 3
+
+  - it: should have priorityClassName on RabbitMQ when enabled is true but create is false
+    set:
+      priorityClasses.enabled: true
+      priorityClasses.create: false
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-critical
+        documentIndex: 3

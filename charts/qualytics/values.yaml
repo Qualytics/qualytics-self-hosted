@@ -124,6 +124,7 @@ storageClass:
 
 # Priority classes
 priorityClasses:
+  enabled: true
   create: true
   criticalValue: 100
   standardValue: 10

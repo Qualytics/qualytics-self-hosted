@@ -14,6 +14,21 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: should NOT render PriorityClasses when enabled is false
+    set:
+      priorityClasses.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should NOT render PriorityClasses when enabled is true but create is false
+    set:
+      priorityClasses.enabled: true
+      priorityClasses.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
   - it: should create qualytics-critical PriorityClass with correct values
     asserts:
       - isKind:

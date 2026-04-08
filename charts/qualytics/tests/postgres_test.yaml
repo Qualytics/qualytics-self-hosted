@@ -169,6 +169,26 @@ tests:
           value: qualytics-critical
         documentIndex: 2
 
+  - it: should NOT have priorityClassName on Postgres when priorityClasses.enabled is false
+    set:
+      postgres.enabled: true
+      priorityClasses.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.priorityClassName
+        documentIndex: 2
+
+  - it: should have priorityClassName on Postgres when enabled is true but create is false
+    set:
+      postgres.enabled: true
+      priorityClasses.enabled: true
+      priorityClasses.create: false
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-critical
+        documentIndex: 2
+
   # CronJob resource limits
   - it: should have memory requests and limits on snapshotter CronJob
     set:
@@ -236,6 +256,18 @@ tests:
       - equal:
           path: spec.jobTemplate.spec.template.spec.priorityClassName
           value: qualytics-standard
+        documentIndex: 5
+
+  - it: should NOT have priorityClassName on CronJobs when priorityClasses.enabled is false
+    set:
+      postgres.enabled: true
+      priorityClasses.enabled: false
+    asserts:
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
+        documentIndex: 4
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.priorityClassName
         documentIndex: 5
 
   # Postgres memory calculations

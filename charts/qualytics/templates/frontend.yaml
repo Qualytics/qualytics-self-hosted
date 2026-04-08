@@ -16,7 +16,9 @@ spec:
     spec:
       imagePullSecrets:
         - name: regcred
+      {{- if .Values.priorityClasses.enabled }}
       priorityClassName: qualytics-standard
+      {{- end }}
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}

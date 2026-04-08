@@ -146,3 +146,21 @@ tests:
           path: spec.template.spec.priorityClassName
           value: qualytics-standard
         documentIndex: 0
+
+  - it: should NOT have priorityClassName on psql when priorityClasses.enabled is false
+    set:
+      priorityClasses.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.priorityClassName
+        documentIndex: 0
+
+  - it: should have priorityClassName on psql when enabled is true but create is false
+    set:
+      priorityClasses.enabled: true
+      priorityClasses.create: false
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: qualytics-standard
+        documentIndex: 0
