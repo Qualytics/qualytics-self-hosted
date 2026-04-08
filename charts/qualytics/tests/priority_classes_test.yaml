@@ -2,10 +2,17 @@ suite: test priority classes
 templates:
   - priority-classes.yaml
 tests:
-  - it: should render two PriorityClass resources
+  - it: should render two PriorityClass resources when create is true (default)
     asserts:
       - hasDocuments:
           count: 2
+
+  - it: should NOT render PriorityClasses when create is false
+    set:
+      priorityClasses.create: false
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: should create qualytics-critical PriorityClass with correct values
     asserts:
@@ -66,6 +73,24 @@ tests:
       - equal:
           path: value
           value: 100
+        documentIndex: 1
+
+  - it: should respect custom criticalValue
+    set:
+      priorityClasses.criticalValue: 2000000
+    asserts:
+      - equal:
+          path: value
+          value: 2000000
+        documentIndex: 0
+
+  - it: should respect custom standardValue
+    set:
+      priorityClasses.standardValue: 500
+    asserts:
+      - equal:
+          path: value
+          value: 500
         documentIndex: 1
 
   - it: should render PriorityClasses regardless of postgres.enabled

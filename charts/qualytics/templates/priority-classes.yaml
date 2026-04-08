@@ -1,8 +1,9 @@
+{{- if .Values.priorityClasses.create }}
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: qualytics-critical
-value: 1000000
+value: {{ .Values.priorityClasses.criticalValue | int }}
 globalDefault: false
 description: "High priority for critical stateful services (PostgreSQL, RabbitMQ)"
 ---
@@ -10,6 +11,7 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: qualytics-standard
-value: 100
+value: {{ .Values.priorityClasses.standardValue | int }}
 globalDefault: false
 description: "Standard priority for application workloads"
+{{- end }}
