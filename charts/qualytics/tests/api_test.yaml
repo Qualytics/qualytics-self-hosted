@@ -32,15 +32,26 @@ tests:
         documentIndex: 0
 
   # Health probes
+  - it: should have startup probe on /api/health
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /api/health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 10
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+        documentIndex: 0
+
   - it: should configure readiness probe on API
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /api/health
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
-          value: 60
         documentIndex: 0
 
   - it: should configure liveness probe on API
@@ -50,8 +61,8 @@ tests:
           value: /api/health
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 60
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
         documentIndex: 0
 
   # Replica configuration

@@ -22,15 +22,26 @@ tests:
         documentIndex: 0
 
   # Health probes
+  - it: should have startup probe on /health
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 5
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 12
+        documentIndex: 0
+
   - it: should configure readiness probe on frontend
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /health
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
-          value: 60
         documentIndex: 0
 
   - it: should configure liveness probe on frontend
@@ -40,8 +51,8 @@ tests:
           value: /health
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 60
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
         documentIndex: 0
 
   - it: should create frontend service

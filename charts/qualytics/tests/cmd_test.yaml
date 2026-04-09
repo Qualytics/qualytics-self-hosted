@@ -23,46 +23,61 @@ tests:
         documentIndex: 0
 
   # Health probes
-  - it: should configure readiness probe with kill signal via bash
+  - it: should have startup probe checking Python process
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[0]
+          value: python
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          value: "exit(0)"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
+          value: 10
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 30
+        documentIndex: 0
+
+  - it: should have readiness probe using TCP socket check to RabbitMQ
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
-          value: "/bin/bash"
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].readinessProbe.exec.command[1]
-          value: "-c"
+          value: python
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
-          value: "kill -0 1"
+          value: "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
-          value: 60
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 10
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
         documentIndex: 0
 
-  - it: should configure liveness probe with RabbitMQ health check
+  - it: should have liveness probe checking Python process not dependencies
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
-          value: "python"
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].livenessProbe.exec.command[1]
-          value: "-c"
+          value: python
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
-          value: "from app.helpers.networking import is_rabbit_ok; exit(0 if is_rabbit_ok() else 1)"
+          value: "exit(0)"
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 60
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 5
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
-          value: 10
+          value: 5
         documentIndex: 0
 
   - it: should configure CMD deployment with correct replicas
@@ -109,7 +124,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
-          value: "2000m"
+          value: "1000m"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory

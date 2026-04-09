@@ -271,7 +271,7 @@ controlplaneCmd:
   resources:
     requests:
       memory: "6Gi"
-      cpu: "2000m"
+      cpu: "1000m"
     limits:
       memory: "12Gi"
 
@@ -308,7 +308,7 @@ postgres:
   resources:
     requests:
       memory: "10Gi"
-      cpu: "2000m"
+      cpu: "1000m"
     limits:
       memory: "20Gi"
   cronjobs:

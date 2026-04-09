@@ -36,26 +36,34 @@ spec:
             cpu: {{ .Values.controlplaneCmd.resources.requests.cpu | quote }}
           limits:
             memory: {{ .Values.controlplaneCmd.resources.limits.memory | quote }}
+        startupProbe:
+          exec:
+            command:
+              - python
+              - -c
+              - "exit(0)"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
         readinessProbe:
           exec:
             command:
-              - /bin/bash
+              - python
               - -c
-              - "kill -0 1"
-          initialDelaySeconds: 60
+              - "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
           periodSeconds: 30
-          timeoutSeconds: 5
+          timeoutSeconds: 10
           failureThreshold: 3
         livenessProbe:
           exec:
             command:
               - python
               - -c
-              - "from app.helpers.networking import is_rabbit_ok; exit(0 if is_rabbit_ok() else 1)"
-          initialDelaySeconds: 60
+              - "exit(0)"
           periodSeconds: 30
-          timeoutSeconds: 10
-          failureThreshold: 3
+          timeoutSeconds: 5
+          failureThreshold: 5
         env:
           - name: APP_AUTO_RELOAD
             value: "False"

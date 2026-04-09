@@ -38,11 +38,18 @@ spec:
             memory: {{ .Values.controlplane.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.controlplane.ingress.servicePort }}
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: {{ .Values.controlplane.ingress.servicePort }}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
         readinessProbe:
           httpGet:
             path: /api/health
             port: {{ .Values.controlplane.ingress.servicePort }}
-          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
@@ -50,10 +57,9 @@ spec:
           httpGet:
             path: /api/health
             port: {{ .Values.controlplane.ingress.servicePort }}
-          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 5
-          failureThreshold: 3
+          failureThreshold: 5
         env:
           - name: APP_AUTO_RELOAD
             value: "False"

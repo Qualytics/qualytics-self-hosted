@@ -36,22 +36,28 @@ spec:
             memory: {{ .Values.frontend.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.frontend.ingress.servicePort }}
+        startupProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.frontend.ingress.servicePort }}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
         readinessProbe:
           httpGet:
             path: /health
             port: {{ .Values.frontend.ingress.servicePort }}
-          initialDelaySeconds: 60
-          periodSeconds: 30
+          periodSeconds: 15
           timeoutSeconds: 3
           failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /health
             port: {{ .Values.frontend.ingress.servicePort }}
-          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 3
-          failureThreshold: 3
+          failureThreshold: 5
         env:
           - name: VITE_QUALYTICS_DNS
             value: {{ tpl .Values.global.dnsRecord . | quote }}
