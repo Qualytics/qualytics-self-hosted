@@ -113,10 +113,10 @@ spec:
         {{- end }}
         resources:
           requests:
-            {{- with .Values.rabbitmq.resources }}
-            memory: {{ .memory }}
-            cpu: {{ .cpu }}
-            {{- end }}
+            memory: {{ .Values.rabbitmq.resources.requests.memory }}
+            cpu: {{ .Values.rabbitmq.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.rabbitmq.resources.limits.memory }}
         env:
         - name: RABBIT_POD_NAME
           valueFrom:

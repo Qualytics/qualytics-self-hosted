@@ -65,10 +65,9 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Higher priority to match before regular API ingress
     nginx.ingress.kubernetes.io/priority: "100"
-    # Rate limiting for API endpoints: rps controls sustained rate, connections caps concurrency.
-    # Both return 429 so clients back off before exhausting upstream pods.
+    # Rate limiting: rps returns 429 (client can back off), connections returns 503 (nginx limitation).
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
-    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
     nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     # Never mark upstream pods as unavailable due to transient errors; always try a live pod.
@@ -120,10 +119,9 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
-    # Rate limiting for API endpoints: rps controls sustained rate, connections caps concurrency.
-    # Both return 429 so clients back off before exhausting upstream pods.
+    # Rate limiting: rps returns 429 (client can back off), connections returns 503 (nginx limitation).
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
-    nginx.ingress.kubernetes.io/limit-burst-multiplier: "1"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
     nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     # Never mark upstream pods as unavailable due to transient errors; always try a live pod.

@@ -4,7 +4,7 @@ Qualytics supports connecting to an externally managed PostgreSQL instance inste
 
 ## Database-per-Deployment Model
 
-Each Qualytics deployment (Helm release) connects to its **own dedicated database** on the shared server. This provides full DDL isolation, independent backups and restores, and no risk of cross-tenant interference.
+Each Qualytics deployment (Helm release) connects to its own dedicated database on the shared server. This provides full DDL isolation, independent backups and restores, and no risk of cross-tenant interference.
 
 ```
 postgres_server
@@ -37,7 +37,7 @@ If the database already exists:
 ALTER DATABASE qualytics_<tenant> OWNER TO qualytics_<tenant>;
 ```
 
-Ownership grants full DDL rights within the database, which Alembic requires to run schema migrations.
+Ownership grants full DDL rights within the database, which is required to run schema migrations.
 
 ### 3. Connect to the tenant database and grant schema privileges
 
@@ -45,7 +45,7 @@ Ownership grants full DDL rights within the database, which Alembic requires to 
 \c qualytics_<tenant>
 ```
 
-Grant explicit access on the `public` schema. This is **required on PostgreSQL 15+**, where the default `CREATE` privilege on `public` was revoked from all non-superuser roles:
+Grant explicit access on the public schema. This is required on PostgreSQL 15+, where the default `CREATE` privilege on `public` was revoked from all non-superuser roles:
 
 ```sql
 GRANT ALL PRIVILEGES ON SCHEMA public TO qualytics_<tenant>;
@@ -63,30 +63,30 @@ GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO qualytics_<tenant>;
 
 ### 5. Set default privileges for future objects
 
-Without this, tables created by Alembic migrations will not automatically inherit the correct permissions if any other role creates objects in the schema.
+Without this, tables created by migrations will not automatically inherit the correct permissions if any other role creates objects in the schema.
 
 ```sql
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON TABLES TO qualytics_<tenant>;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON SEQUENCES TO qualytics_<tenant>;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON FUNCTIONS TO qualytics_<tenant>;
 ```
 
-### 6. Enable required extensions
+### 6. Optional: Enable the `pgcrypto` extension
 
-Qualytics migrations seed data that calls `gen_random_uuid()` and other helpers provided by the [`pgcrypto`](https://www.postgresql.org/docs/current/pgcrypto.html) extension. Install it **inside each tenant database** while connected as the service account (or any role that owns the database):
+The `pgcrypto` extension is **optional**. Qualytics performs all credential encryption at the application layer using AES-256-GCM, so `pgcrypto` is not required at runtime. The `gen_random_uuid()` function used during initial data seeding is a built-in PostgreSQL function on version 13+ and does not depend on `pgcrypto`.
+
+If your organization permits installing extensions, you may optionally enable it as a best practice:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 ```
 
-> Keep the service account as the database owner. Alembic needs to create/drop enums, functions, and extensions during upgrades, so migrations must run as a role with full DDL rights (the owner).
+If your organization's policy restricts PostgreSQL extensions, this step can be safely skipped. See the [External PostgreSQL FAQ](https://github.com/Qualytics/qualytics-self-hosted/blob/main/docs/external-postgres-faq.md) for more details on encryption and `pgcrypto`.
 
----
+> **Keep the service account as the database owner.** Migrations need to create/drop tables, enums, functions, and sequences during upgrades, so they must run as a role with full DDL rights (the owner).
 
 ## PostgreSQL 15+ Note
 
@@ -96,15 +96,12 @@ PostgreSQL 15 revoked the default `CREATE` privilege on the `public` schema from
 ERROR: permission denied for schema public
 ```
 
-ensure that step 3 was run **after connecting to the target tenant database** — not the `postgres` default database. The `\c qualytics_<tenant>` step is required before granting schema privileges.
+ensure that step 3 was run after connecting to the target tenant database — not the `postgres` default database. The `\c qualytics_<tenant>` step is required before granting schema privileges.
 
----
-
-## Full Example — Deployment
+## Full Example — Single Deployment
 
 ```sql
 -- Run as superuser on the PostgreSQL server
-
 CREATE ROLE qualytics_env1 WITH LOGIN PASSWORD 'Str0ng_P@ssword!';
 CREATE DATABASE qualytics_env1 OWNER qualytics_env1;
 
@@ -114,23 +111,20 @@ GRANT ALL PRIVILEGES ON SCHEMA public TO qualytics_env1;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON TABLES TO qualytics_env1;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON SEQUENCES TO qualytics_env1;
-
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
     GRANT ALL ON FUNCTIONS TO qualytics_env1;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+-- Optional: enable pgcrypto (not required, see FAQ)
+-- CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 ```
-
----
 
 ## Helm Chart Configuration
 
 Once the database and service account are ready, configure each Helm release to use the external PostgreSQL instance.
 
-### values.yaml
+**values.yaml**
 
 ```yaml
 postgres:
@@ -146,7 +140,7 @@ secrets:
     secrets_passphrase: <passphrase>
 ```
 
-### Applying the configuration
+**Applying the configuration**
 
 ```bash
 helm upgrade --install qualytics qualytics/qualytics \
@@ -156,26 +150,21 @@ helm upgrade --install qualytics qualytics/qualytics \
   --timeout=20m
 ```
 
----
-
 ## Validation Script (run by DBA)
 
-Because Qualytics migrations use enums, extensions, sequences, and ad-hoc functions, validate the service account **before** handing the environment over. Run the following as the service account (or impersonating it) after completing the setup above:
+Because Qualytics migrations use enums, sequences, functions, and triggers, validate the service account before handing the environment over. Run the following as the service account (or impersonating it) after completing the setup above:
 
 ```bash
 export PGPASSWORD='<strong_password>'
 psql "host=<your-postgres-host> port=5432 dbname=qualytics_<tenant> user=qualytics_<tenant>" -v ON_ERROR_STOP=1 <<'SQL'
+
 \timing on
 \echo 'Starting Qualytics external Postgres validation'
-
--- Ensure pgcrypto exists and gen_random_uuid works (ALEMBIC seeds/actions rely on it)
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
-SELECT gen_random_uuid() AS uuid_smoke_test;
 
 -- Table + index DDL (covers CREATE, ALTER, DROP on tables and indexes)
 DROP TABLE IF EXISTS qualytics_permission_probe CASCADE;
 CREATE TABLE qualytics_permission_probe (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     created TIMESTAMPTZ DEFAULT now()
 );
@@ -185,13 +174,13 @@ CREATE INDEX IF NOT EXISTS ix_qpp_created ON qualytics_permission_probe (created
 DROP INDEX IF EXISTS ix_qpp_created;
 DROP TABLE IF EXISTS qualytics_permission_probe CASCADE;
 
--- Sequence privileges (Alembic creates/drops sequences during migrations)
+-- Sequence privileges (migrations create/drop sequences)
 DROP SEQUENCE IF EXISTS qualytics_permission_probe_seq;
 CREATE SEQUENCE qualytics_permission_probe_seq;
 SELECT nextval('qualytics_permission_probe_seq') AS seq_smoke_test;
 DROP SEQUENCE IF EXISTS qualytics_permission_probe_seq;
 
--- Function privileges (Qualytics ships helper functions + uses plpgsql)
+-- Function privileges (Qualytics creates helper functions)
 DROP FUNCTION IF EXISTS qualytics_permission_probe_fn() CASCADE;
 CREATE FUNCTION qualytics_permission_probe_fn()
 RETURNS INTEGER
@@ -204,14 +193,18 @@ $$;
 SELECT qualytics_permission_probe_fn();
 DROP FUNCTION IF EXISTS qualytics_permission_probe_fn();
 
--- Enum privileges (Alembic uses CREATE TYPE + ALTER TYPE ... ADD VALUE)
+-- Enum privileges (migrations use CREATE TYPE + ALTER TYPE ... ADD VALUE)
 DROP TYPE IF EXISTS qualytics_permission_probe_enum;
 CREATE TYPE qualytics_permission_probe_enum AS ENUM ('seed');
+
 \echo 'Committing before ALTER TYPE ... ADD VALUE (requires no active transaction)'
 COMMIT;
 ALTER TYPE qualytics_permission_probe_enum ADD VALUE IF NOT EXISTS 'migrated';
 BEGIN;
 DROP TYPE IF EXISTS qualytics_permission_probe_enum;
+
+-- UUID generation (built-in on PostgreSQL 13+, no extension required)
+SELECT gen_random_uuid() AS uuid_smoke_test;
 
 \echo 'All Qualytics permission probes completed successfully.'
 SQL
@@ -220,7 +213,7 @@ SQL
 If every statement succeeds the DBA can be confident that:
 
 - The service account can create/alter/drop tables, sequences, indexes, and functions.
-- Enum migrations that require `ALTER TYPE ... ADD VALUE` can run (this is the most restrictive Alembic requirement).
-- The `pgcrypto` extension is installed and the account can call `gen_random_uuid()` just like Qualytics seeds do.
+- Enum migrations that require `ALTER TYPE ... ADD VALUE` can run (this is the most restrictive migration requirement).
+- The built-in `gen_random_uuid()` function works as expected.
 
 After validation, provide the `DATABASE_URL` (or the Helm `secrets.postgres.*` values) to the deployment team.

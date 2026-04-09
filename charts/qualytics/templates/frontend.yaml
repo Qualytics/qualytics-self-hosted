@@ -30,12 +30,28 @@ spec:
         imagePullPolicy: IfNotPresent
         resources:
           requests:
-            {{- with .Values.frontend.resources }}
-            memory: {{ .memory }}
-            cpu: {{ .cpu }}
-            {{- end }}
+            memory: {{ .Values.frontend.resources.requests.memory }}
+            cpu: {{ .Values.frontend.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.frontend.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.frontend.ingress.servicePort }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.frontend.ingress.servicePort }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.frontend.ingress.servicePort }}
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
         env:
           - name: VITE_QUALYTICS_DNS
             value: {{ tpl .Values.global.dnsRecord . | quote }}

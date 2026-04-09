@@ -81,12 +81,15 @@ certmanager:
 ingress:
   enabled: false
   cors: false
-  maxRequestsPerSecondPerIP: 10
-  # Concurrent open connections allowed per IP before returning 429.
-  # Complements maxRequestsPerSecondPerIP: the rps limit handles sustained rate,
-  # while this caps the burst of simultaneous connections from a single client
-  # (e.g. a browser page load or a bulk-calling script) before pods are saturated.
-  maxConnectionsPerIP: 20
+  maxRequestsPerSecondPerIP: 50
+  # Burst multiplier for rate limiting: burst bucket = rps * multiplier.
+  # Allows short bursts (e.g. SPA page loads firing many parallel API calls)
+  # without throttling, while still capping sustained abuse.
+  burstMultiplier: 5
+  # Concurrent open connections allowed per IP before returning 503.
+  # Note: unlike rps limiting (which returns 429), connection limiting always
+  # returns 503 (nginx limitation). Set high enough that normal users never hit it.
+  maxConnectionsPerIP: 250
 
 #--------------------------------------------------------------------------------
 # Global values
@@ -106,13 +109,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260327-439a375"
+    controlplaneImageTag: "20260408-f4a3d13"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260327-c29be62"
+    dataplaneImageTag: "20260408-a346f67"
 frontendImage:
   image:
-    frontendImageTag: "20260327-946efb4"
+    frontendImageTag: "20260408-8cf07dd"
 
 # Storage classes
 storageClass:
@@ -202,7 +205,7 @@ secrets:
 #--------------------------------------------------------------------------------
 dataplane:
   enabled: true
-  sparkVersion: "4.0.2"
+  sparkVersion: "4.1.1"
   eventLog: false
   numVolumes: -1
   parallelismScaleFactor: -1
@@ -237,13 +240,16 @@ dataplane:
 # Controlplane configuration
 #--------------------------------------------------------------------------------
 controlplane:
-  replicas: 6
+  replicas: 8
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"
   resources:
-    memory: "1Gi"
-    cpu: "500m"
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
   smtp:
     enabled: true
     server: "email-smtp.us-east-1.amazonaws.com"
@@ -263,8 +269,11 @@ controlplane:
 
 controlplaneCmd:
   resources:
-    memory: "6Gi"
-    cpu: "500m"
+    requests:
+      memory: "6Gi"
+      cpu: "2000m"
+    limits:
+      memory: "12Gi"
 
 #--------------------------------------------------------------------------------
 # Frontend configuration
@@ -275,8 +284,11 @@ frontend:
     path: "/?(.*)"
     servicePort: "8080"
   resources:
-    memory: "256Mi"
-    cpu: "200m"
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
 
 #--------------------------------------------------------------------------------
 # Postgres
@@ -294,8 +306,26 @@ postgres:
   #   imageUrl: "pgautoupgrade/pgautoupgrade"
   #   imageTag: "17-bookworm"
   resources:
-    memory: "10Gi"
-    cpu: "2000m"
+    requests:
+      memory: "10Gi"
+      cpu: "2000m"
+    limits:
+      memory: "20Gi"
+  cronjobs:
+    snapshotter:
+      resources:
+        requests:
+          memory: "1Gi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+    maintenance:
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
   tls:
     enabled: false  # Requires certmanager.enabled to be true
 
@@ -311,8 +341,11 @@ rabbitmq:
     imageUrl: "rabbitmq"
     imageTag: "4.0-management"
   resources:
-    memory: "1Gi"
-    cpu: "500m"
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
   tls:
     enabled: false  # Requires certmanager.enabled to be true
   enableInbound: false  # When true, opens AMQP-TLS on port 30671 into the cluster

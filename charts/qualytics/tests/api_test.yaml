@@ -23,6 +23,37 @@ tests:
           value: RELEASE-NAME-api-service
         documentIndex: 1
 
+  # Strategy configuration
+  - it: should use Recreate strategy
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 0
+
+  # Health probes
+  - it: should configure readiness probe on API
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /api/health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+
+  - it: should configure liveness probe on API
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /api/health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 60
+        documentIndex: 0
+
   # Replica configuration
   - it: should configure API replicas
     set:
@@ -45,13 +76,50 @@ tests:
         documentIndex: 0
 
   # Resource configuration
-  - it: should configure API resources
-    set:
-      controlplane.resources.memory: "2Gi"
+  - it: should configure API resources with defaults
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "2Gi"
+          value: 1Gi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 500m
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+        documentIndex: 0
+
+  - it: should have default memory limit at 2x requests for API
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 2Gi
+        documentIndex: 0
+
+  - it: should NOT set CPU limits on API
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 0
+
+  - it: should allow custom memory limit override without changing requests for API
+    set:
+      controlplane.resources.requests.memory: "1Gi"
+      controlplane.resources.limits.memory: "4Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 1Gi
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: 4Gi
         documentIndex: 0
 
   # Image configuration
