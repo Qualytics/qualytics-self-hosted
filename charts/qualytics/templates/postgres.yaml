@@ -81,9 +81,6 @@ spec:
       terminationGracePeriodSeconds: 10
       imagePullSecrets:
         - name: regcred
-      {{- if .Values.priorityClasses.enabled }}
-      priorityClassName: qualytics-critical
-      {{- end }}
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -251,9 +248,6 @@ spec:
         spec:
           imagePullSecrets:
             - name: regcred
-          {{- if .Values.priorityClasses.enabled }}
-          priorityClassName: qualytics-standard
-          {{- end }}
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}
@@ -320,9 +314,6 @@ spec:
         spec:
           imagePullSecrets:
             - name: regcred
-          {{- if .Values.priorityClasses.enabled }}
-          priorityClassName: qualytics-standard
-          {{- end }}
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}

@@ -147,32 +147,6 @@ tests:
           value: "16Gi"
         documentIndex: 0
 
-  # PriorityClass
-  - it: should have qualytics-standard priorityClassName for CMD
-    asserts:
-      - equal:
-          path: spec.template.spec.priorityClassName
-          value: qualytics-standard
-        documentIndex: 0
-
-  - it: should NOT have priorityClassName on CMD when priorityClasses.enabled is false
-    set:
-      priorityClasses.enabled: false
-    asserts:
-      - isNull:
-          path: spec.template.spec.priorityClassName
-        documentIndex: 0
-
-  - it: should have priorityClassName on CMD when enabled is true but create is false
-    set:
-      priorityClasses.enabled: true
-      priorityClasses.create: false
-    asserts:
-      - equal:
-          path: spec.template.spec.priorityClassName
-          value: qualytics-standard
-        documentIndex: 0
-
   # Node selector configuration
   - it: should configure node selector when set
     set:
