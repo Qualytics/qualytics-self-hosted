@@ -170,14 +170,45 @@ tests:
           value: "true"
         documentIndex: 0
 
-  - it: should configure rate limiting when enabled
+  - it: should configure rate limiting with correct defaults
     set:
       ingress.enabled: true
       global.dnsRecord: "test.qualytics.io"
     asserts:
-      - exists:
+      # Streaming API ingress rate limiting
+      - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/limit-rps"]
+          value: "50"
         documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-burst-multiplier"]
+          value: "5"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-connections"]
+          value: "250"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-req-status-code"]
+          value: "429"
+        documentIndex: 0
+      # Regular API ingress rate limiting
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-rps"]
+          value: "50"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-burst-multiplier"]
+          value: "5"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-connections"]
+          value: "250"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-req-status-code"]
+          value: "429"
+        documentIndex: 1
 
   - it: should configure ModSecurity when enabled
     set:
