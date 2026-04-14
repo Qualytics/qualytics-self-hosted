@@ -171,6 +171,8 @@ dataplane:
 # Storage Configuration
 #--------------------------------------------------------------------------------
 postgres:
+  # Use a custom schema only when required by your database policy.
+  schema: "public"
   enabled: true
   pvc:
     storageSize: "50Gi"
