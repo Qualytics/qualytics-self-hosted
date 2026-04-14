@@ -360,3 +360,24 @@ tests:
             name: APP_DEPLOYMENT_MODE
             value: "databricks"
         documentIndex: 0
+
+  # PostgreSQL schema configuration
+  - it: should set POSTGRES_SCHEMA to default value public
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_SCHEMA
+            value: "public"
+        documentIndex: 0
+
+  - it: should set POSTGRES_SCHEMA to custom value when overridden
+    set:
+      postgres.schema: "qualytics"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_SCHEMA
+            value: "qualytics"
+        documentIndex: 0

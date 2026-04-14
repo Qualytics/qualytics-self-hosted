@@ -80,6 +80,8 @@ spec:
                 key: connection_url
           - name: DATABASE_URL
             value: "postgresql+psycopg2://$(POSTGRES_CONNECTION_URL)"
+          - name: POSTGRES_SCHEMA
+            value: {{ .Values.postgres.schema | quote }}
           {{- if ( eq .Values.controlplane.smtp.enabled true ) }}
           - name: SMTP_SERVER
             value: {{ .Values.controlplane.smtp.server | quote }}
