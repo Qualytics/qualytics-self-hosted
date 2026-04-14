@@ -354,7 +354,7 @@ spec:
                 TABLES=$(psql $DATABASE_URL -t -c "
                   SELECT '\"' || schemaname || '\".\"' || tablename || '\"'
                   FROM pg_tables
-                  WHERE schemaname = 'public';")
+                  WHERE schemaname = '{{ .Values.postgres.schema }}';")
                 for table in $TABLES; do
                   printf "Reindexing table: $table\n"
                   psql $DATABASE_URL -c "REINDEX TABLE CONCURRENTLY $table;"

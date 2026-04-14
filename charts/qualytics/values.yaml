@@ -328,6 +328,9 @@ postgres:
           memory: "1Gi"
   tls:
     enabled: false  # Requires certmanager.enabled to be true
+  # PostgreSQL schema used by the controlplane at runtime (sets search_path).
+  # Override to use a custom schema instead of the default "public" schema.
+  schema: "public"
 
 #--------------------------------------------------------------------------------
 # RabbitMQ
