@@ -93,6 +93,9 @@ sparkoperator:
     - "qualytics"
     serviceAccount:
       name: "qualytics-spark"
+      # For AWS IRSA (IAM Role authentication for S3/Athena connectors):
+      # annotations:
+      #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
 
 nginx:
   enabled: false
@@ -100,17 +103,25 @@ nginx:
     nodeSelector:
       appNodes: "true"
 
-certmanager:
-  enabled: false
-  nodeSelector:
-    appNodes: "true"
-
 #--------------------------------------------------------------------------------
 # Ingress Configuration
 #--------------------------------------------------------------------------------
+# Before `helm install`, create a TLS Secret in the release namespace. Recommended
+# pattern (a single wildcard/SAN cert used for both api and frontend):
+#
+#   kubectl create secret tls qualytics-tls-cert -n qualytics \
+#     --cert=fullchain.pem --key=privkey.pem
+#
+# Then set ingress.tls.secretName below. See docs/ingress-tls.md for all options,
+# including the legacy split-Secret mode (api-tls-cert + frontend-tls-cert) which
+# is automatically used when ingress.tls.secretName is empty.
 ingress:
   enabled: true
   cors: false
+  tls:
+    # Single shared Secret for both api and frontend (recommended for new deployments).
+    # Leave empty to keep the legacy `api-tls-cert` + `frontend-tls-cert` split pair.
+    secretName: "qualytics-tls-cert"
 
 #--------------------------------------------------------------------------------
 # Controlplane Configuration

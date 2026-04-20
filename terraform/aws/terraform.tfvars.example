@@ -44,7 +44,7 @@ node_group_az_suffix = "a"
 
 #-------------------------------------------------------------------------------
 # Application Nodes
-# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager
+# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator
 #-------------------------------------------------------------------------------
 
 # Instance types - m8g.2xlarge (8 vCPUs, 32 GB) recommended

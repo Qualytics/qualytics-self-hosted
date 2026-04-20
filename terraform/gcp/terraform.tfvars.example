@@ -60,7 +60,7 @@ master_authorized_networks = [
 
 #-------------------------------------------------------------------------------
 # Application Nodes
-# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager
+# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator
 #-------------------------------------------------------------------------------
 
 # Machine type - n4-standard-8 (8 vCPUs, 32 GB) recommended

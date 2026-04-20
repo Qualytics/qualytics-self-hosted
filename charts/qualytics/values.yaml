@@ -33,6 +33,11 @@ sparkoperator:
     - "qualytics" # Set to qualytics target namespace
     serviceAccount:
       name: "qualytics-spark"
+      # Annotations for the Spark ServiceAccount.
+      # For AWS IRSA (IAM Roles for Service Accounts), add:
+      #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
+      # This enables keyless IAM Role authentication for S3 and Athena connectors.
+      annotations: {}
   hook:
     upgradeCrd: false
 
@@ -61,20 +66,6 @@ nginx:
       #   service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: 'true'
       #   service.beta.kubernetes.io/aws-load-balancer-type: nlb
 
-certmanager:
-  enabled: false
-  installCRDs: true
-  config:
-    featureGates:
-      ACMEHTTP01IngressPathTypeExact: false
-  nodeSelector: {}
-  #   appNodes: "true"
-  # tolerations:
-  #   - key: appNodes
-  #     operator: Equal
-  #     value: "true"
-  #     effect: NoSchedule
-
 #--------------------------------------------------------------------------------
 # App Ingresses
 #--------------------------------------------------------------------------------
@@ -90,6 +81,22 @@ ingress:
   # Note: unlike rps limiting (which returns 429), connection limiting always
   # returns 503 (nginx limitation). Set high enough that normal users never hit it.
   maxConnectionsPerIP: 250
+  # Frontend rate limiting: set very high to allow parallel asset loading
+  # (typical SPA loads 50-100 assets at once) while still capping DDoS floods.
+  frontendMaxRequestsPerSecondPerIP: 500
+  frontendMaxConnectionsPerIP: 1000
+  # TLS Secrets — Bring Your Own. Create the referenced `kubernetes.io/tls` Secret
+  # in the release namespace before installing. See docs/ingress-tls.md.
+  tls:
+    # Recommended for new deployments: set `secretName` to a single wildcard
+    # (or SAN) Secret used by both the API and frontend ingresses. When set,
+    # it takes precedence over `apiSecretName` / `frontendSecretName` below.
+    secretName: ""
+    # Per-ingress Secret names. These are the zero-config defaults; existing
+    # installs that already have `api-tls-cert` + `frontend-tls-cert` Secrets
+    # keep working without any values changes.
+    apiSecretName: "api-tls-cert"
+    frontendSecretName: "frontend-tls-cert"
 
 #--------------------------------------------------------------------------------
 # Global values
@@ -327,7 +334,10 @@ postgres:
         limits:
           memory: "1Gi"
   tls:
-    enabled: false  # Requires certmanager.enabled to be true
+    # When true, Postgres mounts the `postgres-tls` Secret at /etc/certs.
+    # Create a `kubernetes.io/tls` Secret named `postgres-tls` in the release
+    # namespace before enabling. See docs/ingress-tls.md.
+    enabled: false
 
 #--------------------------------------------------------------------------------
 # RabbitMQ
@@ -347,7 +357,10 @@ rabbitmq:
     limits:
       memory: "2Gi"
   tls:
-    enabled: false  # Requires certmanager.enabled to be true
+    # When true, RabbitMQ mounts the `rabbitmq-tls` Secret and serves AMQPS on 5671.
+    # Create a `kubernetes.io/tls` Secret named `rabbitmq-tls` in the release
+    # namespace before enabling. See docs/ingress-tls.md.
+    enabled: false
   enableInbound: false  # When true, opens AMQP-TLS on port 30671 into the cluster
 
 #--------------------------------------------------------------------------------

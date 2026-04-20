@@ -61,7 +61,7 @@ node_group_az = "1"
 
 #-------------------------------------------------------------------------------
 # Application Nodes
-# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator, Cert-Manager
+# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator
 #-------------------------------------------------------------------------------
 
 # VM size - Standard_D8s_v5 (8 vCPUs, 32 GB) recommended

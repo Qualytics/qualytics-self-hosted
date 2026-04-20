@@ -85,7 +85,8 @@ This Terraform configuration creates a Google Kubernetes Engine (GKE) cluster co
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
      -f values.yaml \
-     --timeout=20m
+     --wait \
+     --timeout=5m
    ```
 
 ## Machine Type Recommendations

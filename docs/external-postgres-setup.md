@@ -147,7 +147,8 @@ helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
   -f values.yaml \
-  --timeout=20m
+  --wait \
+  --timeout=5m
 ```
 
 ## Validation Script (run by DBA)

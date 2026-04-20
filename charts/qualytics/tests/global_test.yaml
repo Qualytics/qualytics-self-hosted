@@ -6,6 +6,7 @@ tests:
   # Platform configuration tests in SparkApplication
   - it: should configure AWS platform in spark volumes
     template: spark.yaml
+    documentIndex: 0
     set:
       global.platform: "aws"
       dataplane.numVolumes: 2
@@ -25,6 +26,7 @@ tests:
 
   - it: should configure GCP platform in spark volumes
     template: spark.yaml
+    documentIndex: 0
     set:
       global.platform: "gcp"
       dataplane.numVolumes: 2
@@ -44,6 +46,7 @@ tests:
 
   - it: should configure Azure platform with emptyDir volumes
     template: spark.yaml
+    documentIndex: 0
     set:
       global.platform: "azure"
       dataplane.numVolumes: 1
@@ -69,6 +72,7 @@ tests:
   # Image URL configuration in SparkApplication
   - it: should configure dataplane image URL
     template: spark.yaml
+    documentIndex: 0
     set:
       global.imageUrls.dataplaneImageUrl: "custom-registry/dataplane"
       dataplaneImage.image.dataplaneImageTag: "v2.3.4"
@@ -125,6 +129,7 @@ tests:
   # Global values interaction tests
   - it: should work with all global values configured for spark
     template: spark.yaml
+    documentIndex: 0
     set:
       global.platform: "gcp"
       global.dnsRecord: "production.qualytics.io"
@@ -148,6 +153,7 @@ tests:
   # Platform validation
   - it: should handle different platforms correctly
     template: spark.yaml
+    documentIndex: 0
     set:
       global.platform: "other"
       dataplane.numVolumes: 1

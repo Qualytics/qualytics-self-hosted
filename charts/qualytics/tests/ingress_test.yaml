@@ -122,19 +122,25 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/enable-owasp-core-rules"]
           value: "true"
         documentIndex: 2
-      # Verify rate limiting is disabled for frontend (to allow parallel asset loading)
+      # Verify frontend has high rate limits (allows parallel asset loading, caps DDoS)
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/limit-rps"]
-          value: "0"
+          value: "500"
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-connections"]
+          value: "1000"
+        documentIndex: 2
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/limit-req-status-code"]
+          value: "429"
         documentIndex: 2
 
-  - it: should configure TLS when cert-manager is enabled
+  - it: should default to legacy split TLS Secret names when no override is set (backwards compatible)
     set:
       ingress.enabled: true
       global.dnsRecord: "test.qualytics.io"
-      global.certManager.enabled: true
     asserts:
-      # Streaming API ingress TLS
       - contains:
           path: spec.tls
           content:
@@ -142,7 +148,6 @@ tests:
               - "test.qualytics.io"
             secretName: "api-tls-cert"
         documentIndex: 0
-      # Regular API ingress TLS
       - contains:
           path: spec.tls
           content:
@@ -150,13 +155,113 @@ tests:
               - "test.qualytics.io"
             secretName: "api-tls-cert"
         documentIndex: 1
-      # Frontend ingress TLS
       - contains:
           path: spec.tls
           content:
             hosts:
               - "test.qualytics.io"
             secretName: "frontend-tls-cert"
+        documentIndex: 2
+
+  - it: should use a single shared TLS Secret for both api and frontend when ingress.tls.secretName is set
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.tls.secretName: "qualytics-wildcard"
+    asserts:
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "qualytics-wildcard"
+        documentIndex: 0
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "qualytics-wildcard"
+        documentIndex: 1
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "qualytics-wildcard"
+        documentIndex: 2
+
+  - it: should let ingress.tls.secretName take precedence over the per-ingress defaults when set
+    # When secretName is provided, it wins — the per-ingress api/frontend fields
+    # (which default to api-tls-cert / frontend-tls-cert) are ignored.
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.tls.secretName: "shared-wins"
+      ingress.tls.apiSecretName: "ignored-api"
+      ingress.tls.frontendSecretName: "ignored-frontend"
+    asserts:
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "shared-wins"
+        documentIndex: 0
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "shared-wins"
+        documentIndex: 1
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "shared-wins"
+        documentIndex: 2
+
+  - it: should use per-ingress apiSecretName/frontendSecretName when secretName is empty
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.tls.apiSecretName: "custom-api"
+      ingress.tls.frontendSecretName: "custom-frontend"
+    asserts:
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "custom-api"
+        documentIndex: 0
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "custom-api"
+        documentIndex: 1
+      - contains:
+          path: spec.tls
+          content:
+            hosts:
+              - "test.qualytics.io"
+            secretName: "custom-frontend"
+        documentIndex: 2
+
+  - it: should not include the cert-manager cluster-issuer annotation
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - notExists:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+        documentIndex: 0
+      - notExists:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
         documentIndex: 2
 
   - it: should configure CORS when enabled

@@ -9,7 +9,7 @@ data:
     default_user = user
     loopback_users.user = false
     listeners.tcp.default = 5672
-{{ if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+{{ if .Values.rabbitmq.tls.enabled }}
     # TLS configuration
     listeners.ssl.default = 5671
     ssl_options.certfile   = /etc/rabbitmq/tls/tls.crt
@@ -104,7 +104,7 @@ spec:
         ports:
         - containerPort: 15672
           name: discovery
-        {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+        {{- if .Values.rabbitmq.tls.enabled }}
         - containerPort: 5671
           name: amqp-tls
         {{- else }}
@@ -144,7 +144,7 @@ spec:
               name: qualytics-creds
               key: rabbitmq_password
         volumeMounts:
-        {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+        {{- if .Values.rabbitmq.tls.enabled }}
         - name: rabbitmq-tls
           mountPath: /etc/rabbitmq/tls/
           readOnly: true
@@ -157,7 +157,7 @@ spec:
         - name: plugins-file
           mountPath: /etc/rabbitmq/
       volumes:
-      {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+      {{- if .Values.rabbitmq.tls.enabled }}
       - name: rabbitmq-tls
         secret:
           secretName: rabbitmq-tls
@@ -179,21 +179,6 @@ spec:
           name: {{ .Release.Name }}-rabbitmq-config
           defaultMode: 0755
 
-{{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: rabbitmq-cert
-spec:
-  secretName: rabbitmq-tls
-  dnsNames:
-  - {{ tpl .Values.global.dnsRecord . | quote }}
-  issuerRef:
-    name: letsencrypt
-    kind: ClusterIssuer
-{{- end }}
-
 ---
 apiVersion: v1
 kind: Service
@@ -202,7 +187,7 @@ metadata:
   labels:
     service: {{ .Release.Name }}-rabbitmq-service
 spec:
-{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled .Values.certmanager.enabled }}
+{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled }}
   type: NodePort
 {{- else }}
   clusterIP: None
@@ -214,7 +199,7 @@ spec:
   - port: 5672
     targetPort: 5672
     name: amqp
-  {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+  {{- if .Values.rabbitmq.tls.enabled }}
   - port: 5671
   {{- if .Values.rabbitmq.enableInbound }}
     nodePort: 30671

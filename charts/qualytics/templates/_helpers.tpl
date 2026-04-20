@@ -12,7 +12,7 @@ Generate postgres connection URL
 {{- $host = .Values.secrets.postgres.host -}}
 {{- $port = toString .Values.secrets.postgres.port -}}
 {{- end -}}
-{{- if and .Values.certmanager.enabled .Values.postgres.tls.enabled -}}
+{{- if .Values.postgres.tls.enabled -}}
 {{- $sslMode = "require" -}}
 {{- end -}}
 {{- printf "%s:%s@%s:%s/%s?sslmode=%s" .Values.secrets.postgres.username .Values.secrets.postgres.password $host $port .Values.secrets.postgres.database $sslMode -}}

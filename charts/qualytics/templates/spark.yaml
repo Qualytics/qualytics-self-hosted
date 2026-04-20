@@ -5,6 +5,7 @@ metadata:
   name: {{ .Release.Name }}-spark
   annotations:
     "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
 spec:
   type: Scala
   mode: cluster
@@ -240,4 +241,134 @@ spec:
         mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
       {{- end }}
     {{- end }}
+{{- if and .Values.sparkoperator.enabled .Values.sparkoperator.webhook.enable }}
+---
+# Pre-flight Job that blocks the SparkApplication post-install/post-upgrade hook
+# until the spark-operator mutating webhook has ready endpoints. Prevents
+# "no endpoints available for service qualytics-sparkoperator-webhook-svc" errors
+# when the webhook pod is still pulling its image or passing readiness probes
+# (common on EKS with Karpenter / cluster autoscaler).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-spark-webhook-wait
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: Role
+  name: {{ .Release.Name }}-spark-webhook-wait
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-10"
+    # before-hook-creation: the previous Job is removed before the next install/upgrade.
+    # We intentionally omit hook-succeeded so the Job's logs remain inspectable after
+    # success. ttlSecondsAfterFinished (below) handles cleanup a few minutes later.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  # Keep the Job (and its pod logs) around for 10 minutes after completion so
+  # operators can inspect what happened during install/upgrade. The next
+  # before-hook-creation pass will clean it up regardless.
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-spark-webhook-wait
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Release.Name }}-spark-webhook-wait
+      {{- if .Values.appNodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.appNodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations.appNodeTolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: wait
+          # Reuse the spark-operator subchart's kubectl image — customers already
+          # pull this for the subchart's CRD upgrade hook, so no new dependency.
+          # It ships kubectl as the entrypoint and /bin/sh for the retry loop below.
+          image: "ghcr.io/kubeflow/spark-operator/kubectl:{{ .Subcharts.sparkoperator.Chart.AppVersion }}"
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              memory: "128Mi"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              NS="{{ .Release.Namespace }}"
+              DEPLOY="{{ .Release.Name }}-sparkoperator-webhook"
+              SVC="{{ .Release.Name }}-sparkoperator-webhook-svc"
+              ROLLOUT_TIMEOUT="300s"
+              ENDPOINT_TIMEOUT=300
+
+              echo "[1/2] Waiting up to ${ROLLOUT_TIMEOUT} for Deployment/${DEPLOY} to become Available..."
+              kubectl -n "${NS}" rollout status deployment/"${DEPLOY}" --timeout="${ROLLOUT_TIMEOUT}"
+
+              echo "[2/2] Waiting up to ${ENDPOINT_TIMEOUT}s for Service/${SVC} endpoints to populate..."
+              end=$(( $(date +%s) + ENDPOINT_TIMEOUT ))
+              while [ "$(date +%s)" -lt "${end}" ]; do
+                ips=$(kubectl -n "${NS}" get endpoints "${SVC}" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
+                if [ -n "${ips}" ]; then
+                  echo "Webhook endpoints ready: ${ips}"
+                  exit 0
+                fi
+                echo "  no endpoints yet, retrying in 5s..."
+                sleep 5
+              done
+
+              echo "ERROR: timed out waiting for ${SVC} endpoints" >&2
+              kubectl -n "${NS}" get endpoints "${SVC}" -o yaml || true
+              kubectl -n "${NS}" get pods -l app.kubernetes.io/component=webhook -o wide || true
+              exit 1
+{{- end }}
 {{- end }}
