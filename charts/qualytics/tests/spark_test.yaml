@@ -4,6 +4,7 @@ templates:
 tests:
   # Basic functionality tests
   - it: should render SparkApplication with default values
+    documentIndex: 0
     asserts:
       - isKind:
           of: SparkApplication
@@ -21,13 +22,18 @@ tests:
           value: io.qualytics.dataplane.SparkMothership
 
   - it: should have helm hook annotations for post-install ordering
+    documentIndex: 0
     asserts:
       - equal:
           path: metadata.annotations["helm.sh/hook"]
           value: post-install,post-upgrade
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "0"
 
   # Platform-specific configurations (template.values.yaml: global.platform)
   - it: should configure AWS platform volumes correctly
+    documentIndex: 0
     set:
       global.platform: aws
       dataplane.numVolumes: 2
@@ -46,6 +52,7 @@ tests:
               path: /mnt/disks/nvme2n1/spark-local-dir-2
 
   - it: should configure GCP platform volumes correctly
+    documentIndex: 0
     set:
       global.platform: gcp
       dataplane.numVolumes: 2
@@ -65,6 +72,7 @@ tests:
 
   # Dataplane configuration tests (template.values.yaml: dataplane.*)
   - it: should configure driver resources from template values
+    documentIndex: 0
     set:
       dataplane.driver.cores: 4
       dataplane.driver.memory: "32000m"
@@ -77,6 +85,7 @@ tests:
           value: "32000m"
 
   - it: should configure executor resources from template values
+    documentIndex: 0
     set:
       dataplane.executor.instances: 2
       dataplane.executor.cores: 8
@@ -93,6 +102,7 @@ tests:
           value: "64000m"
 
   - it: should configure dynamic allocation from template values
+    documentIndex: 0
     set:
       dataplane.dynamicAllocation.enabled: true
       dataplane.dynamicAllocation.initialExecutors: 2
@@ -113,6 +123,7 @@ tests:
           value: 20
 
   - it: should set parallelism scale factor environment variable
+    documentIndex: 0
     set:
       dataplane.parallelismScaleFactor: 0.5
     asserts:
@@ -123,6 +134,7 @@ tests:
             value: "0.5"
 
   - it: should set max parallel sync requests environment variable
+    documentIndex: 0
     set:
       dataplane.maxParallelSyncRequests: 5
     asserts:
@@ -134,6 +146,7 @@ tests:
 
   # Volume configuration tests
   - it: should not have volumes section when no volumes configured
+    documentIndex: 0
     set:
       dataplane.numVolumes: -1
     asserts:
@@ -141,6 +154,7 @@ tests:
           path: spec.volumes
 
   - it: should configure numVolumes from template values
+    documentIndex: 0
     set:
       dataplane.numVolumes: 3
       global.platform: aws
@@ -157,6 +171,7 @@ tests:
 
   # Node selector tests (template.values.yaml: *NodeSelector)
   - it: should configure driver node selector
+    documentIndex: 0
     set:
       driverNodeSelector:
         driverNodes: "true"
@@ -170,6 +185,7 @@ tests:
           value: "us-east-1a"
 
   - it: should configure executor node selector
+    documentIndex: 0
     set:
       executorNodeSelector:
         executorNodes: "true"
@@ -184,6 +200,7 @@ tests:
 
   # ServiceAccount test (template.values.yaml: sparkoperator.spark.serviceAccount.name)
   - it: should use configured service account
+    documentIndex: 0
     set:
       sparkoperator.spark.serviceAccount.name: "custom-spark-sa"
     asserts:
@@ -198,9 +215,176 @@ tests:
       - hasDocuments:
           count: 0
 
-  - it: should render when dataplane is explicitly enabled
+  - it: should render 5 documents when dataplane is explicitly enabled (SparkApplication + wait-hook resources)
     set:
       dataplane.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 5
+      - isKind:
+          of: SparkApplication
+        documentIndex: 0
+
+  - it: should render exactly one SparkApplication at documentIndex 0
+    asserts:
+      - hasDocuments:
+          count: 5
+      - isKind:
+          of: SparkApplication
+        documentIndex: 0
+
+  # -------------------------------------------------------------------------
+  # Pre-flight wait-hook tests. Document layout when everything is enabled:
+  #   0 = SparkApplication
+  #   1 = ServiceAccount (wait)
+  #   2 = Role (wait)
+  #   3 = RoleBinding (wait)
+  #   4 = Job (wait)
+  # -------------------------------------------------------------------------
+
+  - it: should render a ServiceAccount with correct name and hook metadata
+    asserts:
+      - isKind:
+          of: ServiceAccount
+        documentIndex: 1
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-webhook-wait
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-20"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation,hook-succeeded
+        documentIndex: 1
+
+  - it: should render a Role granting endpoints + deployments read access
+    asserts:
+      - isKind:
+          of: Role
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-webhook-wait
+        documentIndex: 2
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: ["endpoints", "pods"]
+            verbs: ["get", "list", "watch"]
+        documentIndex: 2
+      - contains:
+          path: rules
+          content:
+            apiGroups: ["apps"]
+            resources: ["deployments"]
+            verbs: ["get", "list", "watch"]
+        documentIndex: 2
+
+  - it: should render a RoleBinding linking the SA to the Role
+    asserts:
+      - isKind:
+          of: RoleBinding
+        documentIndex: 3
+      - equal:
+          path: subjects[0].kind
+          value: ServiceAccount
+        documentIndex: 3
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-spark-webhook-wait
+        documentIndex: 3
+      - equal:
+          path: roleRef.name
+          value: RELEASE-NAME-spark-webhook-wait
+        documentIndex: 3
+
+  - it: should render the wait Job at hook-weight -10 so it runs after RBAC but before the SparkApplication
+    asserts:
+      - isKind:
+          of: Job
+        documentIndex: 4
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,post-upgrade
+        documentIndex: 4
+      - equal:
+          path: metadata.annotations["helm.sh/hook-weight"]
+          value: "-10"
+        documentIndex: 4
+      - equal:
+          path: metadata.annotations["helm.sh/hook-delete-policy"]
+          value: before-hook-creation
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-spark-webhook-wait
+        documentIndex: 4
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+        documentIndex: 4
+      - equal:
+          path: spec.backoffLimit
+          value: 3
+        documentIndex: 4
+      - equal:
+          path: spec.activeDeadlineSeconds
+          value: 600
+        documentIndex: 4
+      - equal:
+          path: spec.ttlSecondsAfterFinished
+          value: 600
+        documentIndex: 4
+
+  - it: should reference the subchart's webhook deployment and service names in the wait command
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: RELEASE-NAME-sparkoperator-webhook
+        documentIndex: 4
+      - matchRegex:
+          path: spec.template.spec.containers[0].command[2]
+          pattern: RELEASE-NAME-sparkoperator-webhook-svc
+        documentIndex: 4
+
+  - it: should apply appNodeSelector to the wait Job when set
+    set:
+      appNodeSelector:
+        appNodes: "true"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.appNodes
+          value: "true"
+        documentIndex: 4
+
+  - it: should apply appNodeTolerations to the wait Job when set
+    set:
+      tolerations.appNodeTolerations:
+        - key: appNodes
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: appNodes
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+        documentIndex: 4
+
+  - it: should render only the SparkApplication when sparkoperator is disabled
+    set:
+      sparkoperator.enabled: false
     asserts:
       - hasDocuments:
           count: 1
@@ -208,7 +392,9 @@ tests:
           of: SparkApplication
         documentIndex: 0
 
-  - it: should render exactly one SparkApplication
+  - it: should render only the SparkApplication when the spark-operator webhook is disabled
+    set:
+      sparkoperator.webhook.enable: false
     asserts:
       - hasDocuments:
           count: 1
@@ -480,7 +666,7 @@ tests:
       global.deploymentMode: "kubernetes"
     asserts:
       - hasDocuments:
-          count: 1
+          count: 5
       - isKind:
           of: SparkApplication
         documentIndex: 0

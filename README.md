@@ -150,7 +150,9 @@ The `template.values.yaml` file contains essential configurations with sensible 
 
 **Optional configurations:**
 - Enable `nginx` if you need an ingress controller
-- Enable `certmanager` for automatic SSL certificates
+- Provide a TLS Secret for the ingress (see [docs/ingress-tls.md](./docs/ingress-tls.md)).
+  Recommended: a single shared `qualytics-tls-cert` Secret referenced via `ingress.tls.secretName`.
+  Existing deployments with `api-tls-cert` + `frontend-tls-cert` keep working unchanged.
 - Configure `controlplane.smtp` settings for email notifications
 - Node selectors are now enabled by default for dedicated node groups
 
@@ -172,7 +174,8 @@ helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
   -f values.yaml \
-  --timeout=20m
+  --wait \
+  --timeout=5m
 ```
 
 **Monitor the deployment:**
@@ -192,21 +195,16 @@ kubectl get ingress -n qualytics
 
 Note this IP address as it's needed for the next step!
 
-### 4. Configure DNS for your deployment
+### 4. Configure DNS and TLS for your deployment
 
-You have two options for DNS configuration:
+Run Qualytics under a domain you control:
 
-**Option A: Qualytics-managed DNS (Recommended)**
-Send your [account manager](mailto://hello@qualytics.ai) the IP address from step 3. Qualytics will assign a DNS record under `*.qualytics.io` (e.g., `https://acme.qualytics.io`) and handle SSL certificate management.
+1. Create an A record pointing your domain to the ingress IP address.
+2. Set `global.dnsRecord` in `values.yaml` to that hostname.
+3. Mint a TLS certificate for that hostname (corporate CA, Let's Encrypt, cloud-provider managed cert, etc.) and create a Kubernetes `tls` Secret from it — see [docs/ingress-tls.md](./docs/ingress-tls.md) for the recommended single-Secret pattern and the per-ingress Secret option.
+4. Update any firewall rules to allow traffic to your domain.
 
-**Option B: Custom Domain**
-If using your own domain:
-1. Create an A record pointing your domain to the ingress IP address
-2. Ensure your `global.dnsRecord` in values.yaml matches your custom domain
-3. Configure SSL certificates (enable `certmanager` or provide your own)
-4. Update any firewall rules to allow traffic to your domain
-
-Contact your [account manager](mailto://hello@qualytics.ai) for assistance with either option.
+Contact your [account manager](mailto://hello@qualytics.ai) if you need assistance.
 
 ## Can I run a fully "air-gapped" deployment?
 

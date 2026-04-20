@@ -40,9 +40,8 @@ tests:
   - it: should NOT create PVC and use emptyDir when pvc.enabled is false
     set:
       rabbitmq.pvc.enabled: false
-      certmanager.enabled: false
     asserts:
-      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC, no Certificate)
+      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC)
       - hasDocuments:
           count: 4
       - isKind:

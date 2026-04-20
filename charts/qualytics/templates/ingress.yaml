@@ -1,8 +1,5 @@
 {{/* Define common annotations as a named template */}}
 {{- define "common.ingress.annotations" -}}
-{{- if ( eq .Values.certmanager.enabled true ) }}
-cert-manager.io/cluster-issuer: 'letsencrypt'
-{{- end }}
 nginx.ingress.kubernetes.io/proxy-connect-timeout: '3600'
 nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
 nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
@@ -46,13 +43,28 @@ SecAuditLog /dev/stdout
 SecAuditLogParts ABCIJDEFHZ
 SecAuditLogFormat JSON
 SecAuditEngine RelevantOnly # could be On/Off/RelevantOnly
-# addresses SC-14854
-SecRule REQUEST_URI "@rx ^.*/\?(/\?)+/?$" "id:14854,phase:2,deny,status:403"
+# addresses SC-14854 expanded (phase:1 to reject before body processing)
+SecRule REQUEST_URI_RAW "@rx (?:/\?){3,}" "id:14854,phase:1,deny,status:403"
+# Block absurdly long URIs used in DDoS path-traversal floods (>4KB).
+# t:length must run *before* @gt so the numeric comparison is against the URI's
+# character count — otherwise @gt coerces the raw string to int (=0) and never fires.
+SecRule REQUEST_URI_RAW "@gt 4096" "id:14855,phase:1,deny,status:414,t:length"
 # addresses SC-15205
 SecRuleRemoveById 949110
 {{- end -}}
 
 {{- if ( eq .Values.ingress.enabled true ) }}
+{{/*
+  Resolve TLS Secret names with three-tier precedence:
+    1. Shared Secret (ingress.tls.secretName) — when set, used by BOTH ingresses.
+       This is the recommended pattern for new deployments.
+    2. Per-ingress Secret (ingress.tls.apiSecretName / frontendSecretName) — defaults
+       to "api-tls-cert" / "frontend-tls-cert" for zero-config backwards compatibility
+       with existing installs.
+    3. Hardcoded fallback if both of the above are somehow empty strings.
+*/}}
+{{- $apiTLSSecret := coalesce .Values.ingress.tls.secretName .Values.ingress.tls.apiSecretName "api-tls-cert" -}}
+{{- $frontendTLSSecret := coalesce .Values.ingress.tls.secretName .Values.ingress.tls.frontendSecretName "frontend-tls-cert" -}}
 ---
 # API Ingress - Streaming endpoints (no buffering, no OWASP Core Rules)
 apiVersion: networking.k8s.io/v1
@@ -95,7 +107,7 @@ spec:
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
-      secretName: api-tls-cert
+      secretName: {{ $apiTLSSecret }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
@@ -153,7 +165,7 @@ spec:
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
-      secretName: api-tls-cert
+      secretName: {{ $apiTLSSecret }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
@@ -175,8 +187,11 @@ metadata:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "50"
     {{- include "common.ingress.annotations" . | nindent 4 }}
-    # Disable rate limiting for frontend assets (browser needs to load many assets in parallel)
-    nginx.ingress.kubernetes.io/limit-rps: "0"
+    # High rate limits for frontend: allows parallel asset loading while capping DDoS floods
+    nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.frontendMaxRequestsPerSecondPerIP | int | quote }}
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
+    nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.frontendMaxConnectionsPerIP | int | quote }}
+    nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     nginx.ingress.kubernetes.io/proxy-buffering: "on"
     nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
     nginx.ingress.kubernetes.io/proxy-busy-buffers-size: "128k"
@@ -192,7 +207,7 @@ spec:
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
-      secretName: frontend-tls-cert
+      secretName: {{ $frontendTLSSecret }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
