@@ -11,7 +11,7 @@ This Helm chart deploys a single-tenant instance of the Qualytics data quality p
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
 - **Dependencies**: Spark Operator 2.5.0, nginx-ingress 4.15.1 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
 
-Chart version: **2025.10.17** (application type)
+Chart version: **2026.4.20** (application type)
 
 ## Directory Structure
 

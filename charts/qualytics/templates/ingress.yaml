@@ -45,9 +45,10 @@ SecAuditLogFormat JSON
 SecAuditEngine RelevantOnly # could be On/Off/RelevantOnly
 # addresses SC-14854 expanded (phase:1 to reject before body processing)
 SecRule REQUEST_URI_RAW "@rx (?:/\?){3,}" "id:14854,phase:1,deny,status:403"
-# Block absurdly long URIs used in DDoS path-traversal floods (>4KB)
-SecRule REQUEST_URI_RAW "@gt 4096" "id:14855,phase:1,deny,status:414,chain"
-SecRule REQUEST_URI_RAW "@unconditionalMatch" "t:length"
+# Block absurdly long URIs used in DDoS path-traversal floods (>4KB).
+# t:length must run *before* @gt so the numeric comparison is against the URI's
+# character count — otherwise @gt coerces the raw string to int (=0) and never fires.
+SecRule REQUEST_URI_RAW "@gt 4096" "id:14855,phase:1,deny,status:414,t:length"
 # addresses SC-15205
 SecRuleRemoveById 949110
 {{- end -}}
