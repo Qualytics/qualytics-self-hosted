@@ -244,10 +244,19 @@ spec:
 {{- if and .Values.sparkoperator.enabled .Values.sparkoperator.webhook.enable }}
 ---
 # Pre-flight Job that blocks the SparkApplication post-install/post-upgrade hook
-# until the spark-operator mutating webhook has ready endpoints. Prevents
-# "no endpoints available for service qualytics-sparkoperator-webhook-svc" errors
-# when the webhook pod is still pulling its image or passing readiness probes
-# (common on EKS with Karpenter / cluster autoscaler).
+# until the spark-operator mutating webhook is fully serving admission requests.
+# Three conditions must all be true — skipping any of them produces a real race
+# we have reproduced:
+#   (1) Webhook Deployment is Available. Covers "webhook pod still pulling its
+#       image or passing readiness probes" (common on EKS with Karpenter /
+#       cluster autoscaler on a cold node).
+#   (2) Service endpoints are populated. Covers the "no endpoints available for
+#       service qualytics-sparkoperator-webhook-svc" error on fresh installs.
+#   (3) MutatingWebhookConfiguration CA bundle has been injected by the
+#       operator's controller loop. Covers the "tls: failed to verify
+#       certificate: x509: certificate signed by unknown authority" error on
+#       fresh single-phase `helm install`, where the operator loop lags the
+#       Service endpoint controller by 15-20s.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -290,6 +299,41 @@ subjects:
     namespace: {{ .Release.Namespace }}
 roleRef:
   kind: Role
+  name: {{ .Release.Name }}-spark-webhook-wait
+  apiGroup: rbac.authorization.k8s.io
+---
+# Cluster-scoped read on MutatingWebhookConfiguration so the wait Job can block
+# until the sparkoperator controller has written the CA bundle into the webhook
+# configuration. Without this extra gate, admission calls can still fail with
+# "tls: certificate signed by unknown authority" even after Service endpoints
+# are populated.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-spark-webhook-wait
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Release.Name }}-spark-webhook-wait
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
   name: {{ .Release.Name }}-spark-webhook-wait
   apiGroup: rbac.authorization.k8s.io
 ---
@@ -348,27 +392,46 @@ spec:
               NS="{{ .Release.Namespace }}"
               DEPLOY="{{ .Release.Name }}-sparkoperator-webhook"
               SVC="{{ .Release.Name }}-sparkoperator-webhook-svc"
+              MWC="{{ .Release.Name }}-sparkoperator-webhook"
               ROLLOUT_TIMEOUT="300s"
-              ENDPOINT_TIMEOUT=300
+              WAIT_TIMEOUT=300
 
-              echo "[1/2] Waiting up to ${ROLLOUT_TIMEOUT} for Deployment/${DEPLOY} to become Available..."
+              echo "[1/3] Waiting up to ${ROLLOUT_TIMEOUT} for Deployment/${DEPLOY} to become Available..."
               kubectl -n "${NS}" rollout status deployment/"${DEPLOY}" --timeout="${ROLLOUT_TIMEOUT}"
 
-              echo "[2/2] Waiting up to ${ENDPOINT_TIMEOUT}s for Service/${SVC} endpoints to populate..."
-              end=$(( $(date +%s) + ENDPOINT_TIMEOUT ))
+              echo "[2/3] Waiting up to ${WAIT_TIMEOUT}s for Service/${SVC} endpoints to populate..."
+              ips=""
+              end=$(( $(date +%s) + WAIT_TIMEOUT ))
               while [ "$(date +%s)" -lt "${end}" ]; do
                 ips=$(kubectl -n "${NS}" get endpoints "${SVC}" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
                 if [ -n "${ips}" ]; then
                   echo "Webhook endpoints ready: ${ips}"
-                  exit 0
+                  break
                 fi
                 echo "  no endpoints yet, retrying in 5s..."
                 sleep 5
               done
+              if [ -z "${ips}" ]; then
+                echo "ERROR: timed out waiting for ${SVC} endpoints" >&2
+                kubectl -n "${NS}" get endpoints "${SVC}" -o yaml || true
+                kubectl -n "${NS}" get pods -l app.kubernetes.io/component=webhook -o wide || true
+                exit 1
+              fi
 
-              echo "ERROR: timed out waiting for ${SVC} endpoints" >&2
-              kubectl -n "${NS}" get endpoints "${SVC}" -o yaml || true
-              kubectl -n "${NS}" get pods -l app.kubernetes.io/component=webhook -o wide || true
+              echo "[3/3] Waiting up to ${WAIT_TIMEOUT}s for MutatingWebhookConfiguration/${MWC} CA bundle to be injected..."
+              end=$(( $(date +%s) + WAIT_TIMEOUT ))
+              while [ "$(date +%s)" -lt "${end}" ]; do
+                ca=$(kubectl get mutatingwebhookconfiguration "${MWC}" -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null || true)
+                if [ -n "${ca}" ] && [ "${#ca}" -gt 100 ]; then
+                  echo "CA bundle injected (${#ca} chars)"
+                  exit 0
+                fi
+                echo "  CA bundle not yet injected, retrying in 5s..."
+                sleep 5
+              done
+
+              echo "ERROR: timed out waiting for CA bundle on ${MWC}" >&2
+              kubectl get mutatingwebhookconfiguration "${MWC}" -o yaml || true
               exit 1
 {{- end }}
 {{- end }}
