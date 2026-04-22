@@ -10,17 +10,11 @@ sparkoperator:
   prometheus:
     metrics:
       enable: false
-  controller:
-    nodeSelector: {}
-    #   appNodes: "true"
-    # tolerations:
-    #   - key: appNodes
-    #     operator: Equal
-    #     value: "true"
-    #     effect: NoSchedule
   webhook:
-    enable: true
-    timeoutSeconds: 30
+    enable: false
+  hook:
+    upgradeCrd: false
+  controller:
     nodeSelector: {}
     #   appNodes: "true"
     # tolerations:
@@ -38,8 +32,6 @@ sparkoperator:
       #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
       # This enables keyless IAM Role authentication for S3 and Athena connectors.
       annotations: {}
-  hook:
-    upgradeCrd: false
 
 nginx:
   enabled: false

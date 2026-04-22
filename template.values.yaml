@@ -81,11 +81,9 @@ executorNodeSelector:
 #--------------------------------------------------------------------------------
 sparkoperator:
   enabled: true
-  controller:
-    nodeSelector:
-      appNodes: "true"
   webhook:
-    enable: true
+    enable: false
+  controller:
     nodeSelector:
       appNodes: "true"
   spark:

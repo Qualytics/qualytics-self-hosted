@@ -5,7 +5,7 @@
 This Helm chart deploys a single-tenant instance of the Qualytics data quality platform to a CNCF-compliant Kubernetes cluster. The deployment includes:
 
 - **Control Plane**: API service (6 replicas), CMD background processor
-- **Data Plane**: Apache Spark 4.0.1 (dynamic executor scaling 1-12)
+- **Data Plane**: Apache Spark 4.1.1 (dynamic executor scaling 1-12)
 - **Frontend**: React/Vue web UI (1 replica)
 - **Data Tier**: PostgreSQL 17 (StatefulSet with 100Gi storage), RabbitMQ 4.0 message broker
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
@@ -65,7 +65,6 @@ qualytics-self-hosted/
 - **Install chart**: `helm upgrade --install qualytics qualytics/qualytics --namespace qualytics --create-namespace -f values.yaml --wait --timeout=5m`
 - **Upgrade release**: `helm upgrade qualytics qualytics/qualytics --namespace qualytics -f values.yaml --wait --timeout=5m`
 
-> **Why `--wait`?** Without it, Helm runs post-install/post-upgrade hooks as soon as resources are *created*, not when Deployments become *Available*. This causes intermittent `no endpoints available for service qualytics-sparkoperator-webhook-svc` errors on EKS when the spark-operator webhook pod is still starting. The chart also ships a pre-flight wait Job as a safety net, but `--wait` is the recommended baseline.
 - **Uninstall release**: `helm uninstall qualytics --namespace qualytics`
 - **List releases**: `helm list --namespace qualytics`
 
@@ -145,13 +144,12 @@ helm unittest -v charts/qualytics
 `helm unittest` validates rendered YAML. It can't observe things that only happen at runtime:
 
 - Helm hook ordering and `hook-weight` execution
-- Admission webhooks rejecting or mutating resources
 - `Secret` / `ConfigMap` lookups
 - `Service` endpoint population timing
 - `Job` completion vs timeout
 - Multi-release upgrades (reconciliation behavior)
 
-This section is how to verify all of that against a real Kubernetes cluster before shipping a release. This pattern was used to validate the spark-operator webhook race fix, the cert-manager removal, the BYO TLS Secret precedence, and the postgres connection-URL sslmode logic.
+This section is how to verify all of that against a real Kubernetes cluster before shipping a release. This pattern was used to validate the cert-manager removal, the BYO TLS Secret precedence, the postgres connection-URL sslmode logic, and the Spark pod-template migration.
 
 #### Prerequisites
 
@@ -180,9 +178,9 @@ This section is how to verify all of that against a real Kubernetes cluster befo
 | `rabbitmq.pvc.enabled` | `false` | `emptyDir` instead of a PVC |
 | `controlplane.replicas` | `0` | Deployment becomes Available instantly, no image pull |
 | `frontend.replicas` | `0` | Same |
-| `global.imageUrls.*ImageUrl` | `nginx` | Public placeholder; lets `helm install` and admission webhooks succeed without `regcred`. Pods that *do* start (e.g., `cmd`, which hardcodes `replicas: 1`) will CrashLoopBackOff — fine if not testing with `--wait` |
+| `global.imageUrls.*ImageUrl` | `nginx` | Public placeholder; lets `helm install` succeed without `regcred`. Pods that *do* start will CrashLoopBackOff — fine if not testing with `--wait` |
 | `ingress.enabled` | `false` for core tests, `true` when exercising ingress TLS | Ingress needs `nginx.enabled=true` + real Secrets to be meaningful |
-| `dataplane.driver.*` / `executor.*` | `cores: 1, memory: "512m"` | SparkApp admission doesn't care about size; keep it small so minikube can schedule |
+| `dataplane.driver.*` / `executor.*` | `cores: 1, memory: "512m"` | Keep small so minikube can schedule |
 
 #### Baseline values file
 
@@ -283,17 +281,16 @@ helm upgrade --install qualytics charts/qualytics \
   --timeout=10m
 ```
 
-Notice: no `--wait`. Intentional when exercising hook timing (e.g., the spark-webhook wait Job). Add `--wait` if testing that a rollout actually reaches `Available`.
+Notice: no `--wait`. Intentional when exercising hook timing. Add `--wait` if testing that a rollout actually reaches `Available`.
 
 **3. Verify the things unit tests can't**
 
 ```bash
-# Helm hook Job actually ran and succeeded
-kubectl -n qualytics get job qualytics-spark-webhook-wait
-kubectl -n qualytics logs job/qualytics-spark-webhook-wait
-
-# Admission webhook accepted the CR
+# SparkApplication admitted and picked up by the operator
 kubectl -n qualytics get sparkapplication qualytics-spark -o name
+
+# Executor pod template propagated through the operator ConfigMap
+kubectl -n qualytics get configmap -l sparkoperator.k8s.io/app-name=qualytics-spark
 
 # Helper-template output (sslmode) landed in the rendered Secret
 kubectl -n qualytics get secret qualytics-creds \
@@ -332,31 +329,6 @@ done
 
 Then upgrade with each TLS configuration and diff the `custom-columns` output.
 
-#### Reproducing race conditions
-
-For webhook-availability-style races:
-
-```bash
-# Don't kubectl scale the Deployment to 0 — helm upgrade reconciles it back.
-# Force-delete the pod; the ReplicaSet starts a replacement, and you get a real
-# ~10-20s window where the Service has no ready endpoints.
-kubectl -n qualytics delete pod -l app.kubernetes.io/component=webhook \
-  --grace-period=0 --force
-
-# Delete the prior Job + any admission-dependent CRs so the next helm upgrade
-# has to re-run its hooks.
-kubectl -n qualytics delete job qualytics-spark-webhook-wait --ignore-not-found
-kubectl -n qualytics delete sparkapplication qualytics-spark --ignore-not-found
-
-# Trigger the upgrade — the wait Job should bridge the pod-restart gap.
-helm upgrade qualytics charts/qualytics -n qualytics \
-  -f /tmp/qualytics-baseline-values.yaml --timeout=10m
-
-# Post-mortem: Job logs are retained because the template uses
-# `helm.sh/hook-delete-policy: before-hook-creation` (NOT hook-succeeded).
-kubectl -n qualytics logs job/qualytics-spark-webhook-wait
-```
-
 #### Cleanup ritual
 
 Always, even if the test passed:
@@ -381,13 +353,13 @@ For those, use a real cloud cluster (EKS/GKE/AKS). Minikube is for behavior, not
 
 #### Worked example
 
-The cert-manager-removal + TLS-precedence validation done in chart version `2026.4.20`:
+Spark pod-template migration validation (chart version `2026.4.20`):
 
 1. Started minikube on `v1.35.0`.
-2. Installed baseline (ingress off) → confirmed wait Job logs, SparkApp admitted, `sslmode=prefer` in connection URL, cert-manager CRDs absent.
-3. Created 5 self-signed `kubernetes.io/tls` Secrets for the TLS Secret name matrix.
-4. Ran 4 sequential `helm upgrade`s (zero-config, shared Secret, per-ingress override, precedence test).
-5. After each, `kubectl get ingress -o custom-columns=…secretName` showed the expected Secret name.
+2. Installed baseline with `sparkoperator.webhook.enable: false` → confirmed no webhook Deployment, no MutatingWebhookConfiguration, SparkApplication admitted.
+3. Inspected the driver pod → confirmed `spark-kubernetes-driver` container name, all `MOTHERSHIP_*` env vars from the pod template, `nodeSelector: driverNodes=true` propagated.
+4. Inspected the operator-generated ConfigMap `qualytics-spark-*-driver-podspec-conf-map` → confirmed the executor pod template (nodeSelector + Kerberos bits) was written and mounted into the driver, with `spark.kubernetes.executor.podTemplateFile` set in the driver's `spark.properties`.
+5. Upgraded with `dataplane.kerberos.enabled: true` → confirmed Kerberos env + volumeMounts landed in both templates.
 6. Cleaned up, minikube stopped.
 
 Total wall time: ~8 minutes including the initial minikube boot. That's the full-behavior signal you can't get from `helm unittest` alone.
@@ -471,17 +443,26 @@ Total wall time: ~8 minutes including the initial minikube boot. That's the full
 ## Component Configuration
 
 ### Dataplane (Spark)
-- **Version**: Spark 4.0.1
-- **Type**: SparkApplication CRD (custom resource)
-- **Dynamic Allocation**: 1-12 executors (configurable)
+- **Version**: Spark 4.1.1
+- **Type**: SparkApplication CRD, release-tracked (no helm hooks)
+- **Operator webhook**: disabled by default (`sparkoperator.webhook.enable: false`); chart uses CRD-native pod templates (`spec.driver.template` / `spec.executor.template`) and lets spark-submit merge them
+- **Dynamic Allocation**: 1-12 executors (configurable; `dataplane.dynamicAllocation.enabled` is respected, not hardcoded)
 - **Driver Resources**: 7 cores, 55000m memory (default)
 - **Executor Resources**: 7 cores, 55000m memory (default)
-- **Volumes**: Platform-specific NVMe/SSD mounts for scratch space
-- **Kerberos**: Optional support via secret volumes
+- **Volumes**: Platform-specific NVMe/SSD mounts for scratch space. Names **must** start with `spark-local-dir-` and live at CR-level `spec.volumes` (see invariants below)
+- **Kerberos**: Optional (`dataplane.kerberos.enabled`). Krb volumes + env + volumeMounts render into both driver and executor pod templates
 - **Main Class**: `io.qualytics.dataplane.SparkMothership`
 - **Extra Packages**: Oracle, Teradata, IBM DB2 JDBC drivers
-- **Restart Policy**: Always with 1000 retries
-- **Node Scheduling**: Separate driver and executor node selectors
+- **Restart Policy**: Always with 1000 retries (operator-driven, not pod-level)
+- **Node Scheduling**: Separate driver and executor node selectors, emitted inside the respective pod templates
+
+#### Pod-template invariants (do not regress)
+
+The self-hosted and private charts both enforce these. Breaking any of them silently produces wrong behavior at runtime:
+
+1. **Executor pod template always emits `containers[0].name: spark-kubernetes-executor`**, regardless of `dataplane.kerberos.enabled`. Spark 4.1.1's `KubernetesUtils.selectSparkContainer` NPEs when the parsed template has no `containers` field — the container stanza must always be present, and only env/volumeMounts are gated on kerberos. Same rule applies to the driver side. The `should always emit {driver,executor} containers[0].name regardless of kerberos` unit tests exist specifically to catch this.
+2. **`spark-local-dir-` is a load-bearing prefix.** The Kubeflow operator only translates volumes with that exact prefix into `spark.kubernetes.{driver,executor}.volumes.*` sparkConf for spark-submit. Volumes with any other name would require the (now-disabled) mutating webhook and will silently drop. Keep scratch-dir volumes at CR-level `spec.volumes` and keep the prefix.
+3. **Container names `spark-kubernetes-driver` / `spark-kubernetes-executor` are magic strings** matched by the operator's `spark.kubernetes.{driver,executor}.podTemplateContainerName` conf. Renaming them silently breaks the merge — env + volumeMounts just won't land.
 
 ### Control Plane API
 - **Replicas**: 6 (configurable via `controlplane.replicas`)
@@ -776,10 +757,9 @@ helm upgrade qualytics qualytics/qualytics \
 - Verify volumes are mounted correctly
 
 ## Recent Focus Areas
-- Apache Spark 4.0.1 upgrade
-- RabbitMQ 4.0 upgrade
-- Simplified template.values.yaml for easier onboarding
-- Node selector flexibility (optional for all components)
+- Spark pod-template migration (disabled the mutating admission webhook)
+- cert-manager removal (BYO TLS Secrets)
+- Apache Spark 4.1 + RabbitMQ 4.0 upgrades
 - PostgreSQL 17 upgrade support
 - Enhanced ingress security (ModSecurity WAF, rate limiting)
 - Multi-platform storage class support

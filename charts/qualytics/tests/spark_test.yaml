@@ -2,9 +2,14 @@ suite: test spark application
 templates:
   - spark.yaml
 tests:
-  # Basic functionality tests
+  - it: should render exactly one SparkApplication document
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: SparkApplication
+
   - it: should render SparkApplication with default values
-    documentIndex: 0
     asserts:
       - isKind:
           of: SparkApplication
@@ -21,19 +26,14 @@ tests:
           path: spec.mainClass
           value: io.qualytics.dataplane.SparkMothership
 
-  - it: should have helm hook annotations for post-install ordering
-    documentIndex: 0
+  - it: should not be a helm hook (normal release-tracked resource)
     asserts:
-      - equal:
+      - notExists:
           path: metadata.annotations["helm.sh/hook"]
-          value: post-install,post-upgrade
-      - equal:
-          path: metadata.annotations["helm.sh/hook-weight"]
-          value: "0"
 
-  # Platform-specific configurations (template.values.yaml: global.platform)
+  # Platform-specific volume configuration — stays on the CR (operator
+  # special-cases spark-local-dir-* volumes into --conf for spark-submit).
   - it: should configure AWS platform volumes correctly
-    documentIndex: 0
     set:
       global.platform: aws
       dataplane.numVolumes: 2
@@ -52,7 +52,6 @@ tests:
               path: /mnt/disks/nvme2n1/spark-local-dir-2
 
   - it: should configure GCP platform volumes correctly
-    documentIndex: 0
     set:
       global.platform: gcp
       dataplane.numVolumes: 2
@@ -70,9 +69,7 @@ tests:
             hostPath:
               path: /mnt/disks/ssd1/spark-local-dir-2
 
-  # Dataplane configuration tests (template.values.yaml: dataplane.*)
   - it: should configure driver resources from template values
-    documentIndex: 0
     set:
       dataplane.driver.cores: 4
       dataplane.driver.memory: "32000m"
@@ -85,7 +82,6 @@ tests:
           value: "32000m"
 
   - it: should configure executor resources from template values
-    documentIndex: 0
     set:
       dataplane.executor.instances: 2
       dataplane.executor.cores: 8
@@ -102,7 +98,6 @@ tests:
           value: "64000m"
 
   - it: should configure dynamic allocation from template values
-    documentIndex: 0
     set:
       dataplane.dynamicAllocation.enabled: true
       dataplane.dynamicAllocation.initialExecutors: 2
@@ -122,31 +117,7 @@ tests:
           path: spec.dynamicAllocation.maxExecutors
           value: 20
 
-  - it: should set parallelism scale factor environment variable
-    documentIndex: 0
-    set:
-      dataplane.parallelismScaleFactor: 0.5
-    asserts:
-      - contains:
-          path: spec.driver.env
-          content:
-            name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
-            value: "0.5"
-
-  - it: should set max parallel sync requests environment variable
-    documentIndex: 0
-    set:
-      dataplane.maxParallelSyncRequests: 5
-    asserts:
-      - contains:
-          path: spec.driver.env
-          content:
-            name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
-            value: "5"
-
-  # Volume configuration tests
   - it: should not have volumes section when no volumes configured
-    documentIndex: 0
     set:
       dataplane.numVolumes: -1
     asserts:
@@ -154,7 +125,6 @@ tests:
           path: spec.volumes
 
   - it: should configure numVolumes from template values
-    documentIndex: 0
     set:
       dataplane.numVolumes: 3
       global.platform: aws
@@ -169,38 +139,155 @@ tests:
             hostPath:
               path: /mnt/disks/nvme3n1/spark-local-dir-3
 
-  # Node selector tests (template.values.yaml: *NodeSelector)
-  - it: should configure driver node selector
-    documentIndex: 0
+  # Pod template assertions (env, nodeSelector, tolerations, init container).
+  - it: should emit driver pod template with required container name
+    asserts:
+      - equal:
+          path: spec.driver.template.spec.containers[0].name
+          value: spark-kubernetes-driver
+
+  - it: should emit executor pod template with required container name when kerberos is enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+    asserts:
+      - equal:
+          path: spec.executor.template.spec.containers[0].name
+          value: spark-kubernetes-executor
+
+  # Regression test: Spark 4.1.1 NPEs loading an executor pod template that
+  # has no containers field, which crashed every prod cluster (kerberos off).
+  - it: should always emit executor containers[0].name regardless of kerberos
+    set:
+      dataplane.kerberos.enabled: false
+    asserts:
+      - equal:
+          path: spec.executor.template.spec.containers[0].name
+          value: spark-kubernetes-executor
+      - isKind:
+          of: SparkApplication
+
+  - it: should not leak kerberos env or volumeMounts into executor container when disabled
+    set:
+      dataplane.kerberos.enabled: false
+    asserts:
+      - notExists:
+          path: spec.executor.template.spec.containers[0].env
+      - notExists:
+          path: spec.executor.template.spec.containers[0].volumeMounts
+
+  - it: should always emit driver containers[0].name regardless of kerberos
+    set:
+      dataplane.kerberos.enabled: false
+    asserts:
+      - equal:
+          path: spec.driver.template.spec.containers[0].name
+          value: spark-kubernetes-driver
+
+  - it: should place MOTHERSHIP env vars in driver pod template container
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_RABBIT_HOST
+            value: "RELEASE-NAME-rabbitmq"
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_RABBIT_USER
+            value: "user"
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_RABBIT_PASS
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: rabbitmq_password
+
+  - it: should set parallelism scale factor environment variable
+    set:
+      dataplane.parallelismScaleFactor: 0.5
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
+            value: "0.5"
+
+  - it: should set max parallel sync requests environment variable
+    set:
+      dataplane.maxParallelSyncRequests: 5
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
+            value: "5"
+
+  - it: should configure driver node selector in pod template
     set:
       driverNodeSelector:
         driverNodes: "true"
         zone: "us-east-1a"
     asserts:
       - equal:
-          path: spec.driver.nodeSelector.driverNodes
+          path: spec.driver.template.spec.nodeSelector.driverNodes
           value: "true"
       - equal:
-          path: spec.driver.nodeSelector.zone
+          path: spec.driver.template.spec.nodeSelector.zone
           value: "us-east-1a"
+      - notExists:
+          path: spec.driver.nodeSelector
 
-  - it: should configure executor node selector
-    documentIndex: 0
+  - it: should configure executor node selector in pod template
     set:
       executorNodeSelector:
         executorNodes: "true"
         instanceType: "c5.large"
     asserts:
       - equal:
-          path: spec.executor.nodeSelector.executorNodes
+          path: spec.executor.template.spec.nodeSelector.executorNodes
           value: "true"
       - equal:
-          path: spec.executor.nodeSelector.instanceType
+          path: spec.executor.template.spec.nodeSelector.instanceType
           value: "c5.large"
+      - notExists:
+          path: spec.executor.nodeSelector
 
-  # ServiceAccount test (template.values.yaml: sparkoperator.spark.serviceAccount.name)
-  - it: should use configured service account
-    documentIndex: 0
+  - it: should configure driver tolerations in pod template
+    set:
+      tolerations.driverNodeTolerations:
+        - key: driverNodes
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.tolerations
+          content:
+            key: driverNodes
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: should configure executor tolerations in pod template
+    set:
+      tolerations.executorNodeTolerations:
+        - key: executorNodes
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+    asserts:
+      - contains:
+          path: spec.executor.template.spec.tolerations
+          content:
+            key: executorNodes
+            operator: Equal
+            value: "true"
+            effect: NoSchedule
+
+  - it: should use configured service account on driver
     set:
       sparkoperator.spark.serviceAccount.name: "custom-spark-sa"
     asserts:
@@ -214,508 +301,6 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
-
-  - it: should render 5 documents when dataplane is explicitly enabled (SparkApplication + wait-hook resources)
-    set:
-      dataplane.enabled: true
-    asserts:
-      - hasDocuments:
-          count: 7
-      - isKind:
-          of: SparkApplication
-        documentIndex: 0
-
-  - it: should render exactly one SparkApplication at documentIndex 0
-    asserts:
-      - hasDocuments:
-          count: 7
-      - isKind:
-          of: SparkApplication
-        documentIndex: 0
-
-  # -------------------------------------------------------------------------
-  # Pre-flight wait-hook tests. Document layout when everything is enabled:
-  #   0 = SparkApplication
-  #   1 = ServiceAccount (wait)
-  #   2 = Role (wait)
-  #   3 = RoleBinding (wait)
-  #   4 = ClusterRole (wait — for reading MutatingWebhookConfiguration)
-  #   5 = ClusterRoleBinding (wait)
-  #   6 = Job (wait)
-  # -------------------------------------------------------------------------
-
-  - it: should render a ServiceAccount with correct name and hook metadata
-    asserts:
-      - isKind:
-          of: ServiceAccount
-        documentIndex: 1
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 1
-      - equal:
-          path: metadata.annotations["helm.sh/hook"]
-          value: post-install,post-upgrade
-        documentIndex: 1
-      - equal:
-          path: metadata.annotations["helm.sh/hook-weight"]
-          value: "-20"
-        documentIndex: 1
-      - equal:
-          path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation,hook-succeeded
-        documentIndex: 1
-
-  - it: should render a Role granting endpoints + deployments read access
-    asserts:
-      - isKind:
-          of: Role
-        documentIndex: 2
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 2
-      - contains:
-          path: rules
-          content:
-            apiGroups: [""]
-            resources: ["endpoints", "pods"]
-            verbs: ["get", "list", "watch"]
-        documentIndex: 2
-      - contains:
-          path: rules
-          content:
-            apiGroups: ["apps"]
-            resources: ["deployments"]
-            verbs: ["get", "list", "watch"]
-        documentIndex: 2
-
-  - it: should render a RoleBinding linking the SA to the Role
-    asserts:
-      - isKind:
-          of: RoleBinding
-        documentIndex: 3
-      - equal:
-          path: subjects[0].kind
-          value: ServiceAccount
-        documentIndex: 3
-      - equal:
-          path: subjects[0].name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 3
-      - equal:
-          path: roleRef.name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 3
-
-  - it: should render a ClusterRole granting read access on MutatingWebhookConfiguration
-    asserts:
-      - isKind:
-          of: ClusterRole
-        documentIndex: 4
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 4
-      - contains:
-          path: rules
-          content:
-            apiGroups: ["admissionregistration.k8s.io"]
-            resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-            verbs: ["get", "list", "watch"]
-        documentIndex: 4
-
-  - it: should render a ClusterRoleBinding linking the SA to the ClusterRole
-    asserts:
-      - isKind:
-          of: ClusterRoleBinding
-        documentIndex: 5
-      - equal:
-          path: subjects[0].kind
-          value: ServiceAccount
-        documentIndex: 5
-      - equal:
-          path: subjects[0].name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 5
-      - equal:
-          path: roleRef.kind
-          value: ClusterRole
-        documentIndex: 5
-      - equal:
-          path: roleRef.name
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 5
-
-  - it: should render the wait Job at hook-weight -10 so it runs after RBAC but before the SparkApplication
-    asserts:
-      - isKind:
-          of: Job
-        documentIndex: 6
-      - equal:
-          path: metadata.annotations["helm.sh/hook"]
-          value: post-install,post-upgrade
-        documentIndex: 6
-      - equal:
-          path: metadata.annotations["helm.sh/hook-weight"]
-          value: "-10"
-        documentIndex: 6
-      - equal:
-          path: metadata.annotations["helm.sh/hook-delete-policy"]
-          value: before-hook-creation
-        documentIndex: 6
-      - equal:
-          path: spec.template.spec.serviceAccountName
-          value: RELEASE-NAME-spark-webhook-wait
-        documentIndex: 6
-      - equal:
-          path: spec.template.spec.restartPolicy
-          value: Never
-        documentIndex: 6
-      - equal:
-          path: spec.backoffLimit
-          value: 3
-        documentIndex: 6
-      - equal:
-          path: spec.activeDeadlineSeconds
-          value: 600
-        documentIndex: 6
-      - equal:
-          path: spec.ttlSecondsAfterFinished
-          value: 600
-        documentIndex: 6
-
-  - it: should reference the subchart's webhook deployment and service names in the wait command
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: RELEASE-NAME-sparkoperator-webhook
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: RELEASE-NAME-sparkoperator-webhook-svc
-        documentIndex: 6
-
-  - it: should include all three wait phases (deployment rollout, endpoints, CA bundle injection)
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "\\[1/3\\]"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "rollout status deployment"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "\\[2/3\\]"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "endpoints to populate"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "\\[3/3\\]"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: "CA bundle to be injected"
-        documentIndex: 6
-      - matchRegex:
-          path: spec.template.spec.containers[0].command[2]
-          pattern: mutatingwebhookconfiguration
-        documentIndex: 6
-
-  - it: should apply appNodeSelector to the wait Job when set
-    set:
-      appNodeSelector:
-        appNodes: "true"
-    asserts:
-      - equal:
-          path: spec.template.spec.nodeSelector.appNodes
-          value: "true"
-        documentIndex: 6
-
-  - it: should apply appNodeTolerations to the wait Job when set
-    set:
-      tolerations.appNodeTolerations:
-        - key: appNodes
-          operator: Equal
-          value: "true"
-          effect: NoSchedule
-    asserts:
-      - contains:
-          path: spec.template.spec.tolerations
-          content:
-            key: appNodes
-            operator: Equal
-            value: "true"
-            effect: NoSchedule
-        documentIndex: 6
-
-  - it: should render only the SparkApplication when sparkoperator is disabled
-    set:
-      sparkoperator.enabled: false
-    asserts:
-      - hasDocuments:
-          count: 1
-      - isKind:
-          of: SparkApplication
-        documentIndex: 0
-
-  - it: should render only the SparkApplication when the spark-operator webhook is disabled
-    set:
-      sparkoperator.webhook.enable: false
-    asserts:
-      - hasDocuments:
-          count: 1
-      - isKind:
-          of: SparkApplication
-        documentIndex: 0
-
-  - it: should not configure kerberos volumes when kerberos is disabled
-    set:
-      dataplane.kerberos.enabled: false
-    asserts:
-      - notExists:
-          path: spec.volumes[?(@.name == "krb5-conf")]
-        documentIndex: 0
-      - notExists:
-          path: spec.volumes[?(@.name == "keytab")]
-        documentIndex: 0
-
-  - it: should configure kerberos volumes when kerberos is enabled with default keytab name
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-    asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: "krb5-conf"
-            secret:
-              items:
-                - key: krb5.conf
-                  path: krb5.conf
-              secretName: krb5-conf
-        documentIndex: 0
-      - contains:
-          path: spec.volumes
-          content:
-            name: "keytab"
-            secret:
-              items:
-                - key: app.keytab
-                  path: hive.keytab
-              secretName: hive-client-keytab
-        documentIndex: 0
-
-  - it: should configure kerberos environment variables in driver when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
-    asserts:
-      - contains:
-          path: spec.driver.env
-          content:
-            name: "MOTHERSHIP_SPARK_KRB_KRB5"
-            value: "/etc/kerberos/conf/krb5.conf"
-        documentIndex: 0
-      - contains:
-          path: spec.driver.env
-          content:
-            name: "MOTHERSHIP_SPARK_KRB_KEYTAB"
-            value: "/etc/kerberos/keytab/hive.keytab"
-        documentIndex: 0
-      - contains:
-          path: spec.driver.env
-          content:
-            name: "MOTHERSHIP_SPARK_KRB_PRINCIPAL"
-            value: "hive/hadoop@EXAMPLE.COM"
-        documentIndex: 0
-      - contains:
-          path: spec.driver.env
-          content:
-            name: "KERBEROS_DAEMON_ENABLED"
-            value: "false"
-        documentIndex: 0
-
-  - it: should configure kerberos environment variables in executor when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
-    asserts:
-      - contains:
-          path: spec.executor.env
-          content:
-            name: "KRB5_CONFIG"
-            value: "/etc/kerberos/conf/krb5.conf"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.env
-          content:
-            name: "KRB_KEYTAB"
-            value: "/etc/kerberos/keytab/hive.keytab"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.env
-          content:
-            name: "KRB_PRINCIPAL"
-            value: "hive/hadoop@EXAMPLE.COM"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.env
-          content:
-            name: "SPARK_JAVA_OPT_998"
-            value: "-Djava.security.krb5.conf=/etc/kerberos/conf/krb5.conf"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.env
-          content:
-            name: "SPARK_JAVA_OPT_999"
-            value: "-Djavax.security.auth.useSubjectCredsOnly=false"
-        documentIndex: 0
-
-  - it: should configure kerberos volume mounts in driver when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-    asserts:
-      - contains:
-          path: spec.driver.volumeMounts
-          content:
-            name: "krb5-conf"
-            mountPath: "/etc/kerberos/conf/krb5.conf"
-            subPath: "krb5.conf"
-        documentIndex: 0
-      - contains:
-          path: spec.driver.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/etc/kerberos/keytab/hive.keytab"
-            subPath: "hive.keytab"
-        documentIndex: 0
-
-  - it: should configure kerberos volume mounts in executor when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-    asserts:
-      - contains:
-          path: spec.executor.volumeMounts
-          content:
-            name: "krb5-conf"
-            mountPath: "/etc/kerberos/conf/krb5.conf"
-            subPath: "krb5.conf"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/etc/kerberos/keytab/hive.keytab"
-            subPath: "hive.keytab"
-        documentIndex: 0
-
-  - it: should not configure kerberos environment variables when disabled
-    set:
-      dataplane.kerberos.enabled: false
-    asserts:
-      - notExists:
-          path: spec.driver.env[?(@.name == "MOTHERSHIP_SPARK_KRB_KRB5")]
-        documentIndex: 0
-      - notExists:
-          path: spec.driver.env[?(@.name == "MOTHERSHIP_SPARK_KRB_KEYTAB")]
-        documentIndex: 0
-      - notExists:
-          path: spec.driver.env[?(@.name == "MOTHERSHIP_SPARK_KRB_PRINCIPAL")]
-        documentIndex: 0
-      - notExists:
-          path: spec.driver.env[?(@.name == "KERBEROS_DAEMON_ENABLED")]
-        documentIndex: 0
-      - notExists:
-          path: spec.executor.env
-        documentIndex: 0
-
-  - it: should not configure volume mounts when kerberos is disabled
-    set:
-      dataplane.kerberos.enabled: false
-      dataplane.numVolumes: 0
-    asserts:
-      - notExists:
-          path: spec.driver.volumeMounts
-        documentIndex: 0
-      - notExists:
-          path: spec.executor.volumeMounts
-        documentIndex: 0
-
-  - it: should extract filename from keytab path for custom keytab names
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/my-service.keytab"
-      dataplane.kerberos.principal: "my-service/hostname@REALM"
-    asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: "keytab"
-            secret:
-              items:
-                - key: app.keytab
-                  path: my-service.keytab
-              secretName: hive-client-keytab
-        documentIndex: 0
-      - contains:
-          path: spec.driver.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/etc/kerberos/keytab/my-service.keytab"
-            subPath: "my-service.keytab"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/etc/kerberos/keytab/my-service.keytab"
-            subPath: "my-service.keytab"
-        documentIndex: 0
-
-  - it: should extract filename from keytab path for different service names
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.keytab: "/path/to/hdfs-user.keytab"
-    asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: "keytab"
-            secret:
-              items:
-                - key: app.keytab
-                  path: hdfs-user.keytab
-              secretName: hive-client-keytab
-        documentIndex: 0
-      - contains:
-          path: spec.driver.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/path/to/hdfs-user.keytab"
-            subPath: "hdfs-user.keytab"
-        documentIndex: 0
-      - contains:
-          path: spec.executor.volumeMounts
-          content:
-            name: "keytab"
-            mountPath: "/path/to/hdfs-user.keytab"
-            subPath: "hdfs-user.keytab"
-        documentIndex: 0
 
   - it: should not render when deploymentMode is databricks
     set:
@@ -738,7 +323,252 @@ tests:
       global.deploymentMode: "kubernetes"
     asserts:
       - hasDocuments:
-          count: 7
+          count: 1
       - isKind:
           of: SparkApplication
-        documentIndex: 0
+
+  # Kerberos — volumes go in both driver and executor pod templates.
+  - it: should not configure kerberos volumes when kerberos is disabled
+    set:
+      dataplane.kerberos.enabled: false
+    asserts:
+      - notExists:
+          path: spec.driver.template.spec.volumes
+      - notExists:
+          path: spec.executor.template.spec.volumes
+
+  - it: should configure kerberos volumes in driver pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.volumes
+          content:
+            name: "krb5-conf"
+            secret:
+              items:
+                - key: krb5.conf
+                  path: krb5.conf
+              secretName: krb5-conf
+      - contains:
+          path: spec.driver.template.spec.volumes
+          content:
+            name: "keytab"
+            secret:
+              items:
+                - key: app.keytab
+                  path: hive.keytab
+              secretName: hive-client-keytab
+
+  - it: should configure kerberos volumes in executor pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+    asserts:
+      - contains:
+          path: spec.executor.template.spec.volumes
+          content:
+            name: "krb5-conf"
+            secret:
+              items:
+                - key: krb5.conf
+                  path: krb5.conf
+              secretName: krb5-conf
+      - contains:
+          path: spec.executor.template.spec.volumes
+          content:
+            name: "keytab"
+            secret:
+              items:
+                - key: app.keytab
+                  path: hive.keytab
+              secretName: hive-client-keytab
+
+  - it: should configure kerberos environment variables in driver pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: "MOTHERSHIP_SPARK_KRB_KRB5"
+            value: "/etc/kerberos/conf/krb5.conf"
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: "MOTHERSHIP_SPARK_KRB_KEYTAB"
+            value: "/etc/kerberos/keytab/hive.keytab"
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: "MOTHERSHIP_SPARK_KRB_PRINCIPAL"
+            value: "hive/hadoop@EXAMPLE.COM"
+      - contains:
+          path: spec.driver.template.spec.containers[0].env
+          content:
+            name: "KERBEROS_DAEMON_ENABLED"
+            value: "false"
+
+  - it: should configure kerberos environment variables in executor pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
+    asserts:
+      - contains:
+          path: spec.executor.template.spec.containers[0].env
+          content:
+            name: "KRB5_CONFIG"
+            value: "/etc/kerberos/conf/krb5.conf"
+      - contains:
+          path: spec.executor.template.spec.containers[0].env
+          content:
+            name: "KRB_KEYTAB"
+            value: "/etc/kerberos/keytab/hive.keytab"
+      - contains:
+          path: spec.executor.template.spec.containers[0].env
+          content:
+            name: "KRB_PRINCIPAL"
+            value: "hive/hadoop@EXAMPLE.COM"
+      - contains:
+          path: spec.executor.template.spec.containers[0].env
+          content:
+            name: "SPARK_JAVA_OPT_998"
+            value: "-Djava.security.krb5.conf=/etc/kerberos/conf/krb5.conf"
+      - contains:
+          path: spec.executor.template.spec.containers[0].env
+          content:
+            name: "SPARK_JAVA_OPT_999"
+            value: "-Djavax.security.auth.useSubjectCredsOnly=false"
+
+  - it: should configure kerberos volume mounts in driver pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.containers[0].volumeMounts
+          content:
+            name: "krb5-conf"
+            mountPath: "/etc/kerberos/conf/krb5.conf"
+            subPath: "krb5.conf"
+      - contains:
+          path: spec.driver.template.spec.containers[0].volumeMounts
+          content:
+            name: "keytab"
+            mountPath: "/etc/kerberos/keytab/hive.keytab"
+            subPath: "hive.keytab"
+
+  - it: should configure kerberos volume mounts in executor pod template when enabled
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
+    asserts:
+      - contains:
+          path: spec.executor.template.spec.containers[0].volumeMounts
+          content:
+            name: "krb5-conf"
+            mountPath: "/etc/kerberos/conf/krb5.conf"
+            subPath: "krb5.conf"
+      - contains:
+          path: spec.executor.template.spec.containers[0].volumeMounts
+          content:
+            name: "keytab"
+            mountPath: "/etc/kerberos/keytab/hive.keytab"
+            subPath: "hive.keytab"
+
+  - it: should not configure kerberos environment variables when disabled
+    set:
+      dataplane.kerberos.enabled: false
+    asserts:
+      - notExists:
+          path: spec.driver.template.spec.containers[0].env[?(@.name == "MOTHERSHIP_SPARK_KRB_KRB5")]
+      - notExists:
+          path: spec.driver.template.spec.containers[0].env[?(@.name == "MOTHERSHIP_SPARK_KRB_KEYTAB")]
+      - notExists:
+          path: spec.driver.template.spec.containers[0].env[?(@.name == "MOTHERSHIP_SPARK_KRB_PRINCIPAL")]
+      - notExists:
+          path: spec.driver.template.spec.containers[0].env[?(@.name == "KERBEROS_DAEMON_ENABLED")]
+      - notExists:
+          path: spec.executor.template.spec.containers[0].env
+
+  - it: should extract filename from keytab path for custom keytab names
+    set:
+      dataplane.kerberos.enabled: true
+      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
+      dataplane.kerberos.keytab: "/etc/kerberos/keytab/my-service.keytab"
+      dataplane.kerberos.principal: "my-service/hostname@REALM"
+    asserts:
+      - contains:
+          path: spec.driver.template.spec.volumes
+          content:
+            name: "keytab"
+            secret:
+              items:
+                - key: app.keytab
+                  path: my-service.keytab
+              secretName: hive-client-keytab
+      - contains:
+          path: spec.driver.template.spec.containers[0].volumeMounts
+          content:
+            name: "keytab"
+            mountPath: "/etc/kerberos/keytab/my-service.keytab"
+            subPath: "my-service.keytab"
+      - contains:
+          path: spec.executor.template.spec.containers[0].volumeMounts
+          content:
+            name: "keytab"
+            mountPath: "/etc/kerberos/keytab/my-service.keytab"
+            subPath: "my-service.keytab"
+
+  - it: should emit init-spark-local-dir in executor pod template when numVolumes > 0
+    set:
+      dataplane.numVolumes: 2
+      global.platform: aws
+    asserts:
+      - equal:
+          path: spec.executor.template.spec.initContainers[0].name
+          value: init-spark-local-dir
+      - equal:
+          path: spec.executor.template.spec.initContainers[0].command
+          value: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
+      - contains:
+          path: spec.executor.template.spec.initContainers[0].volumeMounts
+          content:
+            name: spark-local-dir-1
+            mountPath: /tmp/spark-local-dir-1
+      - contains:
+          path: spec.executor.template.spec.initContainers[0].volumeMounts
+          content:
+            name: spark-local-dir-2
+            mountPath: /tmp/spark-local-dir-2
+
+  - it: should not emit init container when numVolumes is not set
+    set:
+      dataplane.numVolumes: -1
+    asserts:
+      - notExists:
+          path: spec.executor.template.spec.initContainers
+
+  - it: should keep executor volumeMounts for spark-local-dir on the CR
+    set:
+      dataplane.numVolumes: 2
+      global.platform: aws
+    asserts:
+      - contains:
+          path: spec.executor.volumeMounts
+          content:
+            name: spark-local-dir-1
+            mountPath: /tmp/spark-local-dir-1
+      - contains:
+          path: spec.executor.volumeMounts
+          content:
+            name: spark-local-dir-2
+            mountPath: /tmp/spark-local-dir-2

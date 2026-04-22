@@ -1,11 +1,10 @@
 {{- if and ( eq .Values.dataplane.enabled true ) ( eq .Values.global.deploymentMode "kubernetes" ) }}
+# SparkApplication using CRD-native pod templates; the operator's mutating
+# webhook is disabled (sparkoperator.webhook.enable=false).
 apiVersion: "sparkoperator.k8s.io/v1beta2"
 kind: SparkApplication
 metadata:
   name: {{ .Release.Name }}-spark
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
-    "helm.sh/hook-weight": "0"
 spec:
   type: Scala
   mode: cluster
@@ -33,12 +32,12 @@ spec:
     spark.kubernetes.executor.podNamePrefix: "{{ .Release.Name }}-spark"
     spark.eventLog.enabled: {{ .Values.dataplane.eventLog | quote }}
     spark.kubernetes.memoryOverheadFactor: {{ .Values.dataplane.memoryOverheadFactor | quote }}
-    # Tweak kubernetes timeouts
+    # Kubernetes API timeouts
     spark.kubernetes.submission.connectionTimeout: "480000"
     spark.kubernetes.submission.requestTimeout: "480000"
     spark.kubernetes.driver.connectionTimeout: "480000"
     spark.kubernetes.driver.requestTimeout: "480000"
-    # Spot resilience optimizations
+    # Dynamic allocation + spot-friendly shuffle tracking
     spark.dynamicAllocation.enabled: "true"
     spark.dynamicAllocation.shuffleTracking.enabled: "true"
     spark.dynamicAllocation.shuffleTracking.timeout: "60s"
@@ -47,9 +46,10 @@ spec:
     spark.dynamicAllocation.sustainedSchedulerBacklogTimeout: "5s"
     spark.dynamicAllocation.schedulerBacklogTimeout: "1s"
     spark.jars.ivy: "/tmp"
-  {{- if or (gt ( .Values.dataplane.numVolumes | int ) 0) (eq .Values.dataplane.kerberos.enabled true) }}
+  # spark-local-dir-* volumes stay on the CR; the operator translates them into
+  # --conf spark.kubernetes.{driver,executor}.volumes.* for spark-submit.
+  {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
   volumes:
-    {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
     {{- range $i := until (int .Values.dataplane.numVolumes) }}
     - name: "spark-local-dir-{{ add1 $i }}"
       {{- if ( eq $.Values.global.platform "aws" ) }}
@@ -62,35 +62,12 @@ spec:
       emptyDir: {}
       {{- end }}
     {{- end }}
-    {{- end }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    - name: krb5-conf
-      secret:
-        items:
-          - key: krb5.conf
-            path: krb5.conf
-        secretName: krb5-conf
-    - name: keytab
-      secret:
-        items:
-          - key: app.keytab
-            path: {{ base .Values.dataplane.kerberos.keytab }}
-        secretName: hive-client-keytab
-    {{- end }}
   {{- end }}
   driver:
 {{- $resources := .Values.dataplane -}}
     {{- with $resources.driver }}
     cores: {{ .cores }}
     memory: {{ .memory }}
-    {{- end }}
-    {{- if .Values.driverNodeSelector }}
-    nodeSelector:
-      {{- toYaml .Values.driverNodeSelector | nindent 6 }}
-    {{- end }}
-    {{- if .Values.tolerations.driverNodeTolerations }}
-    tolerations:
-      {{- toYaml .Values.tolerations.driverNodeTolerations | nindent 6 }}
     {{- end }}
     javaOptions:
       "-Divy.cache.dir=/tmp
@@ -99,79 +76,91 @@ spec:
        -Dconfig.resource=prod.conf
        -Djava.library.path=/opt/spark/libs/
        -Duser.timezone=UTC
-       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=35"
-#--------------------------------------------------------------------------------
-# Environments that require a proxy (Http, Socks, etc..) for egress
-#--------------------------------------------------------------------------------
-# The simplest solution is to solve for this outside of Qualytics. For example, using
-#   an istio egress configured for your proxy or another similar gateway device.
-#
-# However, if proxy-aware applications are required, the javaOptions string above can be
-#  updated to hold the relevant proxy information according to the JRE v17 spec:
-#    https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/net/doc-files/net-properties.html
-#
-#  If additionally, authentication is required for an http(s) proxy, use the following additional
-#   properties not documented on the page linked above:
-#  -Dhttps.proxyUser=your_username
-#  -Dhttps.proxyPassword=your_password
-#  -Dhttp.proxyUser=your_username
-#  -Dhttp.proxyPassword=your_password
-#
-    env:
-      - name: MOTHERSHIP_RABBIT_HOST
-        value: "{{ .Release.Name }}-rabbitmq"
-      {{- if eq .Values.rabbitmq.tls.enabled false }}
-      - name: MOTHERSHIP_RABBIT_PORT
-        value: "5672"
-      - name: MOTHERSHIP_RABBIT_USE_TLS
-        value: "false"
-      {{- end }}
-      - name: MOTHERSHIP_RABBIT_USER
-        value: "user"
-      - name: MOTHERSHIP_RABBIT_PASS
-        valueFrom:
-          secretKeyRef:
-            name: qualytics-creds
-            key: rabbitmq_password
-    {{- if gt ( .Values.dataplane.parallelismScaleFactor | float64 ) 0.0 }}
-      - name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
-        value: {{ .Values.dataplane.parallelismScaleFactor | quote }}
-    {{- end }}
-      - name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
-        value: {{ .Values.dataplane.maxParallelSyncRequests | quote }}
-      - name: MOTHERSHIP_MAX_EXECUTORS
-        value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
-      - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
-        value: {{ .Values.dataplane.executor.cores | int | quote  }}
-      - name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
-        value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
-      - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
-        value: {{ .Values.dataplane.libpostalDataPath | quote  }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-      - name: MOTHERSHIP_SPARK_KRB_KRB5
-        value: {{ .Values.dataplane.kerberos.krb5 | quote  }}
-      - name: MOTHERSHIP_SPARK_KRB_KEYTAB
-        value: {{ .Values.dataplane.kerberos.keytab | quote  }}
-      - name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
-        value: {{ .Values.dataplane.kerberos.principal | quote  }}
-      - name: KERBEROS_DAEMON_ENABLED
-        value: "false"
-    {{- end }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    volumeMounts:
-      - name: krb5-conf
-        mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-        subPath: krb5.conf
-      - name: keytab
-        mountPath: {{ .Values.dataplane.kerberos.keytab }}
-        subPath: {{ base .Values.dataplane.kerberos.keytab }}
-    {{- end }}
+       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45"
     labels:
       version: {{ .Values.dataplane.sparkVersion }}
     serviceAccount: {{ .Values.sparkoperator.spark.serviceAccount.name }}
+    # Driver pod template: node scheduling, Kerberos volumes, container env.
+    # Merged by spark-submit; container name must match podTemplateContainerName.
+    template:
+      spec:
+        {{- if .Values.driverNodeSelector }}
+        nodeSelector:
+          {{- toYaml .Values.driverNodeSelector | nindent 10 }}
+        {{- end }}
+        {{- if .Values.tolerations.driverNodeTolerations }}
+        tolerations:
+          {{- toYaml .Values.tolerations.driverNodeTolerations | nindent 10 }}
+        {{- end }}
+        {{- if eq .Values.dataplane.kerberos.enabled true }}
+        volumes:
+          - name: krb5-conf
+            secret:
+              items:
+                - key: krb5.conf
+                  path: krb5.conf
+              secretName: krb5-conf
+          - name: keytab
+            secret:
+              items:
+                - key: app.keytab
+                  path: {{ base .Values.dataplane.kerberos.keytab }}
+              secretName: hive-client-keytab
+        {{- end }}
+        containers:
+          - name: spark-kubernetes-driver
+            env:
+              - name: MOTHERSHIP_RABBIT_HOST
+                value: "{{ .Release.Name }}-rabbitmq"
+              {{- if eq .Values.rabbitmq.tls.enabled false }}
+              - name: MOTHERSHIP_RABBIT_PORT
+                value: "5672"
+              - name: MOTHERSHIP_RABBIT_USE_TLS
+                value: "false"
+              {{- end }}
+              - name: MOTHERSHIP_RABBIT_USER
+                value: "user"
+              - name: MOTHERSHIP_RABBIT_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: qualytics-creds
+                    key: rabbitmq_password
+              {{- if gt ( .Values.dataplane.parallelismScaleFactor | float64 ) 0.0 }}
+              - name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
+                value: {{ .Values.dataplane.parallelismScaleFactor | quote }}
+              {{- end }}
+              - name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
+                value: {{ .Values.dataplane.maxParallelSyncRequests | quote }}
+              - name: MOTHERSHIP_MAX_EXECUTORS
+                value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
+              - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
+                value: {{ .Values.dataplane.executor.cores | int | quote  }}
+              - name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
+                value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
+              - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
+                value: {{ .Values.dataplane.libpostalDataPath | quote  }}
+              {{- if eq .Values.dataplane.kerberos.enabled true }}
+              - name: MOTHERSHIP_SPARK_KRB_KRB5
+                value: {{ .Values.dataplane.kerberos.krb5 | quote  }}
+              - name: MOTHERSHIP_SPARK_KRB_KEYTAB
+                value: {{ .Values.dataplane.kerberos.keytab | quote  }}
+              - name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
+                value: {{ .Values.dataplane.kerberos.principal | quote  }}
+              - name: KERBEROS_DAEMON_ENABLED
+                value: "false"
+              {{- end }}
+            {{- if eq .Values.dataplane.kerberos.enabled true }}
+            volumeMounts:
+              - name: krb5-conf
+                mountPath: {{ .Values.dataplane.kerberos.krb5 }}
+                subPath: krb5.conf
+              - name: keytab
+                mountPath: {{ .Values.dataplane.kerberos.keytab }}
+                subPath: {{ base .Values.dataplane.kerberos.keytab }}
+            {{- end }}
   dynamicAllocation:
     {{- with $resources.dynamicAllocation }}
-    enabled: true
+    enabled: {{ .enabled }}
     initialExecutors: {{ .initialExecutors }}
     minExecutors: {{ .minExecutors }}
     maxExecutors: {{ .maxExecutors }}
@@ -186,252 +175,79 @@ spec:
       "-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties
        -Djava.library.path=/opt/spark/libs/
        -Duser.timezone=UTC
-       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=35"
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    env:
-      - name: KRB5_CONFIG
-        value: {{ .Values.dataplane.kerberos.krb5 | quote }}
-      - name: KRB_KEYTAB
-        value: {{ .Values.dataplane.kerberos.keytab | quote }}
-      - name: KRB_PRINCIPAL
-        value: {{ .Values.dataplane.kerberos.principal | quote }}
-      - name: SPARK_JAVA_OPT_998
-        value: "-Djava.security.krb5.conf={{ .Values.dataplane.kerberos.krb5 }}"
-      - name: SPARK_JAVA_OPT_999
-        value: "-Djavax.security.auth.useSubjectCredsOnly=false"
-    {{- end }}
+       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45"
     labels:
       version: {{ .Values.dataplane.sparkVersion }}
-    {{- if .Values.executorNodeSelector }}
-    nodeSelector:
-      {{- toYaml .Values.executorNodeSelector | nindent 6 }}
-    {{- end }}
-    {{- if .Values.tolerations.executorNodeTolerations }}
-    tolerations:
-      {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 6 }}
-    {{- end }}
-    {{- if or (gt ( .Values.dataplane.numVolumes | int ) 0) (eq .Values.dataplane.kerberos.enabled true) }}
-    volumeMounts:
-      {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
-      {{- range $i := until (int .Values.dataplane.numVolumes) }}
-      - name: "spark-local-dir-{{ add1 $i }}"
-        mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
-      {{- end }}
-      {{- end }}
-      {{- if eq .Values.dataplane.kerberos.enabled true }}
-      - name: krb5-conf
-        mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-        subPath: krb5.conf
-      - name: keytab
-        mountPath: {{ .Values.dataplane.kerberos.keytab }}
-        subPath: {{ base .Values.dataplane.kerberos.keytab }}
-      {{- end }}
-    {{- end }}
     {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
-    initContainers:
-    - name: init-spark-local-dir
-      image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
-      imagePullPolicy: IfNotPresent
-      command: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
-      securityContext:
-        runAsUser: 0
-      volumeMounts:
+    volumeMounts:
       {{- range $i := until (int .Values.dataplane.numVolumes) }}
       - name: "spark-local-dir-{{ add1 $i }}"
         mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
       {{- end }}
     {{- end }}
-{{- if and .Values.sparkoperator.enabled .Values.sparkoperator.webhook.enable }}
----
-# Pre-flight Job that blocks the SparkApplication post-install/post-upgrade hook
-# until the spark-operator mutating webhook is fully serving admission requests.
-# Three conditions must all be true — skipping any of them produces a real race
-# we have reproduced:
-#   (1) Webhook Deployment is Available. Covers "webhook pod still pulling its
-#       image or passing readiness probes" (common on EKS with Karpenter /
-#       cluster autoscaler on a cold node).
-#   (2) Service endpoints are populated. Covers the "no endpoints available for
-#       service qualytics-sparkoperator-webhook-svc" error on fresh installs.
-#   (3) MutatingWebhookConfiguration CA bundle has been injected by the
-#       operator's controller loop. Covers the "tls: failed to verify
-#       certificate: x509: certificate signed by unknown authority" error on
-#       fresh single-phase `helm install`, where the operator loop lags the
-#       Service endpoint controller by 15-20s.
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-20"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-20"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
-rules:
-  - apiGroups: [""]
-    resources: ["endpoints", "pods"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-20"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
-subjects:
-  - kind: ServiceAccount
-    name: {{ .Release.Name }}-spark-webhook-wait
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: Role
-  name: {{ .Release.Name }}-spark-webhook-wait
-  apiGroup: rbac.authorization.k8s.io
----
-# Cluster-scoped read on MutatingWebhookConfiguration so the wait Job can block
-# until the sparkoperator controller has written the CA bundle into the webhook
-# configuration. Without this extra gate, admission calls can still fail with
-# "tls: certificate signed by unknown authority" even after Service endpoints
-# are populated.
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-20"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
-rules:
-  - apiGroups: ["admissionregistration.k8s.io"]
-    resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-    verbs: ["get", "list", "watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-20"
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
-subjects:
-  - kind: ServiceAccount
-    name: {{ .Release.Name }}-spark-webhook-wait
-    namespace: {{ .Release.Namespace }}
-roleRef:
-  kind: ClusterRole
-  name: {{ .Release.Name }}-spark-webhook-wait
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: {{ .Release.Name }}-spark-webhook-wait
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "-10"
-    # before-hook-creation: the previous Job is removed before the next install/upgrade.
-    # We intentionally omit hook-succeeded so the Job's logs remain inspectable after
-    # success. ttlSecondsAfterFinished (below) handles cleanup a few minutes later.
-    helm.sh/hook-delete-policy: before-hook-creation
-spec:
-  backoffLimit: 3
-  activeDeadlineSeconds: 600
-  # Keep the Job (and its pod logs) around for 10 minutes after completion so
-  # operators can inspect what happened during install/upgrade. The next
-  # before-hook-creation pass will clean it up regardless.
-  ttlSecondsAfterFinished: 600
-  template:
-    metadata:
-      labels:
-        app: {{ .Release.Name }}-spark-webhook-wait
-    spec:
-      restartPolicy: Never
-      serviceAccountName: {{ .Release.Name }}-spark-webhook-wait
-      {{- if .Values.appNodeSelector }}
-      nodeSelector:
-        {{- toYaml .Values.appNodeSelector | nindent 8 }}
-      {{- end }}
-      {{- if .Values.tolerations.appNodeTolerations }}
-      tolerations:
-        {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
-      {{- end }}
-      containers:
-        - name: wait
-          # Reuse the spark-operator subchart's kubectl image — customers already
-          # pull this for the subchart's CRD upgrade hook, so no new dependency.
-          # It ships kubectl as the entrypoint and /bin/sh for the retry loop below.
-          image: "ghcr.io/kubeflow/spark-operator/kubectl:{{ .Subcharts.sparkoperator.Chart.AppVersion }}"
-          imagePullPolicy: IfNotPresent
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-            limits:
-              memory: "128Mi"
-          command:
-            - /bin/sh
-            - -c
-            - |
-              set -eu
-              NS="{{ .Release.Namespace }}"
-              DEPLOY="{{ .Release.Name }}-sparkoperator-webhook"
-              SVC="{{ .Release.Name }}-sparkoperator-webhook-svc"
-              MWC="{{ .Release.Name }}-sparkoperator-webhook"
-              ROLLOUT_TIMEOUT="300s"
-              WAIT_TIMEOUT=300
-
-              echo "[1/3] Waiting up to ${ROLLOUT_TIMEOUT} for Deployment/${DEPLOY} to become Available..."
-              kubectl -n "${NS}" rollout status deployment/"${DEPLOY}" --timeout="${ROLLOUT_TIMEOUT}"
-
-              echo "[2/3] Waiting up to ${WAIT_TIMEOUT}s for Service/${SVC} endpoints to populate..."
-              ips=""
-              end=$(( $(date +%s) + WAIT_TIMEOUT ))
-              while [ "$(date +%s)" -lt "${end}" ]; do
-                ips=$(kubectl -n "${NS}" get endpoints "${SVC}" -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || true)
-                if [ -n "${ips}" ]; then
-                  echo "Webhook endpoints ready: ${ips}"
-                  break
-                fi
-                echo "  no endpoints yet, retrying in 5s..."
-                sleep 5
-              done
-              if [ -z "${ips}" ]; then
-                echo "ERROR: timed out waiting for ${SVC} endpoints" >&2
-                kubectl -n "${NS}" get endpoints "${SVC}" -o yaml || true
-                kubectl -n "${NS}" get pods -l app.kubernetes.io/component=webhook -o wide || true
-                exit 1
-              fi
-
-              echo "[3/3] Waiting up to ${WAIT_TIMEOUT}s for MutatingWebhookConfiguration/${MWC} CA bundle to be injected..."
-              end=$(( $(date +%s) + WAIT_TIMEOUT ))
-              while [ "$(date +%s)" -lt "${end}" ]; do
-                ca=$(kubectl get mutatingwebhookconfiguration "${MWC}" -o jsonpath='{.webhooks[0].clientConfig.caBundle}' 2>/dev/null || true)
-                if [ -n "${ca}" ] && [ "${#ca}" -gt 100 ]; then
-                  echo "CA bundle injected (${#ca} chars)"
-                  exit 0
-                fi
-                echo "  CA bundle not yet injected, retrying in 5s..."
-                sleep 5
-              done
-
-              echo "ERROR: timed out waiting for CA bundle on ${MWC}" >&2
-              kubectl get mutatingwebhookconfiguration "${MWC}" -o yaml || true
-              exit 1
-{{- end }}
+    # Executor pod template: node scheduling, init container, Kerberos volumes.
+    # The operator writes this to a ConfigMap mounted into the driver, which
+    # spark-submit then uses for every executor it launches.
+    template:
+      spec:
+        {{- if .Values.executorNodeSelector }}
+        nodeSelector:
+          {{- toYaml .Values.executorNodeSelector | nindent 10 }}
+        {{- end }}
+        {{- if .Values.tolerations.executorNodeTolerations }}
+        tolerations:
+          {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 10 }}
+        {{- end }}
+        {{- if eq .Values.dataplane.kerberos.enabled true }}
+        volumes:
+          - name: krb5-conf
+            secret:
+              items:
+                - key: krb5.conf
+                  path: krb5.conf
+              secretName: krb5-conf
+          - name: keytab
+            secret:
+              items:
+                - key: app.keytab
+                  path: {{ base .Values.dataplane.kerberos.keytab }}
+              secretName: hive-client-keytab
+        {{- end }}
+        {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
+        initContainers:
+          - name: init-spark-local-dir
+            image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
+            imagePullPolicy: IfNotPresent
+            command: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
+            securityContext:
+              runAsUser: 0
+            volumeMounts:
+              {{- range $i := until (int .Values.dataplane.numVolumes) }}
+              - name: "spark-local-dir-{{ add1 $i }}"
+                mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
+              {{- end }}
+        {{- end }}
+        # Always emit containers; Spark NPEs loading a template without it.
+        containers:
+          - name: spark-kubernetes-executor
+            {{- if eq .Values.dataplane.kerberos.enabled true }}
+            env:
+              - name: KRB5_CONFIG
+                value: {{ .Values.dataplane.kerberos.krb5 | quote }}
+              - name: KRB_KEYTAB
+                value: {{ .Values.dataplane.kerberos.keytab | quote }}
+              - name: KRB_PRINCIPAL
+                value: {{ .Values.dataplane.kerberos.principal | quote }}
+              - name: SPARK_JAVA_OPT_998
+                value: "-Djava.security.krb5.conf={{ .Values.dataplane.kerberos.krb5 }}"
+              - name: SPARK_JAVA_OPT_999
+                value: "-Djavax.security.auth.useSubjectCredsOnly=false"
+            volumeMounts:
+              - name: krb5-conf
+                mountPath: {{ .Values.dataplane.kerberos.krb5 }}
+                subPath: krb5.conf
+              - name: keytab
+                mountPath: {{ .Values.dataplane.kerberos.keytab }}
+                subPath: {{ base .Values.dataplane.kerberos.keytab }}
+            {{- end }}
 {{- end }}
