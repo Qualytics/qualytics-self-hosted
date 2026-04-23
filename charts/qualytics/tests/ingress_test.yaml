@@ -315,6 +315,24 @@ tests:
           value: "429"
         documentIndex: 1
 
+  - it: should set kubernetes.io/ingress.allow-http=false on all ingresses
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.allow-http"]
+          value: "false"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.allow-http"]
+          value: "false"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["kubernetes.io/ingress.allow-http"]
+          value: "false"
+        documentIndex: 2
+
   - it: should configure ModSecurity when enabled
     set:
       ingress.enabled: true
