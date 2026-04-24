@@ -74,6 +74,8 @@ spec:
       labels:
         app: {{ .Release.Name }}-rabbitmq
     spec:
+      securityContext:
+        fsGroup: 999
       imagePullSecrets:
         - name: regcred
       {{- if .Values.appNodeSelector }}
