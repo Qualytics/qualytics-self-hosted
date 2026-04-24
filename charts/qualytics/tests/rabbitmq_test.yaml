@@ -82,6 +82,13 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.cpu
         documentIndex: 3
 
+  - it: should set fsGroupChangePolicy to OnRootMismatch so .erlang.cookie perms survive pod restarts
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+        documentIndex: 3
+
   - it: should allow custom memory limit override without changing requests for RabbitMQ
     set:
       rabbitmq.resources.requests.memory: "1Gi"

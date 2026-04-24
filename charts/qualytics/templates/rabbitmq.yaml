@@ -76,6 +76,7 @@ spec:
     spec:
       securityContext:
         fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
       imagePullSecrets:
         - name: regcred
       {{- if .Values.appNodeSelector }}
