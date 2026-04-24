@@ -3,7 +3,7 @@ entries:
   qualytics:
   - apiVersion: v2
     appVersion: 2026.4.24
-    created: "2026-04-24T17:55:21.708155063Z"
+    created: "2026-04-24T18:53:42.000000000Z"
     dependencies:
     - alias: sparkoperator
       condition: sparkoperator.enabled
@@ -16,7 +16,7 @@ entries:
       repository: https://kubernetes.github.io/ingress-nginx
       version: 4.15.1
     description: A Helm chart for deploying Qualytics on Kubernetes
-    digest: cbc380dd73c16252480cd213f92308ab71c8229d6ef09babb69e0d1549636339
+    digest: 6d1be182f43704bb05292109b1aeded696b5ff21cae56cd3493c09d663f0c945
     name: qualytics
     type: application
     urls:
