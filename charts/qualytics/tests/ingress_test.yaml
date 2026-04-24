@@ -343,3 +343,21 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/enable-modsecurity"]
           value: "true"
         documentIndex: 0
+
+  - it: modsecurity-snippet must contain no apostrophes
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - notMatchRegex:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/modsecurity-snippet"]
+          pattern: "'"
+        documentIndex: 0
+      - notMatchRegex:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/modsecurity-snippet"]
+          pattern: "'"
+        documentIndex: 1
+      - notMatchRegex:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/modsecurity-snippet"]
+          pattern: "'"
+        documentIndex: 2
