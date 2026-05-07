@@ -100,6 +100,35 @@ spec:
           mountPath: /config/
         - name: plugins-file
           mountPath: /etc/rabbitmq/
+      # Re-lock the Erlang cookie to 0600 after the fsGroup walk.
+      #
+      # Defense-in-depth for upgrades from chart versions that had `fsGroup: 999` without
+      # `fsGroupChangePolicy: OnRootMismatch`. On those versions, the recursive kubelet walk
+      # applied g+rw to every file in /var/lib/rabbitmq, bumping `.erlang.cookie` from 0600
+      # to 0660. Erlang's auth module then refuses to start ("Cookie file ... must be
+      # accessible by owner only") and the StatefulSet crashloops.
+      #
+      # On fresh PVCs the policy alone is sufficient — RabbitMQ creates the cookie at 0600
+      # *after* the walk runs. This init container exists to repair already-broken volumes
+      # left over from older deployments. After the first successful restart the volume root
+      # is owned by 999:999, the OnRootMismatch policy short-circuits the walk on every
+      # subsequent restart, and this becomes a cheap idempotent no-op (~0.5s busybox boot).
+      - name: fix-cookie-perms
+        image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - |
+            if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+              chmod 0600 /var/lib/rabbitmq/.erlang.cookie
+              echo "fixed cookie perms: $(ls -la /var/lib/rabbitmq/.erlang.cookie)"
+            else
+              echo "no cookie present yet — fresh volume, rabbitmq will create one"
+            fi
+        volumeMounts:
+        - name: rabbitmq-data
+          mountPath: /var/lib/rabbitmq
       containers:
       - name: rabbitmq
         image: "{{ tpl .Values.rabbitmq.image.imageUrl . }}:{{ .Values.rabbitmq.image.imageTag }}"

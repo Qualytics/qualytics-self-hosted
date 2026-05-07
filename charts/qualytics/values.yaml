@@ -108,13 +108,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260424-69c2dfe"
+    controlplaneImageTag: "20260507-8cacb93"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260424-d0d732e"
+    dataplaneImageTag: "20260507-c2ea6a8"
 frontendImage:
   image:
-    frontendImageTag: "20260424-138541b"
+    frontendImageTag: "20260507-8cc8ab2"
 
 # Storage classes
 storageClass:
@@ -259,6 +259,9 @@ controlplane:
     migrateIdpByEmail: ""
     # SCIM username prefix
     scimUsernamePrefix: ""
+    # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
+    # Set to false to force all access through OIDC cookie-based auth only.
+    allowQualyticsIssuer: true
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true

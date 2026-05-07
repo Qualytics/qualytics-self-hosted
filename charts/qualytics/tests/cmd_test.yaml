@@ -391,35 +391,23 @@ tests:
             name: regcred
         documentIndex: 0
 
-  # MCP configuration
-  - it: should set MCP_ENABLED to false by default
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_ENABLED
-            value: "false"
-        documentIndex: 0
-
-  - it: should set MCP_ENABLED to true when enabled
-    set:
-      controlplane.mcp.enabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MCP_ENABLED
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
             value: "true"
         documentIndex: 0
 
-  - it: should set MCP_ENABLED to false when explicitly disabled
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to false when configured
     set:
-      controlplane.mcp.enabled: false
+      controlplane.auth.allowQualyticsIssuer: false
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_ENABLED
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
             value: "false"
         documentIndex: 0
 

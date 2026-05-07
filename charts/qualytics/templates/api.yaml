@@ -259,8 +259,8 @@ spec:
           - name: SCIM_USERNAME_PREFIX
             value: {{ .Values.controlplane.auth.scimUsernamePrefix | quote }}
         {{- end }}
-          - name: MCP_ENABLED
-            value: {{ .Values.controlplane.mcp.enabled | quote }}
+          - name: API_AUTH_ALLOW_QUALYTICS_ISSUER
+            value: {{ .Values.controlplane.auth.allowQualyticsIssuer | quote }}
           - name: APP_DEPLOYMENT_MODE
             value: {{ .Values.global.deploymentMode | quote }}
 

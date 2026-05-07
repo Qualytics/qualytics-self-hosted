@@ -118,3 +118,46 @@ tests:
           path: allowVolumeExpansion
           value: true
         documentIndex: 1
+
+  # Auto-skip when no in-chart resource consumes a storage class. Composes with
+  # storageClass.create — the explicit opt-in still wins (false → never render), and the
+  # auto-skip layers on top to avoid emitting unused / colliding StorageClass objects.
+  - it: should NOT render any storage class when postgres is external AND rabbitmq is ephemeral
+    set:
+      storageClass.create: true
+      global.platform: "aws"
+      postgres.enabled: false
+      rabbitmq.pvc.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should still render storage classes when postgres is external but rabbitmq uses PVC
+    set:
+      storageClass.create: true
+      global.platform: "gcp"
+      postgres.enabled: false
+      rabbitmq.pvc.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: should still render storage classes when rabbitmq is ephemeral but postgres uses PVC
+    set:
+      storageClass.create: true
+      global.platform: "aws"
+      postgres.enabled: true
+      rabbitmq.pvc.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: should respect storageClass.create=false even when consumers are present
+    set:
+      storageClass.create: false
+      global.platform: "aws"
+      postgres.enabled: true
+      rabbitmq.pvc.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 0

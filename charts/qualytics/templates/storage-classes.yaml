@@ -1,4 +1,15 @@
-{{- if ( eq .Values.storageClass.create true ) }}
+{{- /*
+  Skip storage class creation when no in-chart resource consumes one. Even with
+  storageClass.create: true, if both postgres is external and rabbitmq is on emptyDir,
+  the chart produces zero PVCs — so the platform-specific StorageClass declarations
+  would be unused at best and could collide with cluster-managed platform-default
+  storage classes (e.g. an EKS fleet's pre-existing `aws` SC, which has a Retain
+  reclaim policy and so makes accidental conflicts sticky).
+
+  Auto-derived from the existing toggles (no new values knob); composes with
+  storageClass.create so the explicit opt-in still wins.
+*/}}
+{{- if and (eq .Values.storageClass.create true) (or .Values.postgres.enabled .Values.rabbitmq.pvc.enabled) }}
 
 {{- if ( eq .Values.global.platform "aws" ) }}
 ---

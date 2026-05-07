@@ -82,12 +82,45 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.cpu
         documentIndex: 3
 
-  - it: should set fsGroupChangePolicy to OnRootMismatch so .erlang.cookie perms survive pod restarts
+  - it: should set fsGroup and fsGroupChangePolicy so .erlang.cookie perms survive pod restarts
     asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+        documentIndex: 3
       - equal:
           path: spec.template.spec.securityContext.fsGroupChangePolicy
           value: OnRootMismatch
         documentIndex: 3
+
+  - it: should run a fix-cookie-perms initContainer to re-lock .erlang.cookie after fsGroup
+    # fsGroup applies g+rw to every file in /var/lib/rabbitmq on first mount, which bumps the
+    # Erlang cookie from 0600 to 0660 and makes the rabbitmq daemon refuse to start. The init
+    # container chmods it back to 0600 on every pod start.
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: "fix-cookie-perms"
+        documentIndex: 3
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: rabbitmq-data
+            mountPath: /var/lib/rabbitmq
+        documentIndex: 3
+
+  - it: should set fsGroup on ephemeral mode too
+    set:
+      rabbitmq.pvc.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+        documentIndex: 2
 
   - it: should allow custom memory limit override without changing requests for RabbitMQ
     set:
