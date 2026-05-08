@@ -30,7 +30,6 @@ jobs:
 
       - name: Add Helm Dependencies
         run: |
-          helm repo add spark-operator https://kubeflow.github.io/spark-operator
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
           helm repo update
 

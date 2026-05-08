@@ -5,33 +5,10 @@
 #--------------------------------------------------------------------------------
 # Dependencies
 #--------------------------------------------------------------------------------
-sparkoperator:
-  enabled: true
-  prometheus:
-    metrics:
-      enable: false
-  webhook:
-    enable: false
-  hook:
-    upgradeCrd: false
-  controller:
-    nodeSelector: {}
-    #   appNodes: "true"
-    # tolerations:
-    #   - key: appNodes
-    #     operator: Equal
-    #     value: "true"
-    #     effect: NoSchedule
-  spark:
-    jobNamespaces:
-    - "qualytics" # Set to qualytics target namespace
-    serviceAccount:
-      name: "qualytics-spark"
-      # Annotations for the Spark ServiceAccount.
-      # For AWS IRSA (IAM Roles for Service Accounts), add:
-      #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
-      # This enables keyless IAM Role authentication for S3 and Athena connectors.
-      annotations: {}
+# Note: spark-operator is no longer required. The dataplane runs as a native
+# Deployment that invokes spark-submit in client mode and creates executor
+# pods directly via the Kubernetes API. RBAC for executor management lives
+# under `dataplane.rbac` below.
 
 nginx:
   enabled: false
@@ -212,9 +189,20 @@ dataplane:
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
-    - "com.oracle.database.jdbc:ojdbc11:21.19.0.0"
-    - "com.teradata.jdbc:terajdbc:20.00.00.49"
-    - "com.ibm.db2:jcc:12.1.2.0"
+    - "com.oracle.database.jdbc:ojdbc11:21.20.0.0"
+    - "com.teradata.jdbc:terajdbc:20.00.00.51"
+    - "com.ibm.db2:jcc:12.1.3.0"
+  # RBAC for the driver pod to manage executor pods directly. Replaces the
+  # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.
+  rbac:
+    # When true, create the ServiceAccount + Role + RoleBinding. Set to false
+    # to BYO an existing SA in clusters with restricted RBAC.
+    create: true
+    serviceAccountName: "qualytics-spark"
+    # Annotations on the driver ServiceAccount.
+    # For AWS IRSA (IAM Roles for Service Accounts), add:
+    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
+    serviceAccountAnnotations: {}
   driver:
     cores: 7
     memory: "55000m"
@@ -265,9 +253,6 @@ controlplane:
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true
-  # Enable Model Context Protocol
-  mcp:
-    enabled: false
 
 controlplaneCmd:
   resources:
@@ -299,7 +284,7 @@ postgres:
   enabled: true
   pvc:
     storageSize: "100Gi"
-    backupStorageSize: "50Gi"
+    backupStorageSize: "100Gi"
   image:
     imageUrl: "postgres"
     imageTag: "17"
@@ -338,9 +323,11 @@ postgres:
 # RabbitMQ
 #--------------------------------------------------------------------------------
 rabbitmq:
-  # Set pvc.enabled to false to use emptyDir (node-local disk) instead of PVC
+  # Defaults to emptyDir (node-local disk). RabbitMQ state is recoverable from
+  # the controlplane on restart, so a 10 GiB PVC is overkill for most installs.
+  # Set pvc.enabled to true if you need persistence across pod-host evictions.
   pvc:
-    enabled: true
+    enabled: false
     storageSize: "10Gi"
   image:
     imageUrl: "rabbitmq"

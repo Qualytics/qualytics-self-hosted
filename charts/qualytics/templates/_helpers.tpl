@@ -35,3 +35,38 @@ Determine deployment size based on dataplane.driver.cores
     unspecified
   {{- end -}}
 {{- end }}
+
+{{/*
+Driver pod memory in MiB. Mirrors Spark's KubernetesUtils overhead computation:
+  overhead = max(memoryOverheadFactor * heap, 384)
+The 384 MiB floor matters for small drivers; for production-sized 55 GiB drivers
+the factor (e.g. 5500 MiB at 0.1) dominates. Without the floor, small driver
+pods would have less non-heap headroom than spark-operator-managed ones and
+risk OOMKill — the side-by-side smoke against the SparkApplication shape
+showed exactly this: operator pod = 1408Mi (1024 + 384), this without floor
+= 1126 (1024 + 102).
+Input shape: dataplane.driver.memory expressed in Spark units like "55000m" (= MiB).
+*/}}
+{{- define "qualytics.spark.driver.podMemoryMb" -}}
+{{- $heapMb := .Values.dataplane.driver.memory | trimSuffix "m" | int -}}
+{{- $factorPct := mulf .Values.dataplane.memoryOverheadFactor 100 | int -}}
+{{- /* Sprig pipes pass the value as the trailing arg, so `mul A B | div 100`
+       means div(100, A*B). Use explicit parens to compute (A*B)/100. */ -}}
+{{- $factorOverhead := div (mul $heapMb $factorPct) 100 -}}
+{{- $overhead := max $factorOverhead 384 -}}
+{{- add $heapMb $overhead -}}
+{{- end -}}
+
+{{/*
+Comma-separated spark.local.dir paths, one per dataplane.numVolumes.
+Renders empty when numVolumes <= 0.
+*/}}
+{{- define "qualytics.spark.localDirs" -}}
+{{- $dirs := list -}}
+{{- if gt (.Values.dataplane.numVolumes | int) 0 -}}
+{{- range $i := until (int .Values.dataplane.numVolumes) -}}
+{{- $dirs = append $dirs (printf "/tmp/spark-local-dir-%d" (add1 $i)) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $dirs -}}
+{{- end -}}

@@ -48,18 +48,6 @@ docker pull postgres:17
 
 ## Dependency Chart Images
 
-### Spark Operator (Required)
-
-| Component | Image |
-|---|---|
-| Controller | `ghcr.io/kubeflow/spark-operator/controller:2.5.0` |
-| Kubectl hook | `ghcr.io/kubeflow/spark-operator/kubectl:2.5.0` |
-
-```bash
-docker pull ghcr.io/kubeflow/spark-operator/controller:2.5.0
-docker pull ghcr.io/kubeflow/spark-operator/kubectl:2.5.0
-```
-
 ### Ingress NGINX (Optional - when `nginx.enabled: true`)
 
 | Component | Image |

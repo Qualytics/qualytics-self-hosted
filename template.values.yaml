@@ -79,21 +79,11 @@ executorNodeSelector:
 #--------------------------------------------------------------------------------
 # Dependencies
 #--------------------------------------------------------------------------------
-sparkoperator:
-  enabled: true
-  webhook:
-    enable: false
-  controller:
-    nodeSelector:
-      appNodes: "true"
-  spark:
-    jobNamespaces:
-    - "qualytics"
-    serviceAccount:
-      name: "qualytics-spark"
-      # For AWS IRSA (IAM Role authentication for S3/Athena connectors):
-      # annotations:
-      #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
+# spark-operator is no longer required — the dataplane runs as a native
+# Deployment that invokes spark-submit in client mode and creates executor
+# pods directly via the Kubernetes API. See `dataplane.rbac` below for the
+# ServiceAccount/Role/RoleBinding that replace what the operator chart used
+# to install.
 
 nginx:
   enabled: false
@@ -141,6 +131,13 @@ dataplane:
   numVolumes: -1
   parallelismScaleFactor: -1
   maxParallelSyncRequests: 3
+  # RBAC the driver needs to manage executor pods (replaces the spark-operator
+  # SA/Role bundle). For AWS IRSA, add the role-arn annotation here:
+  rbac:
+    create: true
+    serviceAccountName: "qualytics-spark"
+    # serviceAccountAnnotations:
+    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
   driver:
     cores: 7
     memory: "55000m"
