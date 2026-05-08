@@ -3,59 +3,47 @@ templates:
   - spark.yaml
   - ingress.yaml
 tests:
-  # Platform configuration tests in SparkApplication
-  - it: should configure AWS platform in spark volumes
+  # Platform-specific scratch volumes now land in the executor pod template
+  # ConfigMap (the driver Deployment delegates per-executor scheduling to
+  # spark-submit, which reads this template). doc 3 is the ConfigMap.
+  - it: should configure AWS NVMe paths in the executor pod template
     template: spark.yaml
-    documentIndex: 0
+    documentIndex: 3
     set:
       global.platform: "aws"
       dataplane.numVolumes: 2
     asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-1
-            hostPath:
-              path: /mnt/disks/nvme1n1/spark-local-dir-1
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-2
-            hostPath:
-              path: /mnt/disks/nvme2n1/spark-local-dir-2
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "/mnt/disks/nvme1n1/spark-local-dir-1"
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "/mnt/disks/nvme2n1/spark-local-dir-2"
 
-  - it: should configure GCP platform in spark volumes
+  - it: should configure GCP SSD paths in the executor pod template
     template: spark.yaml
-    documentIndex: 0
+    documentIndex: 3
     set:
       global.platform: "gcp"
       dataplane.numVolumes: 2
     asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-1
-            hostPath:
-              path: /mnt/disks/ssd0/spark-local-dir-1
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-2
-            hostPath:
-              path: /mnt/disks/ssd1/spark-local-dir-2
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "/mnt/disks/ssd0/spark-local-dir-1"
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "/mnt/disks/ssd1/spark-local-dir-2"
 
-  - it: should configure Azure platform with emptyDir volumes
+  - it: should fall back to emptyDir for Azure
     template: spark.yaml
-    documentIndex: 0
+    documentIndex: 3
     set:
       global.platform: "azure"
       dataplane.numVolumes: 1
     asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-1
-            emptyDir: {}
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "emptyDir: \\{\\}"
 
   # DNS record configuration in ingress
   - it: should configure DNS record in ingress
@@ -69,17 +57,21 @@ tests:
           value: "customer.qualytics.io"
         documentIndex: 0
 
-  # Image URL configuration in SparkApplication
-  - it: should configure dataplane image URL
+  # Image URL — the driver image lives on the Deployment container (doc 5)
+  # and is also passed to spark-submit so executors pull the same image.
+  - it: should configure dataplane image URL on the driver Deployment
     template: spark.yaml
-    documentIndex: 0
+    documentIndex: 5
     set:
       global.imageUrls.dataplaneImageUrl: "custom-registry/dataplane"
       dataplaneImage.image.dataplaneImageTag: "v2.3.4"
     asserts:
       - equal:
-          path: spec.image
+          path: spec.template.spec.containers[0].image
           value: "custom-registry/dataplane:v2.3.4"
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.kubernetes.container.image=\"custom-registry/dataplane:v2.3.4\""
 
   # Ingress configuration tests
   - it: should enable ingress when configured
@@ -126,10 +118,10 @@ tests:
           value: "false"
         documentIndex: 0
 
-  # Global values interaction tests
-  - it: should work with all global values configured for spark
+  # End-to-end: all globals applied at once. Driver image asserted on doc 5,
+  # platform-specific scratch path on doc 3.
+  - it: should compose globals across the spark templates
     template: spark.yaml
-    documentIndex: 0
     set:
       global.platform: "gcp"
       global.dnsRecord: "production.qualytics.io"
@@ -139,27 +131,25 @@ tests:
       dataplane.numVolumes: 1
     asserts:
       - isKind:
-          of: SparkApplication
+          of: Deployment
+        documentIndex: 5
       - equal:
-          path: spec.image
+          path: spec.template.spec.containers[0].image
           value: "gcr.io/project/dataplane:latest"
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-1
-            hostPath:
-              path: /mnt/disks/ssd0/spark-local-dir-1
+        documentIndex: 5
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "/mnt/disks/ssd0/spark-local-dir-1"
+        documentIndex: 3
 
-  # Platform validation
-  - it: should handle different platforms correctly
+  # Platform fallback for unknown platforms
+  - it: should fall back to emptyDir for unknown platforms
     template: spark.yaml
-    documentIndex: 0
+    documentIndex: 3
     set:
       global.platform: "other"
       dataplane.numVolumes: 1
     asserts:
-      - contains:
-          path: spec.volumes
-          content:
-            name: spark-local-dir-1
-            emptyDir: {}
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "emptyDir: \\{\\}"

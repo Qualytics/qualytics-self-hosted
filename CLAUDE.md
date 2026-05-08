@@ -5,11 +5,11 @@
 This Helm chart deploys a single-tenant instance of the Qualytics data quality platform to a CNCF-compliant Kubernetes cluster. The deployment includes:
 
 - **Control Plane**: API service (6 replicas), CMD background processor
-- **Data Plane**: Apache Spark 4.1.1 (dynamic executor scaling 1-12)
+- **Data Plane**: Apache Spark 4.1.1 driver as a native `Deployment` running `spark-submit` in client mode; executor pods created directly via the Kubernetes API (dynamic executor scaling 1-12). No spark-operator dependency.
 - **Frontend**: React/Vue web UI (1 replica)
 - **Data Tier**: PostgreSQL 17 (StatefulSet with 100Gi storage), RabbitMQ 4.0 message broker
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
-- **Dependencies**: Spark Operator 2.5.0, nginx-ingress 4.15.1 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
+- **Dependencies**: nginx-ingress 4.15.1 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
 
 Chart version: **2026.4.20** (application type)
 
@@ -17,21 +17,19 @@ Chart version: **2026.4.20** (application type)
 
 ```
 qualytics-self-hosted/
-├── README.md                           # User-facing deployment documentation
+├── README.md                           # User-facing deployment documentation (incl. Mermaid architecture diagram)
 ├── template.values.yaml                # Simplified configuration template (128 lines)
-├── deployment_arch_diagram.jpg         # Architecture diagram
 ├── LICENSE                             # License file
 └── charts/qualytics/
     ├── Chart.yaml                      # Chart metadata and dependencies
     ├── values.yaml                     # Default configuration (297 lines)
     ├── charts/                         # Packaged chart dependencies (.tgz)
-    │   ├── spark-operator-2.5.0.tgz    # Apache Spark operator
     │   └── ingress-nginx-4.15.1.tgz    # NGINX ingress controller
     ├── templates/                      # template files + helpers
     │   ├── _helpers.tpl                # Template helper functions
     │   ├── api.yaml                    # API deployment & service
     │   ├── cmd.yaml                    # CMD processor deployment
-    │   ├── spark.yaml                  # Spark application CRD + wait hook
+    │   ├── spark.yaml                  # Spark dataplane: SA+Role+RoleBinding+ConfigMap+Service+Deployment
     │   ├── frontend.yaml               # Frontend deployment & service
     │   ├── postgres.yaml               # PostgreSQL statefulset + PVC
     │   ├── rabbitmq.yaml               # RabbitMQ statefulset + PVC
@@ -91,7 +89,7 @@ This chart uses **helm-unittest** plugin for comprehensive unit testing:
 Each component has a corresponding test file:
 - `api_test.yaml` - API deployment & service tests (168 lines, 10+ test cases)
 - `cmd_test.yaml` - CMD processor tests
-- `spark_test.yaml` - Spark application tests (SparkApplication CRD)
+- `spark_test.yaml` - Spark dataplane tests (Deployment + RBAC + Service + ConfigMap)
 - `frontend_test.yaml` - Frontend deployment tests
 - `postgres_test.yaml` - PostgreSQL statefulset tests
 - `rabbitmq_test.yaml` - RabbitMQ tests
@@ -149,7 +147,7 @@ helm unittest -v charts/qualytics
 - `Job` completion vs timeout
 - Multi-release upgrades (reconciliation behavior)
 
-This section is how to verify all of that against a real Kubernetes cluster before shipping a release. This pattern was used to validate the cert-manager removal, the BYO TLS Secret precedence, the postgres connection-URL sslmode logic, and the Spark pod-template migration.
+This section is how to verify all of that against a real Kubernetes cluster before shipping a release. This pattern was used to validate the cert-manager removal, the BYO TLS Secret precedence, the postgres connection-URL sslmode logic, the Spark pod-template migration, and the native-Deployment dataplane migration that replaced the spark-operator.
 
 #### Prerequisites
 
@@ -188,8 +186,6 @@ Keep this in `/tmp/` — it is **not** committed to the repo. It evolves as the 
 
 ```yaml
 # /tmp/qualytics-baseline-values.yaml
-sparkoperator:
-  enabled: true
 nginx:
   enabled: false
 ingress:
@@ -286,18 +282,26 @@ Notice: no `--wait`. Intentional when exercising hook timing. Add `--wait` if te
 **3. Verify the things unit tests can't**
 
 ```bash
-# SparkApplication admitted and picked up by the operator
-kubectl -n qualytics get sparkapplication qualytics-spark -o name
+# Driver Deployment, headless Service, executor pod template ConfigMap
+kubectl -n qualytics get deployment,svc,cm,sa,role,rolebinding -l app=qualytics-spark
 
-# Executor pod template propagated through the operator ConfigMap
-kubectl -n qualytics get configmap -l sparkoperator.k8s.io/app-name=qualytics-spark
+# The driver pod (random suffix) — use the label, not a hardcoded name
+kubectl -n qualytics get pod -l app=qualytics-spark,spark-role=driver
+
+# Executor pod template content as actually mounted into the driver
+kubectl -n qualytics get cm qualytics-spark-executor-template \
+  -o jsonpath='{.data.executor-template\.yaml}'
+
+# Driver SA can create executor pods (RBAC sanity)
+kubectl auth can-i create pods \
+  --as=system:serviceaccount:qualytics:qualytics-spark -n qualytics
 
 # Helper-template output (sslmode) landed in the rendered Secret
 kubectl -n qualytics get secret qualytics-creds \
   -o jsonpath='{.data.connection_url}' | base64 -d; echo
 
-# Confirm an unwanted dependency is actually gone
-kubectl api-resources --api-group=cert-manager.io
+# Confirm operator/CRD is actually gone (no SparkApplication in the namespace)
+kubectl -n qualytics get sparkapplication 2>&1 | head -3
 ```
 
 **4. Iterate with `helm upgrade`**
@@ -353,16 +357,18 @@ For those, use a real cloud cluster (EKS/GKE/AKS). Minikube is for behavior, not
 
 #### Worked example
 
-Spark pod-template migration validation (chart version `2026.4.20`):
+Native-Deployment dataplane migration (replaces the spark-operator):
 
-1. Started minikube on `v1.35.0`.
-2. Installed baseline with `sparkoperator.webhook.enable: false` → confirmed no webhook Deployment, no MutatingWebhookConfiguration, SparkApplication admitted.
-3. Inspected the driver pod → confirmed `spark-kubernetes-driver` container name, all `MOTHERSHIP_*` env vars from the pod template, `nodeSelector: driverNodes=true` propagated.
-4. Inspected the operator-generated ConfigMap `qualytics-spark-*-driver-podspec-conf-map` → confirmed the executor pod template (nodeSelector + Kerberos bits) was written and mounted into the driver, with `spark.kubernetes.executor.podTemplateFile` set in the driver's `spark.properties`.
-5. Upgraded with `dataplane.kerberos.enabled: true` → confirmed Kerberos env + volumeMounts landed in both templates.
-6. Cleaned up, minikube stopped.
+1. Started minikube; installed baseline + `regcred` token; pre-created `qualytics-creds` Secret with stub values.
+2. `helm install` from the chart → six docs render under `templates/spark.yaml` (SA, Role, RoleBinding, ConfigMap, headless Service, Deployment).
+3. Driver pod scheduled on `driverNodes=true`. `kubectl exec` into it confirmed the env-block: `POD_NAME` / `POD_NAMESPACE` / `SPARK_DRIVER_BIND_ADDRESS` from the downward API, all `MOTHERSHIP_*` vars present.
+4. Container args[0] is `exec /opt/entrypoint.sh driver \ ...` — the image's entrypoint runs SPARK_CLASSPATH + LD_LIBRARY_PATH + Kerberos setup before `exec`'ing `spark-submit`. Crucially we don't pass `--deploy-mode client` or `--conf spark.driver.bindAddress=` ourselves; the entrypoint adds them.
+5. SparkMothership reached steady state (`0 messages awaiting processing from qualytics-rabbitmq`) after the cmd/api dependency chain converged.
+6. Driver spawned an executor pod via the chart-managed SA/Role; `kubectl auth can-i create pods --as=system:serviceaccount:qualytics:qualytics-spark` returned `yes`.
+7. Side-by-side smoke against the previous SparkApplication shape confirmed byte-identical MOTHERSHIP env, executor resources, and Mothership log sequence; the driver pod resources matched after applying Spark's 384 MiB minimum K8s memory overhead floor and emitting `Mi` (mebibytes) instead of `M` (megabytes).
+8. Cleaned up, minikube stopped.
 
-Total wall time: ~8 minutes including the initial minikube boot. That's the full-behavior signal you can't get from `helm unittest` alone.
+Total wall time: ~12 minutes. That's the full-behavior signal you can't get from `helm unittest` alone.
 
 ## Code Style Guidelines
 
@@ -408,7 +414,7 @@ Total wall time: ~8 minutes including the initial minikube boot. That's the full
 - **Image Pull Policy**: `IfNotPresent`
 - **Termination Grace Period**: Default 10 seconds
 - **Resource Requests/Limits**: Always specify for production workloads
-- **Service Account**: `qualytics-spark` for Spark operator integration
+- **Service Account**: `qualytics-spark` (chart-managed via `dataplane.rbac.create`) used by the Spark driver Deployment to create executor pods directly via the K8s API.
 
 ### Configuration Best Practices
 - **Toggleability**: Make features configurable in values.yaml when possible
@@ -444,25 +450,39 @@ Total wall time: ~8 minutes including the initial minikube boot. That's the full
 
 ### Dataplane (Spark)
 - **Version**: Spark 4.1.1
-- **Type**: SparkApplication CRD, release-tracked (no helm hooks)
-- **Operator webhook**: disabled by default (`sparkoperator.webhook.enable: false`); chart uses CRD-native pod templates (`spec.driver.template` / `spec.executor.template`) and lets spark-submit merge them
-- **Dynamic Allocation**: 1-12 executors (configurable; `dataplane.dynamicAllocation.enabled` is respected, not hardcoded)
-- **Driver Resources**: 7 cores, 55000m memory (default)
-- **Executor Resources**: 7 cores, 55000m memory (default)
-- **Volumes**: Platform-specific NVMe/SSD mounts for scratch space. Names **must** start with `spark-local-dir-` and live at CR-level `spec.volumes` (see invariants below)
-- **Kerberos**: Optional (`dataplane.kerberos.enabled`). Krb volumes + env + volumeMounts render into both driver and executor pod templates
+- **Shape**: native Kubernetes `Deployment` (replicas: 1, strategy: Recreate) running `/opt/entrypoint.sh driver` which `exec`s `spark-submit --deploy-mode client …`. The pod's PID 1 IS the driver JVM. Executors are created by the driver directly via the K8s API. No SparkApplication CRD, no spark-operator. See [project_dataplane_image_entrypoint.md](memory) for the entrypoint contract.
+- **Driver pod naming**: `<release>-spark-<rs-hash>-<pod-hash>` (Deployment-managed, random suffix). Use `kubectl logs deployment/<release>-spark` or `-l spark-role=driver` rather than hardcoding pod names. Deployment was chosen over StatefulSet for auto-recovery on node failure (StatefulSet pods stay `Terminating` indefinitely on vanilla EKS until the `out-of-service` taint is applied, which nothing in EKS does automatically).
+- **Resources rendered into the chart bundle** (when `dataplane.enabled=true` and `global.deploymentMode="kubernetes"`):
+  1. `ServiceAccount` (`qualytics-spark` by default; gated on `dataplane.rbac.create`)
+  2. `Role` — pods + configmaps + persistentvolumeclaims + services CRUD + watch
+  3. `RoleBinding` to the SA
+  4. `ConfigMap` `<release>-spark-executor-template` — Spark-style pod template referenced via `--conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml`
+  5. headless `Service` `<release>-spark-driver` for driver↔executor RPC (ports 7078 / 7079 / 4040)
+  6. `Deployment` `<release>-spark`
+- **RBAC opt-out**: `dataplane.rbac.create=false` lets you BYO an existing SA when the cluster restricts ServiceAccount creation. Override SA name via `dataplane.rbac.serviceAccountName`. Annotations (e.g. `eks.amazonaws.com/role-arn` for IRSA, GCP Workload Identity) go on `dataplane.rbac.serviceAccountAnnotations`.
+- **Driver pod resources**: derived from `dataplane.driver.cores` / `dataplane.driver.memory` and the `qualytics.spark.driver.podMemoryMb` helper, which mirrors Spark's `KubernetesUtils.calculatePodMemoryOverhead`: `pod_mem = heap + max(memoryOverheadFactor * heap, 384 MiB)`. Output is `Mi` (mebibytes) so it matches what the operator-managed flow produced.
+- **Executor resources**: computed by Spark from `--conf spark.executor.cores` / `.memory`; same overhead floor formula. The chart doesn't set them on the pod template directly.
+- **Dynamic Allocation**: 1-12 executors (configurable; `dataplane.dynamicAllocation.enabled` is respected, not hardcoded). Shuffle tracking and idle-timeout confs are passed unconditionally; they're inert when DA is off.
+- **Volumes**: Platform-specific NVMe/SSD mounts for scratch space at `/tmp/spark-local-dir-<n>`. Live in the executor pod template (the ConfigMap), not at CR level — there's no operator translating CR volumes anymore.
+- **Kerberos**: Optional (`dataplane.kerberos.enabled`). When true, the chart adds `krb5-conf` + `keytab` Secret-mounted volumes + `KERBEROS_*` / `MOTHERSHIP_SPARK_KRB_*` env to both the driver Deployment and the executor pod template.
 - **Main Class**: `io.qualytics.dataplane.SparkMothership`
-- **Extra Packages**: Oracle, Teradata, IBM DB2 JDBC drivers
-- **Restart Policy**: Always with 1000 retries (operator-driven, not pod-level)
-- **Node Scheduling**: Separate driver and executor node selectors, emitted inside the respective pod templates
+- **Extra Packages**: Oracle, Teradata, IBM DB2 JDBC drivers (passed to spark-submit via `--packages`).
+- **Restart behavior**: Pod's `restartPolicy: Always` (Deployment requirement). On JVM exit, kubelet restarts the container in-place — same pod UID. On full pod loss (node failure, manual delete, helm upgrade with Recreate), Deployment's ReplicaSet creates a new pod with a new UID. The functional guarantee — "always a driver running" — is met in both cases.
+- **Node Scheduling**: `driverNodeSelector` on the driver Deployment, `executorNodeSelector` on the executor pod template. Tolerations follow the same split.
+
+#### Driver entrypoint invariants (do not regress)
+
+The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark-submit` (SPARK_CLASSPATH, LD_LIBRARY_PATH for libpostal JNI, Kerberos kinit + renewal daemon, libnss_wrapper passwd entry, gosu user-switch). The chart relies on this contract:
+
+1. **Don't override `command:` past the entrypoint.** The chart uses `command: ["/bin/bash","-c"]` with `exec /opt/entrypoint.sh driver \ ...` — bash invokes the entrypoint, which then `exec`s spark-submit. If you bypass the entrypoint, classpath setup is missing, libpostal native libs fail to load, Kerberos doesn't kinit, and SIGTERM handling breaks.
+2. **Don't pass `--deploy-mode client` or `--conf spark.driver.bindAddress=` from the chart.** The entrypoint's `driver` case adds both. Duplicate `--conf` lines confuse spark-submit's parser.
+3. **Set `SPARK_DRIVER_BIND_ADDRESS` from `status.podIP` via the downward API.** The entrypoint substitutes it into the bindAddress conf and propagates it to executors via `spark.executorEnv.SPARK_DRIVER_POD_IP`. An empty value breaks spark-submit.
 
 #### Pod-template invariants (do not regress)
 
-The self-hosted and private charts both enforce these. Breaking any of them silently produces wrong behavior at runtime:
-
-1. **Executor pod template always emits `containers[0].name: spark-kubernetes-executor`**, regardless of `dataplane.kerberos.enabled`. Spark 4.1.1's `KubernetesUtils.selectSparkContainer` NPEs when the parsed template has no `containers` field — the container stanza must always be present, and only env/volumeMounts are gated on kerberos. Same rule applies to the driver side. The `should always emit {driver,executor} containers[0].name regardless of kerberos` unit tests exist specifically to catch this.
-2. **`spark-local-dir-` is a load-bearing prefix.** The Kubeflow operator only translates volumes with that exact prefix into `spark.kubernetes.{driver,executor}.volumes.*` sparkConf for spark-submit. Volumes with any other name would require the (now-disabled) mutating webhook and will silently drop. Keep scratch-dir volumes at CR-level `spec.volumes` and keep the prefix.
-3. **Container names `spark-kubernetes-driver` / `spark-kubernetes-executor` are magic strings** matched by the operator's `spark.kubernetes.{driver,executor}.podTemplateContainerName` conf. Renaming them silently breaks the merge — env + volumeMounts just won't land.
+1. **Executor pod template always emits `containers[0].name: spark-kubernetes-executor`**, regardless of `dataplane.kerberos.enabled`. Spark 4.1.1's `KubernetesUtils.selectSparkContainer` NPEs when the parsed template has no `containers` field — the container stanza must always be present, and only env/volumeMounts are gated on kerberos. The `should always emit executor containers[0].name regardless of kerberos` unit test exists specifically to catch this.
+2. **Container names `spark-kubernetes-driver` / `spark-kubernetes-executor` are magic strings** matched by `spark.kubernetes.{driver,executor}.podTemplateContainerName`. Renaming them silently breaks Spark's merge — env + volumeMounts just won't land on the executor pod.
+3. **`spark-local-dir-` prefix is no longer load-bearing**, since the chart now writes scratch volumes directly into the executor pod template (rather than relying on the operator's CR-volume translation that only matched that prefix). The prefix is still used by convention.
 
 ### Control Plane API
 - **Replicas**: 6 (configurable via `controlplane.replicas`)
@@ -581,17 +601,16 @@ The self-hosted and private charts both enforce these. Breaking any of them sile
 ## Configuration Files
 
 ### values.yaml (Full Configuration)
-- **Lines**: 297
 - **Purpose**: Complete default configuration for the chart
 - **Sections**:
-  1. Dependencies (sparkoperator, nginx)
+  1. nginx subchart (ingress controller)
   2. Ingress configuration
   3. Global values (platform, DNS, auth type, image URLs)
   4. Image tags (controlplane, dataplane, frontend)
   5. Storage class configuration
   6. Node scheduling (selectors and tolerations)
   7. Secrets (auth0, oidc, auth, postgres, smtp, rabbitmq)
-  8. Dataplane configuration (Spark settings)
+  8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`)
   9. Controlplane configuration (API and CMD)
   10. Frontend configuration
   11. PostgreSQL configuration
@@ -615,11 +634,10 @@ The self-hosted and private charts both enforce these. Breaking any of them sile
 ### Chart.yaml
 - **API Version**: v2
 - **Type**: application
-- **Version**: 2025.10.17 (follows date-based versioning)
-- **App Version**: 2025.10.17 (same as chart version)
+- **Version**: date-based (`YYYY.M.D`) — bump on every change.
+- **App Version**: same as chart version.
 - **Dependencies**:
-  1. spark-operator 2.5.0 (condition: `sparkoperator.enabled`)
-  2. ingress-nginx 4.15.1 (condition: `nginx.enabled`)
+  1. ingress-nginx 4.15.1 (condition: `nginx.enabled`)
 
 ## Authentication Configuration
 
@@ -650,9 +668,9 @@ The self-hosted and private charts both enforce these. Breaking any of them sile
 ## Node Scheduling
 
 ### Node Labels
-- **appNodes=true**: Application components (API, CMD, Frontend, operators)
-- **driverNodes=true**: Spark driver
-- **executorNodes=true**: Spark executors
+- **appNodes=true**: Application components (API, CMD, Frontend)
+- **driverNodes=true**: Spark driver Deployment
+- **executorNodes=true**: Spark executor pods (set in the executor pod template ConfigMap)
 - **Alternative**: Use `sparkNodes=true` for combined driver/executor nodes
 
 ### Node Selectors
@@ -751,13 +769,15 @@ helm upgrade qualytics qualytics/qualytics \
 - Test internal DNS: `kubectl run -it --rm debug --image=busybox --restart=Never -n qualytics -- nslookup qualytics-postgres`
 
 **5. Spark jobs failing**
-- Check driver logs: `kubectl logs qualytics-spark-driver -n qualytics`
-- Verify executor resources: `kubectl get pods -n qualytics | grep executor`
-- Check dynamic allocation: Look for executor scaling in driver logs
-- Verify volumes are mounted correctly
+- Check driver logs by selector (the pod has a random suffix): `kubectl logs deployment/qualytics-spark -n qualytics --tail=200 -f` or `kubectl logs -l spark-role=driver -n qualytics`
+- Verify executor resources: `kubectl get pods -n qualytics -l spark-role=executor`
+- Check dynamic allocation: look for executor scaling in driver logs
+- Verify volumes mounted correctly: `kubectl get cm qualytics-spark-executor-template -n qualytics -o jsonpath='{.data.executor-template\.yaml}'`
+- Verify driver SA can manage executor pods: `kubectl auth can-i create pods --as=system:serviceaccount:qualytics:qualytics-spark -n qualytics` should return `yes`
 
 ## Recent Focus Areas
-- Spark pod-template migration (disabled the mutating admission webhook)
+- Native-Deployment dataplane: replaced the SparkApplication CRD + spark-operator with a chart-managed Deployment + RBAC + headless Service + executor pod template ConfigMap. Driver runs `spark-submit` in client mode and creates executor pods directly via the K8s API.
+- Spark pod-template migration (disabled the mutating admission webhook) — historical, superseded by the above
 - cert-manager removal (BYO TLS Secrets)
 - Apache Spark 4.1 + RabbitMQ 4.0 upgrades
 - PostgreSQL 17 upgrade support
@@ -766,6 +786,6 @@ helm upgrade qualytics qualytics/qualytics \
 
 ## Additional Resources
 - [Qualytics User Guide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
-- [Spark Operator Documentation](https://github.com/kubeflow/spark-operator)
+- [Spark on Kubernetes (Apache)](https://spark.apache.org/docs/latest/running-on-kubernetes.html) — for client-mode driver semantics + executor pod template
 - [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
 - [Ingress TLS (BYO Secret)](docs/ingress-tls.md)

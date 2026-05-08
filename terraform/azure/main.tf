@@ -130,7 +130,7 @@ resource "azurerm_kubernetes_cluster" "qualytics" {
 
 ################################################################################
 # Application Node Pool
-# For: API, Frontend, PostgreSQL, RabbitMQ, Spark Operator
+# For: API, Frontend, PostgreSQL, RabbitMQ
 # Pinned to a single zone to prevent Azure Managed Disk AZ mismatch:
 # Managed Disks are zone-locked, so replacement nodes must come up in the same zone.
 ################################################################################
