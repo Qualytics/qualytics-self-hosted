@@ -136,3 +136,15 @@ tests:
           value: 4Gi
         documentIndex: 2
 
+  - it: should set consumer_timeout to 24h to align with OPERATION_RECONCILER_THRESHOLD_MINUTES
+    # The QUA-1752 design relies on `consumer_timeout < OPERATION_RECONCILER_THRESHOLD_MINUTES`
+    # (8h). Previously 60min, which routinely fired during large profile ops and caused the
+    # SparkMothership ShutdownListener to kill the JVM mid-operation — see PR #39 / dataplane
+    # for the listener fix. The 24h value keeps consumer_timeout as a safety net for genuinely
+    # hung consumers while never tripping on legitimate long-running async ops.
+    asserts:
+      - matchRegex:
+          path: data["rabbitmq.conf"]
+          pattern: "consumer_timeout = 86400000"
+        documentIndex: 0
+
