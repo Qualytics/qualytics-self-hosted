@@ -272,7 +272,7 @@ spec:
                 --conf spark.executor.memory={{ .Values.dataplane.executor.memory }} \
                 --conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml \
                 --conf spark.kubernetes.executor.podTemplateContainerName=spark-kubernetes-executor \
-                --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-spark \
+                --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-spark-$(date +%s) \
                 --conf spark.kubernetes.memoryOverheadFactor={{ .Values.dataplane.memoryOverheadFactor }} \
                 --conf spark.kubernetes.submission.connectionTimeout=480000 \
                 --conf spark.kubernetes.submission.requestTimeout=480000 \

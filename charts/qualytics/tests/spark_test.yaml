@@ -487,6 +487,18 @@ tests:
           pattern: "spark.driver.bindAddress="
         documentIndex: 5
 
+  - it: should suffix the executor pod name prefix with $(date +%s) to avoid name collisions across driver container restarts
+    # Spark's K8s scheduler starts executor IDs from 1 on every new SparkContext. With a static
+    # prefix, restart N+1 tries to create exec-1, exec-2, ... but those pods linger as Completed
+    # from the previous SparkContext (the driver Pod is stable across container restarts — same
+    # UID, same name). Each kubelet container restart re-evaluates $(date +%s) → fresh prefix
+    # → no 409 AlreadyExists storms in the K8s API.
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.kubernetes.executor.podNamePrefix=RELEASE-NAME-spark-\\$\\(date \\+%s\\)"
+        documentIndex: 5
+
   - it: should source SPARK_DRIVER_BIND_ADDRESS from the pod IP via downward API
     asserts:
       - contains:
