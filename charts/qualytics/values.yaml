@@ -257,16 +257,16 @@ controlplane:
 controlplaneCmd:
   resources:
     requests:
-      memory: "6Gi"
+      memory: "4Gi"
       cpu: "1000m"
     limits:
-      memory: "12Gi"
+      memory: "6Gi"
 
 #--------------------------------------------------------------------------------
 # Frontend configuration
 #--------------------------------------------------------------------------------
 frontend:
-  replicas: 1
+  replicas: 2
   ingress:
     path: "/?(.*)"
     servicePort: "8080"
@@ -297,7 +297,7 @@ postgres:
       memory: "10Gi"
       cpu: "1000m"
     limits:
-      memory: "20Gi"
+      memory: "12Gi"
   cronjobs:
     snapshotter:
       resources:

@@ -120,7 +120,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "6Gi"
+          value: "4Gi"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
@@ -128,18 +128,18 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: "12Gi"
+          value: "6Gi"
         documentIndex: 0
 
-  - it: should have default memory limit at 2x requests for CMD
+  - it: should have default memory limits for CMD
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "6Gi"
+          value: "4Gi"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: "12Gi"
+          value: "6Gi"
         documentIndex: 0
 
   - it: should NOT set CPU limits on CMD
