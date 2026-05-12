@@ -17,7 +17,7 @@ data:
     ssl_options.verify     = verify_none
     ssl_options.fail_if_no_peer_cert = false
 {{ end }}
-    consumer_timeout = 3600000 # 60 minutes in milliseconds
+    consumer_timeout = 86400000 # 24 hours in milliseconds
     max_message_size = 536870912  # 512 mb in bytes
 
 ---

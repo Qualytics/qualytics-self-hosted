@@ -88,7 +88,7 @@ controlplaneImage:
     controlplaneImageTag: "20260507-8cacb93"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260507-c2ea6a8"
+    dataplaneImageTag: "20260512-0946a06"
 frontendImage:
   image:
     frontendImageTag: "20260507-8cc8ab2"
@@ -257,16 +257,16 @@ controlplane:
 controlplaneCmd:
   resources:
     requests:
-      memory: "6Gi"
+      memory: "4Gi"
       cpu: "1000m"
     limits:
-      memory: "12Gi"
+      memory: "6Gi"
 
 #--------------------------------------------------------------------------------
 # Frontend configuration
 #--------------------------------------------------------------------------------
 frontend:
-  replicas: 1
+  replicas: 2
   ingress:
     path: "/?(.*)"
     servicePort: "8080"
@@ -297,7 +297,7 @@ postgres:
       memory: "10Gi"
       cpu: "1000m"
     limits:
-      memory: "20Gi"
+      memory: "12Gi"
   cronjobs:
     snapshotter:
       resources:

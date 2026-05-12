@@ -123,7 +123,7 @@ tests:
         documentIndex: 4
 
   # Resource limits
-  - it: should have default memory limit at 2x requests for Postgres
+  - it: should have default memory limits for Postgres
     set:
       postgres.enabled: true
     asserts:
@@ -133,7 +133,7 @@ tests:
         documentIndex: 2
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: 20Gi
+          value: 12Gi
         documentIndex: 2
 
   - it: should NOT set CPU limits on Postgres
