@@ -88,7 +88,7 @@ controlplaneImage:
     controlplaneImageTag: "20260507-8cacb93"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260507-c2ea6a8"
+    dataplaneImageTag: "20260512-0946a06"
 frontendImage:
   image:
     frontendImageTag: "20260507-8cc8ab2"
