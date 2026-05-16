@@ -569,7 +569,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "--packages com.oracle.database.jdbc:ojdbc11:21.20.0.0,com.teradata.jdbc:terajdbc:20.00.00.51,com.ibm.db2:jcc:12.1.3.0"
+          pattern: "--packages com.oracle.database.jdbc:ojdbc11:21.21.0.0,com.teradata.jdbc:terajdbc:20.00.00.56,com.ibm.db2:jcc:12.1.4.0"
         documentIndex: 5
 
   - it: should set spark.local.dir conf when numVolumes > 0
