@@ -169,41 +169,58 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_client_secret
+          {{- /* OIDC claim mappings — only emitted when the corresponding
+                 value is set. When using OIDC Discovery the app defaults
+                 to the standard OIDC claim names. */}}
+          {{- if .Values.secrets.oidc.oidc_user_id_key }}
           - name: OIDC_USER_ID_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_id_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_email_key }}
           - name: OIDC_USER_EMAIL_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_email_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_name_key }}
           - name: OIDC_USER_NAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_name_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_fname_key }}
           - name: OIDC_USER_FNAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_fname_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_lname_key }}
           - name: OIDC_USER_LNAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_lname_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_picture_key }}
           - name: OIDC_USER_PICTURE_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_picture_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_provider_key }}
           - name: OIDC_USER_PROVIDER_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_provider_key
+          {{- end }}
           - name: OIDC_ALLOW_INSECURE_HTTP
             value: {{ .Values.secrets.oidc.oidc_allow_insecure_transport | quote }}
           {{- if .Values.secrets.oidc.oidc_jwt_ttl_minutes }}

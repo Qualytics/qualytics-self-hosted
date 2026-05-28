@@ -227,7 +227,7 @@ dataplane:
 # Controlplane configuration
 #--------------------------------------------------------------------------------
 controlplane:
-  replicas: 8
+  replicas: 4
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"
@@ -236,11 +236,11 @@ controlplane:
       memory: "1Gi"
       cpu: "500m"
     limits:
-      memory: "2Gi"
+      memory: "4Gi"
   smtp:
     enabled: true
     server: "email-smtp.us-east-1.amazonaws.com"
-    sender: "no-reply@qualytics.co"
+    sender: "no-reply@qualytics.ai"
     port: "465"
   auth:
     # Enable email-based IDP migration
@@ -272,7 +272,7 @@ frontend:
     servicePort: "8080"
   resources:
     requests:
-      memory: "256Mi"
+      memory: "128Mi"
       cpu: "200m"
     limits:
       memory: "512Mi"
