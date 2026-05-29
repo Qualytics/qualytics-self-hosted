@@ -56,6 +56,11 @@ ingress:
   frontendMaxConnectionsPerIP: 1000
   # TLS Secrets — Bring Your Own. Create the referenced `kubernetes.io/tls` Secret
   # in the release namespace before installing. See docs/ingress-tls.md.
+  # When true, TLS is terminated by an upstream load balancer (e.g. AWS NLB + ACM).
+  # Disables force-ssl-redirect and the tls: block in the Ingress spec — no
+  # Kubernetes TLS Secret is needed. Set nginx.controller.service.targetPorts.https: http
+  # alongside this so the NLB forwards decrypted traffic to nginx's HTTP port.
+  upstreamTLS: false
   tls:
     # Recommended for new deployments: set `secretName` to a single wildcard
     # (or SAN) Secret used by both the API and frontend ingresses. When set,
@@ -74,6 +79,7 @@ ingress:
 # Keep this for dns records and other specifics that are used across the entire app
 global:
   platform: "aws"
+  awsAutoMode: false
   deploymentMode: "kubernetes" # kubernetes | databricks
   dnsRecord: "changeme.qualytics.io"
   authType: "AUTH0"

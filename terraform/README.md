@@ -16,13 +16,13 @@ Each template creates a Kubernetes cluster with three dedicated node pools optim
 
 | Node Pool | Purpose | Recommended Specs |
 |-----------|---------|-------------------|
-| **Application** | API, Frontend, PostgreSQL, RabbitMQ, operators | 8 vCPUs, 32 GB RAM |
+| **Application** | API, Frontend, PostgreSQL, RabbitMQ | 8 vCPUs, 32 GB RAM |
 | **Spark Driver** | Spark driver process | 8 vCPUs, 64 GB RAM |
 | **Spark Executor** | Spark executor processes (auto-scaling) | 8 vCPUs, 64 GB RAM + Local SSD |
 
 All templates include:
 - Virtual network with appropriate subnets
-- Cluster autoscaling for executor nodes
+- Dynamic node provisioning for executor nodes (Karpenter on AWS, cluster autoscaler on GCP/Azure)
 - Node labels and optional taints for workload isolation
 - Optional automatic creation of the `qualytics` namespace and Docker registry secret
 
@@ -31,7 +31,13 @@ All templates include:
 1. **Choose your cloud provider** and navigate to the appropriate directory
 2. **Copy the example configuration**: `cp terraform.tfvars.example terraform.tfvars`
 3. **Edit the configuration** with your settings (subscription/project ID, region, etc.)
-4. **Initialize Terraform**: `terraform init`
+4. **Initialize Terraform** — AWS modules use an S3 backend and require `-backend-config`:
+   ```bash
+   terraform init \
+     -backend-config="bucket=<your-tfstate-bucket>" \
+     -backend-config="region=<your-region>"
+   ```
+   GCP and Azure modules use local state by default — `terraform init` with no flags.
 5. **Preview changes**: `terraform plan`
 6. **Apply changes**: `terraform apply`
 7. **Configure kubectl** using the command shown in the output
@@ -81,11 +87,11 @@ Each template supports cost optimization features:
 - All clusters use private networking where possible
 - API server access can be restricted to specific IP ranges
 - Managed identities are used instead of static credentials
-- Network policies are enabled for pod-level security
+- Node labels for workload isolation (appNodes, driverNodes, executorNodes)
 
 ## Prerequisites
 
-- [Terraform](https://www.terraform.io/downloads) >= 1.3.0
+- [Terraform](https://www.terraform.io/downloads) >= 1.11.1
 - Cloud provider CLI configured with appropriate credentials:
   - AWS: `aws configure`
   - GCP: `gcloud auth application-default login`
@@ -94,11 +100,14 @@ Each template supports cost optimization features:
 
 ## Post-Deployment
 
-After creating the cluster:
+**AWS:** Follow the complete step-by-step guide in [`aws/README.md`](./aws/README.md) — it covers ACM certificate setup, Aurora PostgreSQL, Helm configuration, DNS, and verification.
+
+**GCP / Azure:** After creating the cluster:
 
 1. Verify cluster access: `kubectl get nodes`
-2. Create Docker registry secret (if not done automatically):
+2. Create the `qualytics` namespace and Docker registry secret:
    ```bash
+   kubectl create namespace qualytics
    kubectl create secret docker-registry regcred -n qualytics \
      --docker-username=qualyticsai \
      --docker-password=<token-from-qualytics>
@@ -111,7 +120,7 @@ After creating the cluster:
      --namespace qualytics \
      -f values.yaml \
      --wait \
-     --timeout=5m
+     --timeout=10m
    ```
 
 ## Support

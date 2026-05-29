@@ -52,39 +52,11 @@ output "public_subnets" {
 }
 
 #-------------------------------------------------------------------------------
-# Node Groups
-#-------------------------------------------------------------------------------
-
-output "node_groups" {
-  description = "Map of node group names to their configurations"
-  value = {
-    app = {
-      name           = module.eks.eks_managed_node_groups["app"].node_group_id
-      instance_types = var.app_node_instance_types
-      min_size       = var.app_node_min_size
-      max_size       = var.app_node_max_size
-    }
-    driver = {
-      name           = module.eks.eks_managed_node_groups["driver"].node_group_id
-      instance_types = var.driver_node_instance_types
-      min_size       = var.driver_node_min_size
-      max_size       = var.driver_node_max_size
-    }
-    exec = {
-      name           = module.eks.eks_managed_node_groups["exec"].node_group_id
-      instance_types = var.executor_node_instance_types
-      min_size       = var.executor_node_min_size
-      max_size       = var.executor_node_max_size
-    }
-  }
-}
-
-#-------------------------------------------------------------------------------
 # Authentication
 #-------------------------------------------------------------------------------
 
 output "cluster_oidc_provider_arn" {
-  description = "The ARN of the OIDC provider for the cluster"
+  description = "The ARN of the cluster's OIDC identity provider"
   value       = module.eks.oidc_provider_arn
 }
 
@@ -112,24 +84,19 @@ output "next_steps" {
     Next steps to deploy Qualytics:
 
     1. Configure kubectl:
-       ${module.eks.cluster_name != "" ? "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}" : ""}
+       aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
 
-    2. Verify cluster access:
+    2. Verify cluster nodes:
        kubectl get nodes
 
-    3. If you haven't already, create the Docker registry secret:
-       kubectl create secret docker-registry regcred -n qualytics \
-         --docker-username=qualyticsai \
-         --docker-password=<token-from-qualytics>
-
-    4. Deploy Qualytics using Helm:
+    3. Deploy Qualytics using Helm:
        helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
        helm repo update
        helm upgrade --install qualytics qualytics/qualytics \
          --namespace qualytics \
          -f values.yaml \
          --wait \
-         --timeout=5m
+         --timeout=10m
 
     For more information, visit:
     https://github.com/qualytics/qualytics-self-hosted
