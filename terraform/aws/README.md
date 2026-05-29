@@ -279,8 +279,7 @@ dataplane:
 
 rabbitmq:
   pvc:
-    enabled: true
-    storageSize: "5Gi"
+    enabled: false
 ```
 
 ---
