@@ -85,13 +85,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260515-d5209a2"
+    controlplaneImageTag: "20260601-bfa5153"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260515-9a5d4ed"
+    dataplaneImageTag: "20260601-e5e1ff0"
 frontendImage:
   image:
-    frontendImageTag: "20260515-f699a63"
+    frontendImageTag: "20260601-f0b96ef"
 
 # Storage classes
 storageClass:
@@ -189,7 +189,6 @@ dataplane:
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
-    - "com.oracle.database.jdbc:ojdbc11:21.21.0.0"
     - "com.teradata.jdbc:terajdbc:20.00.00.56"
     - "com.ibm.db2:jcc:12.1.4.0"
   # RBAC for the driver pod to manage executor pods directly. Replaces the

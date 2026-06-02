@@ -466,7 +466,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 - **Volumes**: Platform-specific NVMe/SSD mounts for scratch space at `/tmp/spark-local-dir-<n>`. Live in the executor pod template (the ConfigMap), not at CR level — there's no operator translating CR volumes anymore.
 - **Kerberos**: Optional (`dataplane.kerberos.enabled`). When true, the chart adds `krb5-conf` + `keytab` Secret-mounted volumes + `KERBEROS_*` / `MOTHERSHIP_SPARK_KRB_*` env to both the driver Deployment and the executor pod template.
 - **Main Class**: `io.qualytics.dataplane.SparkMothership`
-- **Extra Packages**: Oracle, Teradata, IBM DB2 JDBC drivers (passed to spark-submit via `--packages`).
+- **Extra Packages**: Teradata + IBM DB2 JDBC drivers, passed to spark-submit via `--packages`.
 - **Restart behavior**: Pod's `restartPolicy: Always` (Deployment requirement). On JVM exit, kubelet restarts the container in-place — same pod UID. On full pod loss (node failure, manual delete, helm upgrade with Recreate), Deployment's ReplicaSet creates a new pod with a new UID. The functional guarantee — "always a driver running" — is met in both cases.
 - **Node Scheduling**: `driverNodeSelector` on the driver Deployment, `executorNodeSelector` on the executor pod template. Tolerations follow the same split.
 
