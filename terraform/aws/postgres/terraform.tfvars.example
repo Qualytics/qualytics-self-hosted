@@ -1,0 +1,65 @@
+################################################################################
+# Qualytics Aurora PostgreSQL - Example Configuration
+#
+# Copy this file to terraform.tfvars and customize for your deployment.
+# Run terraform/aws first — this module reads the VPC and subnet IDs
+# from that state file automatically.
+################################################################################
+
+#-------------------------------------------------------------------------------
+# General
+# cluster_name and tfstate_bucket must match the values used in terraform/aws/cluster
+#-------------------------------------------------------------------------------
+
+aws_region     = "us-east-1"
+cluster_name   = "qualytics"
+tfstate_bucket = "<your-tfstate-bucket>"
+
+default_tags = {
+  Terraform   = "true"
+  Application = "qualytics"
+  Environment = "production"
+}
+
+#-------------------------------------------------------------------------------
+# Database
+#-------------------------------------------------------------------------------
+
+database_name       = "surveillance_hub"
+administrator_login = "postgres"
+postgresql_version  = "17.9"
+
+#-------------------------------------------------------------------------------
+# Instance
+# See docs/cluster-sizing.md for Aurora instance sizing guidance.
+# db.r8g.large  = 2 vCPU, 16 GB  (development / small production)
+# db.r8g.xlarge = 4 vCPU, 32 GB  (medium production)
+#
+# For a read replica, add a second instance:
+# instances = { 1 = {}, 2 = {} }
+#-------------------------------------------------------------------------------
+
+instance_class = "db.r8g.large"
+instances      = { 1 = {} }
+
+#-------------------------------------------------------------------------------
+# Backup and Maintenance
+#-------------------------------------------------------------------------------
+
+backup_retention_period = 7
+preferred_backup_window = "03:00-04:00"
+
+# false = apply changes during maintenance window (recommended for production)
+apply_immediately = false
+
+#-------------------------------------------------------------------------------
+# Safety Controls
+# For non-production environments set both to true and false respectively
+# to allow clean terraform destroy without manual intervention.
+#-------------------------------------------------------------------------------
+
+deletion_protection = true
+skip_final_snapshot = false
+
+# Increment to rotate the master password
+# master_password_wo_version = 1

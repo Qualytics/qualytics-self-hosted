@@ -137,7 +137,7 @@ dataplane:
     create: true
     serviceAccountName: "qualytics-spark"
     # serviceAccountAnnotations:
-    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
+    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
   driver:
     cores: 7
     memory: "55000m"
@@ -163,3 +163,23 @@ postgres:
 rabbitmq:
   pvc:
     storageSize: "5Gi"
+
+#--------------------------------------------------------------------------------
+# EKS Auto Mode (AWS only)
+# Uncomment this section when deploying on an EKS Auto Mode cluster.
+#--------------------------------------------------------------------------------
+# global:
+#   awsAutoMode: true   # switches StorageClass provisioner to ebs.csi.eks.amazonaws.com
+#
+# nginx:
+#   controller:
+#     service:
+#       annotations:
+#         # Required: Auto Mode NLB defaults to internal. This makes it internet-facing.
+#         service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+#
+# dataplane:
+#   # numVolumes defaults to -1 (no extra mounts). Leave as-is for Auto Mode —
+#   # NVMe instance store (e.g. r8gd) is auto-mounted as the container root
+#   # filesystem by Auto Mode. SPARK_LOCAL_DIRS is automatically set to use it.
+#   numVolumes: -1

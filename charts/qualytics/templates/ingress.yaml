@@ -1,11 +1,11 @@
 {{/* Define common annotations as a named template */}}
 {{- define "common.ingress.annotations" -}}
-kubernetes.io/ingress.allow-http: 'false'
+kubernetes.io/ingress.allow-http: '{{ if .Values.ingress.upstreamTLS }}true{{ else }}false{{ end }}'
 nginx.ingress.kubernetes.io/proxy-connect-timeout: '3600'
 nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
 nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
 nginx.ingress.kubernetes.io/use-regex: 'true'
-nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+nginx.ingress.kubernetes.io/force-ssl-redirect: '{{ if .Values.ingress.upstreamTLS }}false{{ else }}true{{ end }}'
 nginx.ingress.kubernetes.io/enable-gzip: "true"
 nginx.ingress.kubernetes.io/enable-brotli: "true"
 nginx.ingress.kubernetes.io/gzip-types: "application/json application/xml text/html text/plain application/javascript text/css application/x-javascript text/xml application/xml+rss text/javascript"
@@ -105,10 +105,12 @@ metadata:
       SecResponseBodyAccess Off
 spec:
   ingressClassName: nginx
+  {{- if not .Values.ingress.upstreamTLS }}
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
       secretName: {{ $apiTLSSecret }}
+  {{- end }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
@@ -163,10 +165,12 @@ metadata:
       SecRequestBodyLimitAction Reject
 spec:
   ingressClassName: nginx
+  {{- if not .Values.ingress.upstreamTLS }}
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
       secretName: {{ $apiTLSSecret }}
+  {{- end }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:
@@ -205,10 +209,12 @@ metadata:
       {{- include "common.modsecurity.snippet" . | nindent 6 }}
 spec:
   ingressClassName: nginx
+  {{- if not .Values.ingress.upstreamTLS }}
   tls:
     - hosts:
         - {{ tpl .Values.global.dnsRecord . | quote }}
       secretName: {{ $frontendTLSSecret }}
+  {{- end }}
   rules:
     - host: {{ tpl .Values.global.dnsRecord . | quote }}
       http:

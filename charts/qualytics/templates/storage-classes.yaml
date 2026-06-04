@@ -17,7 +17,7 @@ apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
   name: aws
-provisioner: ebs.csi.aws.com
+provisioner: {{ if .Values.global.awsAutoMode }}ebs.csi.eks.amazonaws.com{{ else }}ebs.csi.aws.com{{ end }}
 parameters:
   type: gp3
   fsType: ext4
