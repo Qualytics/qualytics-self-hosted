@@ -85,13 +85,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260602-ec5e786"
+    controlplaneImageTag: "20260610-3175a4b"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260601-e5e1ff0"
+    dataplaneImageTag: "20260610-4246303"
 frontendImage:
   image:
-    frontendImageTag: "20260601-f0b96ef"
+    frontendImageTag: "20260610-61136ba"
 
 # Storage classes
 storageClass:
@@ -185,7 +185,7 @@ dataplane:
   eventLog: false
   numVolumes: -1
   parallelismScaleFactor: -1
-  maxParallelSyncRequests: 3
+  maxParallelSyncRequests: 4
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
