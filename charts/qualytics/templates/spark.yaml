@@ -321,6 +321,9 @@ spec:
           livenessProbe:
             exec:
               command: ["/bin/sh", "-c", "find /tmp/mothership-heartbeat -mmin -8 | grep -q ."]
+            # Explicit handoff margin after the startup probe passes, so the first liveness
+            # check never races the mothership's first scheduled heartbeat write.
+            initialDelaySeconds: 60
             periodSeconds: 60
             timeoutSeconds: 5
             failureThreshold: 3
