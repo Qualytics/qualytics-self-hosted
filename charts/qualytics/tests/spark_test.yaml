@@ -372,11 +372,30 @@ tests:
           value: Recreate
         documentIndex: 5
 
-  - it: should set terminationGracePeriodSeconds to the chart-wide default of 10s
+  - it: should set terminationGracePeriodSeconds to 60s (QUA-1990 graceful consumer drain)
     asserts:
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds
-          value: 10
+          value: 60
+        documentIndex: 5
+
+  # QUA-1990: heartbeat-file probes — a deaf-but-alive mothership stops touching the heartbeat
+  # file and the kubelet restarts the pod instead of requiring a human to delete it.
+  - it: should configure heartbeat-file startup and liveness probes on the driver
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].startupProbe.exec
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 60
+        documentIndex: 5
+      - exists:
+          path: spec.template.spec.containers[0].livenessProbe.exec
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
         documentIndex: 5
 
   - it: should select pods with spark-role=driver for the headless Service

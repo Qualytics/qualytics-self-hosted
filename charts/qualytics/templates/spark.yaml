@@ -215,7 +215,10 @@ spec:
       serviceAccountName: {{ .Values.dataplane.rbac.serviceAccountName }}
       imagePullSecrets:
         - name: regcred
-      terminationGracePeriodSeconds: 10
+      # QUA-1990: 60s gives the mothership's SIGTERM hook time to stop consumers and drain
+      # briefly (the previous 10s SIGKILLed it almost immediately, making the graceful-shutdown
+      # machinery dead code in k8s mode).
+      terminationGracePeriodSeconds: 60
       {{- if .Values.driverNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.driverNodeSelector | nindent 8 }}
@@ -304,6 +307,23 @@ spec:
               containerPort: 7079
             - name: ui
               containerPort: 4040
+          # QUA-1990: the mothership touches /tmp/mothership-heartbeat every 2 minutes while its
+          # AMQP connection, main channel, and control lane are all healthy (see
+          # SparkMothership.writeLivenessHeartbeat). A deaf-but-alive JVM stops heartbeating and
+          # the kubelet restarts the pod — previously a wedged dataplane could only be recovered
+          # by a human deleting the pod. The startup probe tolerates slow Spark init plus the
+          # controlplane initialize handshake before the liveness clock starts.
+          startupProbe:
+            exec:
+              command: ["/bin/sh", "-c", "test -f /tmp/mothership-heartbeat"]
+            periodSeconds: 20
+            failureThreshold: 60
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "find /tmp/mothership-heartbeat -mmin -8 | grep -q ."]
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
           env:
             - name: POD_NAME
               valueFrom:
