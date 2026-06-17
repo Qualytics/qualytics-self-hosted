@@ -73,6 +73,8 @@ data:
       imagePullSecrets:
         - name: regcred
       restartPolicy: Never
+      # Grace for graceful decommission to migrate shuffle/RDD blocks (within the AWS spot 120s window).
+      terminationGracePeriodSeconds: 120
       {{- if .Values.executorNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.executorNodeSelector | nindent 8 }}
@@ -280,7 +282,7 @@ spec:
                 --conf spark.kubernetes.driver.requestTimeout=480000 \
                 --conf spark.dynamicAllocation.enabled={{ .Values.dataplane.dynamicAllocation.enabled }} \
                 --conf spark.dynamicAllocation.shuffleTracking.enabled=true \
-                --conf spark.dynamicAllocation.shuffleTracking.timeout=60s \
+                --conf spark.dynamicAllocation.shuffleTracking.timeout=600s \
                 --conf spark.dynamicAllocation.executorIdleTimeout=300s \
                 --conf spark.dynamicAllocation.cachedExecutorIdleTimeout=300s \
                 --conf spark.dynamicAllocation.sustainedSchedulerBacklogTimeout=5s \
@@ -288,6 +290,12 @@ spec:
                 --conf spark.dynamicAllocation.initialExecutors={{ .Values.dataplane.dynamicAllocation.initialExecutors }} \
                 --conf spark.dynamicAllocation.minExecutors={{ .Values.dataplane.dynamicAllocation.minExecutors }} \
                 --conf spark.dynamicAllocation.maxExecutors={{ .Values.dataplane.dynamicAllocation.maxExecutors }} \
+                --conf spark.decommission.enabled=true \
+                --conf spark.storage.decommission.enabled=true \
+                --conf spark.storage.decommission.shuffleBlocks.enabled=true \
+                --conf spark.storage.decommission.rddBlocks.enabled=true \
+                --conf spark.executor.decommission.killInterval=120 \
+                --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
                 --conf spark.jars.ivy=/tmp \
                 {{- if gt (int .Values.dataplane.numVolumes) 0 }}
