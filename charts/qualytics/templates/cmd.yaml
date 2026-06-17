@@ -28,8 +28,7 @@ spec:
       - name: cmd
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
         imagePullPolicy: IfNotPresent
-        command: [ "/bin/bash","-c" ]
-        args: [ "python /app/hub_cmd.py" ]
+        command: ["python3","/app/hub_cmd.py"]
         resources:
           requests:
             memory: {{ .Values.controlplaneCmd.resources.requests.memory | quote }}
@@ -39,7 +38,7 @@ spec:
         startupProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "exit(0)"
           initialDelaySeconds: 10
@@ -49,7 +48,7 @@ spec:
         readinessProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
           periodSeconds: 30
@@ -58,7 +57,7 @@ spec:
         livenessProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "exit(0)"
           periodSeconds: 30

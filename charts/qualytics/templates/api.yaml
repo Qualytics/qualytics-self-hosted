@@ -28,8 +28,7 @@ spec:
       - name: api
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
         imagePullPolicy: IfNotPresent
-        command: ["/bin/bash","-c"]
-        args: ["python /app/hub_api.py"]
+        command: ["python3","/app/hub_api.py"]
         resources:
           requests:
             memory: {{ .Values.controlplane.resources.requests.memory }}

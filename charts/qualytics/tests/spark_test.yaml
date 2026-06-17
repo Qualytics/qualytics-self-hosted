@@ -598,6 +598,39 @@ tests:
           pattern: "spark.dynamicAllocation.shuffleTracking.enabled=true"
         documentIndex: 5
 
+  - it: should configure graceful decommission and autoscaler protection
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.decommission.enabled=true"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.storage.decommission.shuffleBlocks.enabled=true"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.storage.decommission.rddBlocks.enabled=true"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "cluster-autoscaler.kubernetes.io/safe-to-evict=false"
+        documentIndex: 5
+
+  - it: should raise the shuffleTracking timeout above the old 60s default
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.dynamicAllocation.shuffleTracking.timeout=600s"
+        documentIndex: 5
+
+  - it: should set the executor terminationGracePeriodSeconds for block migration
+    asserts:
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "terminationGracePeriodSeconds: 120"
+        documentIndex: 3
+
   - it: should pass JDBC packages to spark-submit
     asserts:
       - matchRegex:

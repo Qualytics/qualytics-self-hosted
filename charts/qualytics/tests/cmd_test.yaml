@@ -23,11 +23,11 @@ tests:
         documentIndex: 0
 
   # Health probes
-  - it: should have startup probe checking Python process
+  - it: should have startup probe checking python3 process
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
@@ -46,7 +46,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
@@ -61,11 +61,11 @@ tests:
           value: 3
         documentIndex: 0
 
-  - it: should have liveness probe checking Python process not dependencies
+  - it: should have liveness probe checking python3 process not dependencies
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
@@ -108,11 +108,14 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].command[0]
-          value: "/bin/bash"
+          value: "python3"
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].args[0]
-          value: "python /app/hub_cmd.py"
+          path: spec.template.spec.containers[0].command[1]
+          value: "/app/hub_cmd.py"
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.containers[0].args
         documentIndex: 0
 
   # Resource configuration
