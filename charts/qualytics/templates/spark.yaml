@@ -73,7 +73,6 @@ data:
       imagePullSecrets:
         - name: regcred
       restartPolicy: Never
-      # Grace for graceful decommission to migrate shuffle/RDD blocks (within the AWS spot 120s window).
       terminationGracePeriodSeconds: 120
       {{- if .Values.executorNodeSelector }}
       nodeSelector:
