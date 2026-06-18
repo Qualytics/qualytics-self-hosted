@@ -164,6 +164,11 @@ data:
 # Headless Service for driver↔executor RPC. Executors connect back to the
 # driver via spark.driver.host (= this Service's DNS name) on spark.driver.port.
 # Headless (clusterIP: None) so DNS resolves directly to the driver pod IP.
+# publishNotReadyAddresses MUST be true: the QUA-1990 startupProbe holds the
+# driver pod NotReady until /tmp/dataplane-heartbeat exists, but that heartbeat
+# is only written after Spark is up — which needs executors, which need this DNS
+# record. Without this flag the headless Service omits the NotReady driver, so
+# executors can never connect and the pod crash-loops (max executor failures).
 apiVersion: v1
 kind: Service
 metadata:
@@ -172,6 +177,7 @@ metadata:
     app: {{ .Release.Name }}-spark
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: {{ .Release.Name }}-spark
     spark-role: driver

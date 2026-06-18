@@ -320,6 +320,12 @@ tests:
           path: spec.clusterIP
           value: None
         documentIndex: 4
+      # QUA-1990: must publish the NotReady driver so executors can resolve it
+      # before the startupProbe-gated readiness flips (else crash-loop).
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+        documentIndex: 4
       - equal:
           path: spec.selector.app
           value: RELEASE-NAME-spark
