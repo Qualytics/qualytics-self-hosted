@@ -396,6 +396,10 @@ tests:
           value: 60
         documentIndex: 5
       - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 5
+        documentIndex: 5
+      - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command
           value: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
         documentIndex: 5

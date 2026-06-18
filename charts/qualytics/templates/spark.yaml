@@ -325,6 +325,7 @@ spec:
               command: ["/bin/sh", "-c", "test -f /tmp/dataplane-heartbeat"]
             periodSeconds: 20
             failureThreshold: 60
+            timeoutSeconds: 5
           livenessProbe:
             exec:
               command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
