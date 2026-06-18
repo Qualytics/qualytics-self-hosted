@@ -314,7 +314,7 @@ spec:
               containerPort: 7079
             - name: ui
               containerPort: 4040
-          # QUA-1990: the mothership touches /tmp/mothership-heartbeat every 2 minutes while its
+          # QUA-1990: the mothership touches /tmp/dataplane-heartbeat every 2 minutes while its
           # AMQP connection, main channel, and control lane are all healthy (see
           # SparkMothership.writeLivenessHeartbeat). A deaf-but-alive JVM stops heartbeating and
           # the kubelet restarts the pod — previously a wedged dataplane could only be recovered
@@ -322,12 +322,12 @@ spec:
           # controlplane initialize handshake before the liveness clock starts.
           startupProbe:
             exec:
-              command: ["/bin/sh", "-c", "test -f /tmp/mothership-heartbeat"]
+              command: ["/bin/sh", "-c", "test -f /tmp/dataplane-heartbeat"]
             periodSeconds: 20
             failureThreshold: 60
           livenessProbe:
             exec:
-              command: ["/bin/sh", "-c", "find /tmp/mothership-heartbeat -mmin -8 | grep -q ."]
+              command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
             # Explicit handoff margin after the startup probe passes, so the first liveness
             # check never races the mothership's first scheduled heartbeat write.
             initialDelaySeconds: 60

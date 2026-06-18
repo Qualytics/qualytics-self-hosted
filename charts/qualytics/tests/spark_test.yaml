@@ -385,7 +385,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command
-          value: ["/bin/sh", "-c", "test -f /tmp/mothership-heartbeat"]
+          value: ["/bin/sh", "-c", "test -f /tmp/dataplane-heartbeat"]
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].startupProbe.periodSeconds
@@ -397,7 +397,7 @@ tests:
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command
-          value: ["/bin/sh", "-c", "find /tmp/mothership-heartbeat -mmin -8 | grep -q ."]
+          value: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
