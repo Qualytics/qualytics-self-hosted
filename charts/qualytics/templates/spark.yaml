@@ -328,9 +328,9 @@ spec:
           livenessProbe:
             exec:
               command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
-            # Explicit handoff margin after the startup probe passes, so the first liveness
-            # check never races the mothership's first scheduled heartbeat write.
-            initialDelaySeconds: 60
+            # No initialDelaySeconds: the startupProbe already gates liveness until the heartbeat
+            # file exists, so the first liveness check always sees a fresh file (it would have
+            # elapsed during startup anyway — measured from container start).
             periodSeconds: 60
             timeoutSeconds: 5
             failureThreshold: 3

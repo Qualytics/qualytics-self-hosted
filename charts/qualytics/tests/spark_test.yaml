@@ -400,12 +400,12 @@ tests:
           value: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
         documentIndex: 5
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
           value: 60
         documentIndex: 5
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
-          value: 60
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
