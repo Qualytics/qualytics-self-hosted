@@ -164,11 +164,12 @@ data:
 # Headless Service for driver↔executor RPC. Executors connect back to the
 # driver via spark.driver.host (= this Service's DNS name) on spark.driver.port.
 # Headless (clusterIP: None) so DNS resolves directly to the driver pod IP.
-# publishNotReadyAddresses MUST be true: the QUA-1990 startupProbe holds the
-# driver pod NotReady until /tmp/dataplane-heartbeat exists, but that heartbeat
-# is only written after Spark is up — which needs executors, which need this DNS
-# record. Without this flag the headless Service omits the NotReady driver, so
-# executors can never connect and the pod crash-loops (max executor failures).
+# publishNotReadyAddresses: defensive insurance (QUA-1990). The driver intentionally
+# runs liveness-only with no readiness gating, so it is Ready almost immediately and
+# this flag is not strictly required today. We keep it so the executor↔driver DNS
+# record survives even a brief not-ready window — and so a future readiness/startup
+# probe can never silently re-introduce the crash-loop (NotReady driver omitted from
+# the headless Service → executors can't connect → max executor failures).
 apiVersion: v1
 kind: Service
 metadata:
@@ -320,24 +321,19 @@ spec:
               containerPort: 7079
             - name: ui
               containerPort: 4040
-          # QUA-1990: the mothership touches /tmp/dataplane-heartbeat every 2 minutes while its
-          # AMQP connection, main channel, and control lane are all healthy (see
-          # SparkMothership.writeLivenessHeartbeat). A deaf-but-alive JVM stops heartbeating and
-          # the kubelet restarts the pod — previously a wedged dataplane could only be recovered
-          # by a human deleting the pod. The startup probe tolerates slow Spark init plus the
-          # controlplane initialize handshake before the liveness clock starts.
-          startupProbe:
-            exec:
-              command: ["/bin/sh", "-c", "test -f /tmp/dataplane-heartbeat"]
-            periodSeconds: 20
-            failureThreshold: 60
-            timeoutSeconds: 5
+          # QUA-1990: liveness-only self-healing for a deaf-but-alive JVM. The mothership refreshes
+          # /tmp/dataplane-heartbeat every 2 min while its AMQP connection + main channel + control
+          # lane are healthy (SparkMothership.writeLivenessHeartbeat); if it wedges, the file goes
+          # stale (>8 min) and the kubelet restarts the pod. Deliberately NO startup/readiness probe:
+          # the driver must stay Ready so the headless Service keeps publishing it to executors —
+          # gating readiness on the heartbeat deadlocks startup (executors can't connect → no Spark
+          # → no heartbeat → never Ready). initialDelaySeconds covers worst-case boot (Spark init +
+          # cold executor scale-up + controlplane handshake, after which the first heartbeat lands)
+          # so a slow-but-healthy start is never killed.
           livenessProbe:
             exec:
               command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
-            # No initialDelaySeconds: the startupProbe already gates liveness until the heartbeat
-            # file exists, so the first liveness check always sees a fresh file (it would have
-            # elapsed during startup anyway — measured from container start).
+            initialDelaySeconds: 600
             periodSeconds: 60
             timeoutSeconds: 5
             failureThreshold: 3
