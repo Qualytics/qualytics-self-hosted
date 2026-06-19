@@ -327,13 +327,15 @@ spec:
           # stale (>8 min) and the kubelet restarts the pod. Deliberately NO startup/readiness probe:
           # the driver must stay Ready so the headless Service keeps publishing it to executors —
           # gating readiness on the heartbeat deadlocks startup (executors can't connect → no Spark
-          # → no heartbeat → never Ready). initialDelaySeconds covers worst-case boot (Spark init +
-          # cold executor scale-up + controlplane handshake, after which the first heartbeat lands)
-          # so a slow-but-healthy start is never killed.
+          # → no heartbeat → never Ready). initialDelaySeconds (720s) covers worst-case boot (Spark
+          # init + cold executor scale-up + controlplane handshake, after which the first heartbeat
+          # lands) plus ~2 heartbeat cycles of slack, so a slow-but-healthy start on a cold node is
+          # never killed before the first heartbeat is written. SREs: raise this if boots regularly
+          # approach the ceiling.
           livenessProbe:
             exec:
               command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
-            initialDelaySeconds: 600
+            initialDelaySeconds: 720
             periodSeconds: 60
             timeoutSeconds: 5
             failureThreshold: 3

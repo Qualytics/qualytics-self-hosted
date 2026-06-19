@@ -403,7 +403,7 @@ tests:
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
-          value: 600
+          value: 720
         documentIndex: 5
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.periodSeconds
