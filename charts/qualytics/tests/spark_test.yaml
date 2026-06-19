@@ -320,6 +320,12 @@ tests:
           path: spec.clusterIP
           value: None
         documentIndex: 4
+      # QUA-1990: must publish the NotReady driver so executors can resolve it
+      # regardless of readiness, so executors can always resolve it (else crash-loop).
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+        documentIndex: 4
       - equal:
           path: spec.selector.app
           value: RELEASE-NAME-spark
@@ -372,11 +378,44 @@ tests:
           value: Recreate
         documentIndex: 5
 
-  - it: should set terminationGracePeriodSeconds to the chart-wide default of 10s
+  - it: should set terminationGracePeriodSeconds to 60s (QUA-1990 graceful consumer drain)
     asserts:
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds
-          value: 10
+          value: 60
+        documentIndex: 5
+
+  # QUA-1990: heartbeat-file probes — a deaf-but-alive mothership stops touching the heartbeat
+  # file and the kubelet restarts the pod instead of requiring a human to delete it.
+  - it: should configure a liveness-only heartbeat probe on the driver (no startup/readiness gating)
+    asserts:
+      # The driver must never have its readiness gated on the heartbeat — that deadlocks the
+      # headless Service ↔ executor path (QUA-1990 crash-loop). Lock that invariant in.
+      - isNull:
+          path: spec.template.spec.containers[0].startupProbe
+        documentIndex: 5
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 720
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 60
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 3
         documentIndex: 5
 
   - it: should select pods with spark-role=driver for the headless Service

@@ -164,6 +164,12 @@ data:
 # Headless Service for driver↔executor RPC. Executors connect back to the
 # driver via spark.driver.host (= this Service's DNS name) on spark.driver.port.
 # Headless (clusterIP: None) so DNS resolves directly to the driver pod IP.
+# publishNotReadyAddresses: defensive insurance (QUA-1990). The driver intentionally
+# runs liveness-only with no readiness gating, so it is Ready almost immediately and
+# this flag is not strictly required today. We keep it so the executor↔driver DNS
+# record survives even a brief not-ready window — and so a future readiness/startup
+# probe can never silently re-introduce the crash-loop (NotReady driver omitted from
+# the headless Service → executors can't connect → max executor failures).
 apiVersion: v1
 kind: Service
 metadata:
@@ -172,6 +178,7 @@ metadata:
     app: {{ .Release.Name }}-spark
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app: {{ .Release.Name }}-spark
     spark-role: driver
@@ -216,7 +223,10 @@ spec:
       serviceAccountName: {{ .Values.dataplane.rbac.serviceAccountName }}
       imagePullSecrets:
         - name: regcred
-      terminationGracePeriodSeconds: 10
+      # QUA-1990: 60s gives the mothership's SIGTERM hook time to stop consumers and drain
+      # briefly (the previous 10s SIGKILLed it almost immediately, making the graceful-shutdown
+      # machinery dead code in k8s mode).
+      terminationGracePeriodSeconds: 60
       {{- if .Values.driverNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.driverNodeSelector | nindent 8 }}
@@ -311,6 +321,24 @@ spec:
               containerPort: 7079
             - name: ui
               containerPort: 4040
+          # QUA-1990: liveness-only self-healing for a deaf-but-alive JVM. The mothership refreshes
+          # /tmp/dataplane-heartbeat every 2 min while its AMQP connection + main channel + control
+          # lane are healthy (SparkMothership.writeLivenessHeartbeat); if it wedges, the file goes
+          # stale (>8 min) and the kubelet restarts the pod. Deliberately NO startup/readiness probe:
+          # the driver must stay Ready so the headless Service keeps publishing it to executors —
+          # gating readiness on the heartbeat deadlocks startup (executors can't connect → no Spark
+          # → no heartbeat → never Ready). initialDelaySeconds (720s) covers worst-case boot (Spark
+          # init + cold executor scale-up + controlplane handshake, after which the first heartbeat
+          # lands) plus ~2 heartbeat cycles of slack, so a slow-but-healthy start on a cold node is
+          # never killed before the first heartbeat is written. SREs: raise this if boots regularly
+          # approach the ceiling.
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
+            initialDelaySeconds: 720
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
           env:
             - name: POD_NAME
               valueFrom:
