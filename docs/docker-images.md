@@ -1,4 +1,4 @@
-# Qualytics Docker Images - v2026.6.17
+# Qualytics Docker Images - v2026.6.20
 
 Complete list of Docker images required for a Qualytics self-hosted deployment. These images must be pulled and uploaded to your private container registry before installation.
 
@@ -8,9 +8,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag |
 |---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260617-4eba8e2` |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260617-1f079d7` |
-| Frontend | `qualyticsai/frontend` | `20260617-5bf835b` |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260620-774e708` |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260620-d90297f` |
+| Frontend | `qualyticsai/frontend` | `20260620-c7f6fdd` |
 
 ### Pull commands
 
@@ -19,9 +19,9 @@ An authentication token will be provided separately via secure message.
 ```bash
 docker login -u qualyticsai -p <token>
 
-docker pull qualyticsai/controlplane:20260617-4eba8e2
-docker pull qualyticsai/dataplane:20260617-1f079d7
-docker pull qualyticsai/frontend:20260617-5bf835b
+docker pull qualyticsai/controlplane:20260620-774e708
+docker pull qualyticsai/dataplane:20260620-d90297f
+docker pull qualyticsai/frontend:20260620-c7f6fdd
 ```
 
 ## Infrastructure Images
@@ -68,9 +68,9 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260617-4eba8e2 $REGISTRY/qualyticsai/controlplane:20260617-4eba8e2
-docker tag qualyticsai/dataplane:20260617-1f079d7 $REGISTRY/qualyticsai/dataplane:20260617-1f079d7
-docker tag qualyticsai/frontend:20260617-5bf835b $REGISTRY/qualyticsai/frontend:20260617-5bf835b
+docker tag qualyticsai/controlplane:20260620-774e708 $REGISTRY/qualyticsai/controlplane:20260620-774e708
+docker tag qualyticsai/dataplane:20260620-d90297f $REGISTRY/qualyticsai/dataplane:20260620-d90297f
+docker tag qualyticsai/frontend:20260620-c7f6fdd $REGISTRY/qualyticsai/frontend:20260620-c7f6fdd
 
 # Infrastructure images
 docker tag rabbitmq:4.3-management $REGISTRY/rabbitmq:4.3-management
@@ -80,9 +80,9 @@ docker tag busybox:latest $REGISTRY/busybox:latest
 docker tag postgres:17 $REGISTRY/postgres:17
 
 # Push all
-docker push $REGISTRY/qualyticsai/controlplane:20260617-4eba8e2
-docker push $REGISTRY/qualyticsai/dataplane:20260617-1f079d7
-docker push $REGISTRY/qualyticsai/frontend:20260617-5bf835b
+docker push $REGISTRY/qualyticsai/controlplane:20260620-774e708
+docker push $REGISTRY/qualyticsai/dataplane:20260620-d90297f
+docker push $REGISTRY/qualyticsai/frontend:20260620-c7f6fdd
 docker push $REGISTRY/rabbitmq:4.3-management
 docker push $REGISTRY/busybox:latest
 
@@ -105,7 +105,7 @@ kubectl create secret docker-registry regcred -n qualytics \
   --docker-password=<token>
 ```
 
-### 2. Install Qualytics v2026.6.17
+### 2. Install Qualytics v2026.6.20
 
 ```bash
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
@@ -113,7 +113,7 @@ helm repo update
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
-  --version 2026.6.17 \
+  --version 2026.6.20 \
   -f values.yaml \
   --wait \
   --timeout=5m
