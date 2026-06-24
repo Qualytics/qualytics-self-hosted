@@ -8,9 +8,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag |
 |---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260620-774e708` |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260620-d90297f` |
-| Frontend | `qualyticsai/frontend` | `20260620-c7f6fdd` |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260624-1883395` |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260624-c976791` |
+| Frontend | `qualyticsai/frontend` | `20260624-ca0db6a` |
 
 ### Pull commands
 
@@ -19,9 +19,9 @@ An authentication token will be provided separately via secure message.
 ```bash
 docker login -u qualyticsai -p <token>
 
-docker pull qualyticsai/controlplane:20260620-774e708
-docker pull qualyticsai/dataplane:20260620-d90297f
-docker pull qualyticsai/frontend:20260620-c7f6fdd
+docker pull qualyticsai/controlplane:20260624-1883395
+docker pull qualyticsai/dataplane:20260624-c976791
+docker pull qualyticsai/frontend:20260624-ca0db6a
 ```
 
 ## Infrastructure Images
@@ -68,9 +68,9 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260620-774e708 $REGISTRY/qualyticsai/controlplane:20260620-774e708
-docker tag qualyticsai/dataplane:20260620-d90297f $REGISTRY/qualyticsai/dataplane:20260620-d90297f
-docker tag qualyticsai/frontend:20260620-c7f6fdd $REGISTRY/qualyticsai/frontend:20260620-c7f6fdd
+docker tag qualyticsai/controlplane:20260624-1883395 $REGISTRY/qualyticsai/controlplane:20260624-1883395
+docker tag qualyticsai/dataplane:20260624-c976791 $REGISTRY/qualyticsai/dataplane:20260624-c976791
+docker tag qualyticsai/frontend:20260624-ca0db6a $REGISTRY/qualyticsai/frontend:20260624-ca0db6a
 
 # Infrastructure images
 docker tag rabbitmq:4.3-management $REGISTRY/rabbitmq:4.3-management
@@ -80,9 +80,9 @@ docker tag busybox:latest $REGISTRY/busybox:latest
 docker tag postgres:17 $REGISTRY/postgres:17
 
 # Push all
-docker push $REGISTRY/qualyticsai/controlplane:20260620-774e708
-docker push $REGISTRY/qualyticsai/dataplane:20260620-d90297f
-docker push $REGISTRY/qualyticsai/frontend:20260620-c7f6fdd
+docker push $REGISTRY/qualyticsai/controlplane:20260624-1883395
+docker push $REGISTRY/qualyticsai/dataplane:20260624-c976791
+docker push $REGISTRY/qualyticsai/frontend:20260624-ca0db6a
 docker push $REGISTRY/rabbitmq:4.3-management
 docker push $REGISTRY/busybox:latest
 
