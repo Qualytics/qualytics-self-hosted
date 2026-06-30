@@ -1,0 +1,355 @@
+suite: test envoy gateway resources
+templates:
+  - gateway.yaml
+tests:
+  - it: should not render any gateway resources when disabled
+    set:
+      gateway.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when both ingress and gateway are enabled (mutual exclusion)
+    set:
+      ingress.enabled: true
+      gateway.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "Enable EITHER ingress.enabled (nginx) OR gateway.enabled (Envoy Gateway), not both. When using Envoy Gateway also set nginx.enabled=false."
+
+  - it: should fail when className is empty
+    set:
+      gateway.enabled: true
+      gateway.className: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "gateway.className is required when gateway.enabled=true."
+
+  - it: should fail when tls.secretName is empty
+    set:
+      gateway.enabled: true
+      gateway.tls.secretName: ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "gateway.tls.secretName is required when gateway.enabled=true."
+
+  - it: should render the core gateway resources when enabled
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      # Gateway + 3 HTTPRoutes + 2 BackendTrafficPolicy + EnvoyProxy
+      # (no GatewayClass/CORS by default)
+      - hasDocuments:
+          count: 7
+      - isKind:
+          of: Gateway
+        documentIndex: 0
+      - isKind:
+          of: HTTPRoute
+        documentIndex: 1
+      - isKind:
+          of: HTTPRoute
+        documentIndex: 2
+      - isKind:
+          of: HTTPRoute
+        documentIndex: 3
+      - isKind:
+          of: BackendTrafficPolicy
+        documentIndex: 4
+      - isKind:
+          of: BackendTrafficPolicy
+        documentIndex: 5
+      - isKind:
+          of: EnvoyProxy
+        documentIndex: 6
+
+  - it: should configure the Gateway with class, hostname and TLS terminate
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.gatewayClassName
+          value: eg                 # default className
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].protocol
+          value: HTTPS
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].port
+          value: 443
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].tls.mode
+          value: Terminate
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[0].hostname
+          value: "test.qualytics.io"
+        documentIndex: 0
+      - equal:
+          path: spec.listeners[1].protocol
+          value: HTTP
+        documentIndex: 0
+      # data-plane EnvoyProxy is wired via infrastructure.parametersRef
+      - equal:
+          path: spec.infrastructure.parametersRef.kind
+          value: EnvoyProxy
+        documentIndex: 0
+
+  - it: should default the TLS Secret to qualytics-tls-cert and allow override
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.listeners[0].tls.certificateRefs[0].name
+          value: "qualytics-tls-cert"
+        documentIndex: 0
+
+  - it: should use a custom gateway.tls.secretName when set
+    set:
+      gateway.enabled: true
+      gateway.tls.secretName: "my-cert"
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.listeners[0].tls.certificateRefs[0].name
+          value: "my-cert"
+        documentIndex: 0
+
+  - it: should order the streaming regex rule before the broad /api prefix rule
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "RELEASE-NAME-api"
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: RegularExpression
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: "/api/anomalies/[0-9]+/source-record/download.*"
+        documentIndex: 1
+      - equal:
+          path: spec.rules[1].matches[0].path.type
+          value: PathPrefix
+        documentIndex: 1
+      - equal:
+          path: spec.rules[1].matches[0].path.value
+          value: "/api"
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: "RELEASE-NAME-api-service"
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].backendRefs[0].port
+          value: 8000
+        documentIndex: 1
+
+  - it: should keep /.well-known on the frontend route but pointed at the API backend
+    # nginx parity: well-known is on the frontend ingress (500 rps policy) yet
+    # proxies to the API. Moving it under the api route would drop it to 50 rps.
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "RELEASE-NAME-frontend"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].matches[0].path.type
+          value: RegularExpression
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: "/\\.well-known.*"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[0].backendRefs[0].name
+          value: "RELEASE-NAME-api-service"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[1].matches[0].path.value
+          value: "/"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[1].backendRefs[0].name
+          value: "RELEASE-NAME-frontend-service"
+        documentIndex: 2
+      - equal:
+          path: spec.rules[1].backendRefs[0].port
+          value: 8080
+        documentIndex: 2
+
+  - it: should always emit the security response headers and X-Original-URI on each rule
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: ResponseHeaderModifier
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].filters[0].responseHeaderModifier.set[3].name
+          value: Strict-Transport-Security
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].filters[0].responseHeaderModifier.set[3].value
+          value: "max-age=31536000; includeSubDomains; preload"
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].filters[1].type
+          value: RequestHeaderModifier
+        documentIndex: 1
+      - equal:
+          path: spec.rules[0].filters[1].requestHeaderModifier.set[0].name
+          value: X-Original-URI
+        documentIndex: 1
+
+  - it: should default the HTTP->HTTPS redirect to status 301
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: RequestRedirect
+        documentIndex: 3
+      - equal:
+          path: spec.rules[0].filters[0].requestRedirect.scheme
+          value: https
+        documentIndex: 3
+      - equal:
+          path: spec.rules[0].filters[0].requestRedirect.statusCode
+          value: 301
+        documentIndex: 3
+
+  - it: should allow overriding the redirect status code
+    set:
+      gateway.enabled: true
+      gateway.httpsRedirectCode: 308
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].requestRedirect.statusCode
+          value: 308
+        documentIndex: 3
+
+  - it: should set api rate limit to rps*burst and frontend to its own, never eject
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: metadata.name
+          value: "RELEASE-NAME-api"
+        documentIndex: 4
+      - equal:
+          path: spec.rateLimit.type
+          value: Local
+        documentIndex: 4
+      - equal:
+          path: spec.rateLimit.local.rules[0].limit.requests
+          value: 250                # 50 rps * 5 burst
+        documentIndex: 4
+      - equal:
+          path: spec.retry.numRetries
+          value: 3
+        documentIndex: 4
+      - contains:
+          path: spec.retry.retryOn.httpStatusCodes
+          content: 503
+        documentIndex: 4
+      # never passively eject (nginx upstream-max-fails:0) — no passive health check
+      - notExists:
+          path: spec.healthCheck
+        documentIndex: 4
+      - equal:
+          path: spec.rateLimit.local.rules[0].limit.requests
+          value: 2500               # 500 rps * 5 burst
+        documentIndex: 5
+
+  - it: should use global per-IP rate limiting when type=global
+    set:
+      gateway.enabled: true
+      gateway.rateLimit.type: global
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.rateLimit.type
+          value: Global
+        documentIndex: 4
+      - equal:
+          path: spec.rateLimit.global.rules[0].clientSelectors[0].sourceCIDR.type
+          value: Distinct
+        documentIndex: 4
+
+  - it: should always render the data-plane EnvoyProxy with 1 replica by default
+    set:
+      gateway.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - isKind:
+          of: EnvoyProxy
+        documentIndex: 6
+      - equal:
+          path: spec.provider.kubernetes.envoyDeployment.replicas
+          value: 1
+        documentIndex: 6
+      # With empty nodeSelector/tolerations, `pod:` must be OMITTED (a null `pod`
+      # fails the EnvoyProxy CRD's server-side schema validation).
+      - notExists:
+          path: spec.provider.kubernetes.envoyDeployment.pod
+        documentIndex: 6
+
+  - it: should schedule the data-plane Envoy pods via proxy.nodeSelector
+    set:
+      gateway.enabled: true
+      gateway.proxy.nodeSelector:
+        appNodes: "true"
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.provider.kubernetes.envoyDeployment.pod.nodeSelector.appNodes
+          value: "true"
+        documentIndex: 6
+
+  - it: should reference (not create) the GatewayClass via gatewayClassName
+    # The chart never renders a GatewayClass (it's a cluster prerequisite); the
+    # core-resources test above already asserts the doc set is exactly 7 with no
+    # GatewayClass. Here we just confirm the Gateway references the configured class.
+    set:
+      gateway.enabled: true
+      gateway.className: my-eg
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: spec.gatewayClassName
+          value: my-eg
+        documentIndex: 0
+
+  - it: should render a CORS SecurityPolicy only when gateway.cors is true
+    set:
+      gateway.enabled: true
+      gateway.cors: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - hasDocuments:
+          count: 8
+      - isKind:
+          of: SecurityPolicy
+        documentIndex: 6
+      - contains:
+          path: spec.cors.allowOrigins
+          content: "*"
+        documentIndex: 6

@@ -58,6 +58,69 @@ Input shape: dataplane.driver.memory expressed in Spark units like "55000m" (= M
 {{- end -}}
 
 {{/*
+ModSecurity / Coraza SecLang snippet shared by the nginx ingress
+(templates/ingress.yaml) and the Envoy Gateway WAF (templates/gateway.yaml).
+MUST stay apostrophe-free: ingress-nginx wraps it in `modsecurity_rules '...'`, so
+any `'` (even in a comment) breaks the nginx reload. See tests/ingress_test.yaml.
+*/}}
+{{- define "common.modsecurity.snippet" -}}
+# Enable prevention mode. Can be any of: DetectionOnly,On,Off (default is DetectionOnly)
+SecRuleEngine On
+SecRequestBodyAccess On
+# Update config to include PUT/PATCH/DELETE in the allowed HTTP methods
+SecAction "id:900200,phase:1,nolog,pass,t:none,\
+  setvar:tx.allowed_methods=GET HEAD POST OPTIONS PUT PATCH DELETE"
+# Send ModSecurity audit logs to the stdout (only for rejected requests)
+SecAuditLog /dev/stdout
+SecAuditLogParts ABCIJDEFHZ
+SecAuditLogFormat JSON
+SecAuditEngine RelevantOnly # could be On/Off/RelevantOnly
+# addresses SC-14854 expanded (phase:1 to reject before body processing)
+SecRule REQUEST_URI_RAW "@rx (?:/\?){3,}" "id:14854,phase:1,deny,status:403"
+# Block absurdly long URIs used in DDoS path-traversal floods (>4KB).
+# t:length must run before @gt so the numeric comparison is against the URI
+# character count, otherwise @gt coerces the raw string to int (=0) and never fires.
+SecRule REQUEST_URI_RAW "@gt 4096" "id:14855,phase:1,deny,status:414,t:length"
+# addresses SC-15205
+SecRuleRemoveById 949110
+{{- end -}}
+
+{{/*
+Per-rule HTTPRoute filters applied to every Envoy Gateway route: the 7 security
+response headers (ResponseHeaderModifier) + the X-Original-URI request header
+(RequestHeaderModifier). Gateway API has no route-wide filter, so this block is
+included on each rule. Always emitted (the nginx path bakes the equivalents into
+its annotations). Header values are byte-identical to the nginx path.
+*/}}
+{{- define "qualytics.gateway.routeFilters" -}}
+- type: ResponseHeaderModifier
+  responseHeaderModifier:
+    set:
+      - name: X-Frame-Options
+        value: "SAMEORIGIN"
+      - name: X-Content-Type-Options
+        value: "nosniff"
+      - name: Referrer-Policy
+        value: "same-origin"
+      - name: Strict-Transport-Security
+        value: "max-age=31536000; includeSubDomains; preload"
+      - name: Content-Security-Policy
+        value: "default-src https: blob: data: 'unsafe-eval' 'unsafe-inline'; worker-src https: blob:"
+      - name: Permissions-Policy
+        value: "autoplay=(self),cross-origin-isolated=(self),display-capture=(self),encrypted-media=(self),fullscreen=(self),keyboard-map=(self),picture-in-picture=(self),publickey-credentials-get=(self),screen-wake-lock=(self),sync-xhr=(self)"
+      - name: X-Xss-Protection
+        value: "1; mode=block"
+- type: RequestHeaderModifier
+  requestHeaderModifier:
+    set:
+      # nginx: proxy_set_header X-Original-URI $request_uri. %REQ(...)% is an Envoy
+      # Gateway command-operator extension; on HTTP/1 this is the full request-target
+      # (path+query), matching $request_uri.
+      - name: X-Original-URI
+        value: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+{{- end -}}
+
+{{/*
 Comma-separated spark.local.dir paths, one per dataplane.numVolumes.
 Renders empty when numVolumes <= 0.
 */}}
