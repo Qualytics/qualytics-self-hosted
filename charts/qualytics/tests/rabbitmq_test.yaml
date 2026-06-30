@@ -6,43 +6,19 @@ tests:
   - it: should create rabbitmq resources
     asserts:
       - hasDocuments:
-          count: 5
+          count: 4
 
-  # Basic document checks
+  # Basic document checks (default = pvc disabled, so StatefulSet is doc 2)
   - it: should create rabbitmq StatefulSet
     asserts:
       - isKind:
           of: StatefulSet
-        documentIndex: 3
+        documentIndex: 2
 
   # PVC vs emptyDir tests
-  - it: should create PVC and use persistentVolumeClaim when pvc.enabled is true (default)
-    set:
-      rabbitmq.pvc.enabled: true
+  - it: should use emptyDir by default (no PVC, ephemeral state)
     asserts:
-      # PVC resource should exist
-      - isKind:
-          of: PersistentVolumeClaim
-        documentIndex: 2
-      - equal:
-          path: metadata.name
-          value: "rabbitmq-data-claim"
-        documentIndex: 2
-      # StatefulSet volume should use persistentVolumeClaim
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: rabbitmq-data
-            persistentVolumeClaim:
-              claimName: rabbitmq-data-claim
-        documentIndex: 3
-
-  - it: should NOT create PVC and use emptyDir when pvc.enabled is false
-    set:
-      rabbitmq.pvc.enabled: false
-      certmanager.enabled: false
-    asserts:
-      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC, no Certificate)
+      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC)
       - hasDocuments:
           count: 4
       - isKind:
@@ -65,23 +41,86 @@ tests:
             emptyDir: {}
         documentIndex: 2
 
-  # Resource limits
+  - it: should create PVC and use persistentVolumeClaim when pvc.enabled is explicitly true
+    set:
+      rabbitmq.pvc.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 5
+      # PVC resource should exist
+      - isKind:
+          of: PersistentVolumeClaim
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: "rabbitmq-data-claim"
+        documentIndex: 2
+      # StatefulSet volume should use persistentVolumeClaim
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: rabbitmq-data
+            persistentVolumeClaim:
+              claimName: rabbitmq-data-claim
+        documentIndex: 3
+
+  # Resource limits — StatefulSet is doc 2 with the default (pvc disabled).
   - it: should have default memory limit at 2x requests for RabbitMQ
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: 1Gi
-        documentIndex: 3
+        documentIndex: 2
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 2Gi
-        documentIndex: 3
+        documentIndex: 2
 
   - it: should NOT set CPU limits on RabbitMQ
     asserts:
       - isNull:
           path: spec.template.spec.containers[0].resources.limits.cpu
-        documentIndex: 3
+        documentIndex: 2
+
+  - it: should set fsGroup and fsGroupChangePolicy so .erlang.cookie perms survive pod restarts
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+        documentIndex: 2
+
+  - it: should run a fix-cookie-perms initContainer to re-lock .erlang.cookie after fsGroup
+    # fsGroup applies g+rw to every file in /var/lib/rabbitmq on first mount, which bumps the
+    # Erlang cookie from 0600 to 0660 and makes the rabbitmq daemon refuse to start. The init
+    # container chmods it back to 0600 on every pod start.
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: "fix-cookie-perms"
+        documentIndex: 2
+      - contains:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          content:
+            name: rabbitmq-data
+            mountPath: /var/lib/rabbitmq
+        documentIndex: 2
+
+  - it: should set fsGroup on ephemeral mode too
+    set:
+      rabbitmq.pvc.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 999
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.securityContext.fsGroupChangePolicy
+          value: OnRootMismatch
+        documentIndex: 2
 
   - it: should allow custom memory limit override without changing requests for RabbitMQ
     set:
@@ -91,9 +130,21 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: 1Gi
-        documentIndex: 3
+        documentIndex: 2
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 4Gi
-        documentIndex: 3
+        documentIndex: 2
+
+  - it: should set consumer_timeout to 24h to align with OPERATION_RECONCILER_THRESHOLD_MINUTES
+    # The QUA-1752 design relies on `consumer_timeout < OPERATION_RECONCILER_THRESHOLD_MINUTES`
+    # (8h). Previously 60min, which routinely fired during large profile ops and caused the
+    # SparkMothership ShutdownListener to kill the JVM mid-operation — see PR #39 / dataplane
+    # for the listener fix. The 24h value keeps consumer_timeout as a safety net for genuinely
+    # hung consumers while never tripping on legitimate long-running async ops.
+    asserts:
+      - matchRegex:
+          path: data["rabbitmq.conf"]
+          pattern: "consumer_timeout = 86400000"
+        documentIndex: 0
 

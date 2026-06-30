@@ -9,7 +9,7 @@ data:
     default_user = user
     loopback_users.user = false
     listeners.tcp.default = 5672
-{{ if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+{{ if .Values.rabbitmq.tls.enabled }}
     # TLS configuration
     listeners.ssl.default = 5671
     ssl_options.certfile   = /etc/rabbitmq/tls/tls.crt
@@ -17,7 +17,7 @@ data:
     ssl_options.verify     = verify_none
     ssl_options.fail_if_no_peer_cert = false
 {{ end }}
-    consumer_timeout = 3600000 # 60 minutes in milliseconds
+    consumer_timeout = 86400000 # 24 hours in milliseconds
     max_message_size = 536870912  # 512 mb in bytes
 
 ---
@@ -74,6 +74,9 @@ spec:
       labels:
         app: {{ .Release.Name }}-rabbitmq
     spec:
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: "OnRootMismatch"
       imagePullSecrets:
         - name: regcred
       {{- if .Values.appNodeSelector }}
@@ -97,6 +100,35 @@ spec:
           mountPath: /config/
         - name: plugins-file
           mountPath: /etc/rabbitmq/
+      # Re-lock the Erlang cookie to 0600 after the fsGroup walk.
+      #
+      # Defense-in-depth for upgrades from chart versions that had `fsGroup: 999` without
+      # `fsGroupChangePolicy: OnRootMismatch`. On those versions, the recursive kubelet walk
+      # applied g+rw to every file in /var/lib/rabbitmq, bumping `.erlang.cookie` from 0600
+      # to 0660. Erlang's auth module then refuses to start ("Cookie file ... must be
+      # accessible by owner only") and the StatefulSet crashloops.
+      #
+      # On fresh PVCs the policy alone is sufficient — RabbitMQ creates the cookie at 0600
+      # *after* the walk runs. This init container exists to repair already-broken volumes
+      # left over from older deployments. After the first successful restart the volume root
+      # is owned by 999:999, the OnRootMismatch policy short-circuits the walk on every
+      # subsequent restart, and this becomes a cheap idempotent no-op (~0.5s busybox boot).
+      - name: fix-cookie-perms
+        image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+          - /bin/sh
+          - -c
+          - |
+            if [ -f /var/lib/rabbitmq/.erlang.cookie ]; then
+              chmod 0600 /var/lib/rabbitmq/.erlang.cookie
+              echo "fixed cookie perms: $(ls -la /var/lib/rabbitmq/.erlang.cookie)"
+            else
+              echo "no cookie present yet — fresh volume, rabbitmq will create one"
+            fi
+        volumeMounts:
+        - name: rabbitmq-data
+          mountPath: /var/lib/rabbitmq
       containers:
       - name: rabbitmq
         image: "{{ tpl .Values.rabbitmq.image.imageUrl . }}:{{ .Values.rabbitmq.image.imageTag }}"
@@ -104,7 +136,7 @@ spec:
         ports:
         - containerPort: 15672
           name: discovery
-        {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+        {{- if .Values.rabbitmq.tls.enabled }}
         - containerPort: 5671
           name: amqp-tls
         {{- else }}
@@ -144,7 +176,7 @@ spec:
               name: qualytics-creds
               key: rabbitmq_password
         volumeMounts:
-        {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+        {{- if .Values.rabbitmq.tls.enabled }}
         - name: rabbitmq-tls
           mountPath: /etc/rabbitmq/tls/
           readOnly: true
@@ -157,7 +189,7 @@ spec:
         - name: plugins-file
           mountPath: /etc/rabbitmq/
       volumes:
-      {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+      {{- if .Values.rabbitmq.tls.enabled }}
       - name: rabbitmq-tls
         secret:
           secretName: rabbitmq-tls
@@ -179,21 +211,6 @@ spec:
           name: {{ .Release.Name }}-rabbitmq-config
           defaultMode: 0755
 
-{{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: rabbitmq-cert
-spec:
-  secretName: rabbitmq-tls
-  dnsNames:
-  - {{ tpl .Values.global.dnsRecord . | quote }}
-  issuerRef:
-    name: letsencrypt
-    kind: ClusterIssuer
-{{- end }}
-
 ---
 apiVersion: v1
 kind: Service
@@ -202,7 +219,7 @@ metadata:
   labels:
     service: {{ .Release.Name }}-rabbitmq-service
 spec:
-{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled .Values.certmanager.enabled }}
+{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled }}
   type: NodePort
 {{- else }}
   clusterIP: None
@@ -214,7 +231,7 @@ spec:
   - port: 5672
     targetPort: 5672
     name: amqp
-  {{- if and .Values.certmanager.enabled .Values.rabbitmq.tls.enabled }}
+  {{- if .Values.rabbitmq.tls.enabled }}
   - port: 5671
   {{- if .Values.rabbitmq.enableInbound }}
     nodePort: 30671

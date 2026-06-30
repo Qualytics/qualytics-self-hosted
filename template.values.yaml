@@ -79,20 +79,11 @@ executorNodeSelector:
 #--------------------------------------------------------------------------------
 # Dependencies
 #--------------------------------------------------------------------------------
-sparkoperator:
-  enabled: true
-  controller:
-    nodeSelector:
-      appNodes: "true"
-  webhook:
-    enable: true
-    nodeSelector:
-      appNodes: "true"
-  spark:
-    jobNamespaces:
-    - "qualytics"
-    serviceAccount:
-      name: "qualytics-spark"
+# spark-operator is no longer required — the dataplane runs as a native
+# Deployment that invokes spark-submit in client mode and creates executor
+# pods directly via the Kubernetes API. See `dataplane.rbac` below for the
+# ServiceAccount/Role/RoleBinding that replace what the operator chart used
+# to install.
 
 nginx:
   enabled: false
@@ -100,17 +91,25 @@ nginx:
     nodeSelector:
       appNodes: "true"
 
-certmanager:
-  enabled: false
-  nodeSelector:
-    appNodes: "true"
-
 #--------------------------------------------------------------------------------
 # Ingress Configuration
 #--------------------------------------------------------------------------------
+# Before `helm install`, create a TLS Secret in the release namespace. Recommended
+# pattern (a single wildcard/SAN cert used for both api and frontend):
+#
+#   kubectl create secret tls qualytics-tls-cert -n qualytics \
+#     --cert=fullchain.pem --key=privkey.pem
+#
+# Then set ingress.tls.secretName below. See docs/ingress-tls.md for all options,
+# including the legacy split-Secret mode (api-tls-cert + frontend-tls-cert) which
+# is automatically used when ingress.tls.secretName is empty.
 ingress:
   enabled: true
   cors: false
+  tls:
+    # Single shared Secret for both api and frontend (recommended for new deployments).
+    # Leave empty to keep the legacy `api-tls-cert` + `frontend-tls-cert` split pair.
+    secretName: "qualytics-tls-cert"
 
 #--------------------------------------------------------------------------------
 # Controlplane Configuration
@@ -132,6 +131,13 @@ dataplane:
   numVolumes: -1
   parallelismScaleFactor: -1
   maxParallelSyncRequests: 3
+  # RBAC the driver needs to manage executor pods (replaces the spark-operator
+  # SA/Role bundle). For AWS IRSA, add the role-arn annotation here:
+  rbac:
+    create: true
+    serviceAccountName: "qualytics-spark"
+    # serviceAccountAnnotations:
+    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
   driver:
     cores: 7
     memory: "55000m"

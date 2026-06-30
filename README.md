@@ -6,7 +6,61 @@ Qualytics is a closed-source container-native platform for assessing, monitoring
 
 This chart will deploy a single-tenant instance of the qualytics platform to a [CNCF compliant](https://www.cncf.io/certification/software-conformance/) kubernetes control plane.
 
-![Deployment Architecture](/deployment_arch_diagram.jpg)
+### Architecture
+
+```mermaid
+flowchart LR
+  user([User Browser])
+
+  datastores[("Datastores (external)<br/>JDBC: Snowflake, BigQuery, Redshift, Databricks, …<br/>DFS: Amazon S3, Google Cloud Storage, Azure Data Lake Storage")]
+
+  subgraph k8s["Kubernetes Cluster"]
+    direction TB
+    subgraph ns["Qualytics Namespace"]
+      direction TB
+
+      nginx["nginx-ingress<br/>(optional)"]
+
+      subgraph appPool["Application Nodes — appNodes=true"]
+        direction LR
+        fe["Frontend"]
+        api["Controlplane API<br/>(8 replicas)"]
+        cmd["Controlplane CMD"]
+        pg[("PostgreSQL<br/>StatefulSet")]
+        rmq[("RabbitMQ<br/>StatefulSet, emptyDir")]
+      end
+
+      subgraph driverPool["Spark Driver Node — driverNodes=true"]
+        driver["Dataplane (Spark Driver)<br/>spark-submit --deploy-mode client"]
+      end
+
+      subgraph execPool["Spark Executor Nodes — executorNodes=true"]
+        executors["Spark Executors<br/>(dynamic allocation, 1..12 pods)"]
+      end
+    end
+  end
+
+  user --> nginx
+  nginx -->|/| fe
+  nginx -->|/api/...| api
+  api <--> pg
+  api <--> rmq
+  cmd <--> pg
+  cmd <--> rmq
+  driver <-->|dataplane queue| rmq
+  driver -.->|launches and deletes<br/>executor pods| executors
+
+  driver -->|metadata| datastores
+  executors -->|reads data| datastores
+```
+
+A Qualytics deployment is split into a **Controlplane**, a **Dataplane**, and the **Datastores** it monitors:
+
+- **Controlplane** — the API and CMD services plus the Frontend UI, all running on Application Nodes (`appNodes=true`). The API serves user requests and orchestrates work; CMD is the background processor that schedules and tracks operations. PostgreSQL holds platform state and RabbitMQ is the message broker between the Controlplane and the Dataplane.
+- **Dataplane** — a Spark application: a single driver pod (`driverNodes=true`) that runs `spark-submit` in client mode, plus executor pods (`executorNodes=true`) the driver creates and reaps dynamically based on workload (`dataplane.dynamicAllocation.minExecutors..maxExecutors`, default `1..12`).
+- **Datastores** — the external systems Qualytics is profiling and scanning. Two connector families are supported: **JDBC** (Snowflake, BigQuery, Redshift, Databricks, PostgreSQL, Oracle, Microsoft SQL Server, …) and **DFS** (Amazon S3, Google Cloud Storage, Azure Data Lake Storage). The driver opens metadata connections; the executors do the parallel data reads.
+
+Datastores are configured in the Qualytics UI after deployment. See the user guide's [Source Datastores Overview](https://userguide.qualytics.io/source-datastore/overview/) for the full connector list.
 
 ## Prerequisites
 
@@ -34,17 +88,10 @@ Qualytics is designed to be flexible and can run on virtually any Kubernetes inf
 
 #### Node Configuration
 
-For optimal performance and autoscaling, we recommend using dedicated node groups with the following labels:
-- `appNodes=true` — For application components (API, frontend, databases)
-- `driverNodes=true` — For Spark driver
-- `executorNodes=true` — For Spark executors
-
-However, this setup is flexible:
+The architecture above assumes three dedicated node groups (`appNodes`, `driverNodes`, `executorNodes`); for production data volumes we recommend keeping them separate with autoscaling enabled. The setup is flexible if that's overkill for your environment:
 - **Combined Spark nodes**: Merge driver and executor labels into a single `sparkNodes=true` label if your node group has sufficient resources for both.
 - **No node selectors**: Run on any available cluster nodes without targeting specific groups (disable node selectors in values.yaml).
 - **Single node**: For development or small workloads, the entire platform can run on a single appropriately-sized node.
-
-For production workloads with large data volumes, we recommend separate node groups with autoscaling enabled to ensure optimal performance and cost efficiency.
 
 #### Suggested Instance Types
 
@@ -150,9 +197,10 @@ The `template.values.yaml` file contains essential configurations with sensible 
 
 **Optional configurations:**
 - Enable `nginx` if you need an ingress controller
-- Enable `certmanager` for automatic SSL certificates
+- Provide a TLS Secret for the ingress (see [docs/ingress-tls.md](./docs/ingress-tls.md)).
+  Recommended: a single shared `qualytics-tls-cert` Secret referenced via `ingress.tls.secretName`.
+  Existing deployments with `api-tls-cert` + `frontend-tls-cert` keep working unchanged.
 - Configure `controlplane.smtp` settings for email notifications
-- Node selectors are now enabled by default for dedicated node groups
 
 For advanced configuration, refer to the full `charts/qualytics/values.yaml` file which contains all available options.
 
@@ -172,7 +220,8 @@ helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
   -f values.yaml \
-  --timeout=20m
+  --wait \
+  --timeout=5m
 ```
 
 **Monitor the deployment:**
@@ -192,21 +241,16 @@ kubectl get ingress -n qualytics
 
 Note this IP address as it's needed for the next step!
 
-### 4. Configure DNS for your deployment
+### 4. Configure DNS and TLS for your deployment
 
-You have two options for DNS configuration:
+Run Qualytics under a domain you control:
 
-**Option A: Qualytics-managed DNS (Recommended)**
-Send your [account manager](mailto://hello@qualytics.ai) the IP address from step 3. Qualytics will assign a DNS record under `*.qualytics.io` (e.g., `https://acme.qualytics.io`) and handle SSL certificate management.
+1. Create an A record pointing your domain to the ingress IP address.
+2. Set `global.dnsRecord` in `values.yaml` to that hostname.
+3. Mint a TLS certificate for that hostname (corporate CA, Let's Encrypt, cloud-provider managed cert, etc.) and create a Kubernetes `tls` Secret from it — see [docs/ingress-tls.md](./docs/ingress-tls.md) for the recommended single-Secret pattern and the per-ingress Secret option.
+4. Update any firewall rules to allow traffic to your domain.
 
-**Option B: Custom Domain**
-If using your own domain:
-1. Create an A record pointing your domain to the ingress IP address
-2. Ensure your `global.dnsRecord` in values.yaml matches your custom domain
-3. Configure SSL certificates (enable `certmanager` or provide your own)
-4. Update any firewall rules to allow traffic to your domain
-
-Contact your [account manager](mailto://hello@qualytics.ai) for assistance with either option.
+Contact your [account manager](mailto://hello@qualytics.ai) if you need assistance.
 
 ## Can I run a fully "air-gapped" deployment?
 
@@ -249,8 +293,10 @@ kubectl rollout restart deployment/qualytics-cmd -n qualytics
 # View detailed pod information
 kubectl describe pod <pod-name> -n qualytics
 
-# Get spark application logs
-kubectl logs -f pod qualytics-spark-driver -n qualytics
+# Get spark driver logs (Deployment-managed, random pod suffix — use the deployment selector)
+kubectl logs -f deployment/qualytics-spark -n qualytics
+# Or by label
+kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 ```
 
 ## Additional Documentation

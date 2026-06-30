@@ -28,9 +28,7 @@ jobs:
 
       - name: Add Helm repositories
         run: |
-          helm repo add spark-operator https://kubeflow.github.io/spark-operator
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo add jetstack https://charts.jetstack.io
           helm repo update
 
       - name: Build dependencies
@@ -151,31 +149,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
       - name: Add Helm repositories
         run: |
-          helm repo add spark-operator https://kubeflow.github.io/spark-operator
           helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-          helm repo add jetstack https://charts.jetstack.io
           helm repo update
 
       - name: Build dependencies
         run: helm dependency build charts/qualytics
-
-      - name: Install Spark Operator CRDs
-        run: |
-          # Get spark-operator version from Chart.yaml
-          SPARK_OPERATOR_VERSION=$(yq '.dependencies[] | select(.name == "spark-operator") | .version' charts/qualytics/Chart.yaml 2>/dev/null || \
-                                  grep -A 1 'name: spark-operator' charts/qualytics/Chart.yaml | grep 'version:' | awk '{print $2}')
-          echo "Installing Spark Operator CRDs version: $SPARK_OPERATOR_VERSION"
-          
-          # Apply Spark Operator CRDs with server-side apply
-          kubectl apply --server-side=true -f https://raw.githubusercontent.com/kubeflow/spark-operator/v${SPARK_OPERATOR_VERSION}/charts/spark-operator-chart/crds/sparkoperator.k8s.io_sparkapplications.yaml
-          kubectl apply --server-side=true -f https://raw.githubusercontent.com/kubeflow/spark-operator/v${SPARK_OPERATOR_VERSION}/charts/spark-operator-chart/crds/sparkoperator.k8s.io_scheduledsparkapplications.yaml
 
       - name: Test installation (dry-run)
         run: |

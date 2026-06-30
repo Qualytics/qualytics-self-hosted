@@ -28,8 +28,7 @@ spec:
       - name: cmd
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
         imagePullPolicy: IfNotPresent
-        command: [ "/bin/bash","-c" ]
-        args: [ "python /app/hub_cmd.py" ]
+        command: ["python3","/app/hub_cmd.py"]
         resources:
           requests:
             memory: {{ .Values.controlplaneCmd.resources.requests.memory | quote }}
@@ -39,7 +38,7 @@ spec:
         startupProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "exit(0)"
           initialDelaySeconds: 10
@@ -49,7 +48,7 @@ spec:
         readinessProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
           periodSeconds: 30
@@ -58,7 +57,7 @@ spec:
         livenessProbe:
           exec:
             command:
-              - python
+              - python3
               - -c
               - "exit(0)"
           periodSeconds: 30
@@ -171,41 +170,58 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_client_secret
+          {{- /* OIDC claim mappings — only emitted when the corresponding
+                 value is set. When using OIDC Discovery the app defaults
+                 to the standard OIDC claim names. */}}
+          {{- if .Values.secrets.oidc.oidc_user_id_key }}
           - name: OIDC_USER_ID_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_id_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_email_key }}
           - name: OIDC_USER_EMAIL_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_email_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_name_key }}
           - name: OIDC_USER_NAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_name_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_fname_key }}
           - name: OIDC_USER_FNAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_fname_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_lname_key }}
           - name: OIDC_USER_LNAME_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_lname_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_picture_key }}
           - name: OIDC_USER_PICTURE_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_picture_key
+          {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_provider_key }}
           - name: OIDC_USER_PROVIDER_KEY
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_user_provider_key
+          {{- end }}
           - name: OIDC_ALLOW_INSECURE_HTTP
             value: {{ .Values.secrets.oidc.oidc_allow_insecure_transport | quote }}
           {{- if .Values.secrets.oidc.oidc_jwt_ttl_minutes }}
@@ -265,8 +281,8 @@ spec:
           - name: SCIM_USERNAME_PREFIX
             value: {{ .Values.controlplane.auth.scimUsernamePrefix | quote }}
         {{- end }}
-          - name: MCP_ENABLED
-            value: {{ .Values.controlplane.mcp.enabled | quote }}
+          - name: API_AUTH_ALLOW_QUALYTICS_ISSUER
+            value: {{ .Values.controlplane.auth.allowQualyticsIssuer | quote }}
           - name: APP_DEPLOYMENT_MODE
             value: {{ .Values.global.deploymentMode | quote }}
 #--------------------------------------------------------------------------------

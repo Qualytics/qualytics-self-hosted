@@ -5,36 +5,10 @@
 #--------------------------------------------------------------------------------
 # Dependencies
 #--------------------------------------------------------------------------------
-sparkoperator:
-  enabled: true
-  prometheus:
-    metrics:
-      enable: false
-  controller:
-    nodeSelector: {}
-    #   appNodes: "true"
-    # tolerations:
-    #   - key: appNodes
-    #     operator: Equal
-    #     value: "true"
-    #     effect: NoSchedule
-  webhook:
-    enable: true
-    timeoutSeconds: 30
-    nodeSelector: {}
-    #   appNodes: "true"
-    # tolerations:
-    #   - key: appNodes
-    #     operator: Equal
-    #     value: "true"
-    #     effect: NoSchedule
-  spark:
-    jobNamespaces:
-    - "qualytics" # Set to qualytics target namespace
-    serviceAccount:
-      name: "qualytics-spark"
-  hook:
-    upgradeCrd: false
+# Note: spark-operator is no longer required. The dataplane runs as a native
+# Deployment that invokes spark-submit in client mode and creates executor
+# pods directly via the Kubernetes API. RBAC for executor management lives
+# under `dataplane.rbac` below.
 
 nginx:
   enabled: false
@@ -61,20 +35,6 @@ nginx:
       #   service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: 'true'
       #   service.beta.kubernetes.io/aws-load-balancer-type: nlb
 
-certmanager:
-  enabled: false
-  installCRDs: true
-  config:
-    featureGates:
-      ACMEHTTP01IngressPathTypeExact: false
-  nodeSelector: {}
-  #   appNodes: "true"
-  # tolerations:
-  #   - key: appNodes
-  #     operator: Equal
-  #     value: "true"
-  #     effect: NoSchedule
-
 #--------------------------------------------------------------------------------
 # App Ingresses
 #--------------------------------------------------------------------------------
@@ -90,6 +50,22 @@ ingress:
   # Note: unlike rps limiting (which returns 429), connection limiting always
   # returns 503 (nginx limitation). Set high enough that normal users never hit it.
   maxConnectionsPerIP: 250
+  # Frontend rate limiting: set very high to allow parallel asset loading
+  # (typical SPA loads 50-100 assets at once) while still capping DDoS floods.
+  frontendMaxRequestsPerSecondPerIP: 500
+  frontendMaxConnectionsPerIP: 1000
+  # TLS Secrets — Bring Your Own. Create the referenced `kubernetes.io/tls` Secret
+  # in the release namespace before installing. See docs/ingress-tls.md.
+  tls:
+    # Recommended for new deployments: set `secretName` to a single wildcard
+    # (or SAN) Secret used by both the API and frontend ingresses. When set,
+    # it takes precedence over `apiSecretName` / `frontendSecretName` below.
+    secretName: ""
+    # Per-ingress Secret names. These are the zero-config defaults; existing
+    # installs that already have `api-tls-cert` + `frontend-tls-cert` Secrets
+    # keep working without any values changes.
+    apiSecretName: "api-tls-cert"
+    frontendSecretName: "frontend-tls-cert"
 
 #--------------------------------------------------------------------------------
 # Global values
@@ -109,13 +85,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260408-f4a3d13"
+    controlplaneImageTag: "20260624-1883395"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260408-a346f67"
+    dataplaneImageTag: "20260624-c976791"
 frontendImage:
   image:
-    frontendImageTag: "20260408-8cf07dd"
+    frontendImageTag: "20260624-ca0db6a"
 
 # Storage classes
 storageClass:
@@ -209,13 +185,23 @@ dataplane:
   eventLog: false
   numVolumes: -1
   parallelismScaleFactor: -1
-  maxParallelSyncRequests: 3
+  maxParallelSyncRequests: 4
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
-    - "com.oracle.database.jdbc:ojdbc11:21.19.0.0"
-    - "com.teradata.jdbc:terajdbc:20.00.00.49"
-    - "com.ibm.db2:jcc:12.1.2.0"
+    - "com.teradata.jdbc:terajdbc:20.00.00.56"
+    - "com.ibm.db2:jcc:12.1.4.0"
+  # RBAC for the driver pod to manage executor pods directly. Replaces the
+  # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.
+  rbac:
+    # When true, create the ServiceAccount + Role + RoleBinding. Set to false
+    # to BYO an existing SA in clusters with restricted RBAC.
+    create: true
+    serviceAccountName: "qualytics-spark"
+    # Annotations on the driver ServiceAccount.
+    # For AWS IRSA (IAM Roles for Service Accounts), add:
+    #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
+    serviceAccountAnnotations: {}
   driver:
     cores: 7
     memory: "55000m"
@@ -240,7 +226,7 @@ dataplane:
 # Controlplane configuration
 #--------------------------------------------------------------------------------
 controlplane:
-  replicas: 8
+  replicas: 4
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"
@@ -249,43 +235,44 @@ controlplane:
       memory: "1Gi"
       cpu: "500m"
     limits:
-      memory: "2Gi"
+      memory: "4Gi"
   smtp:
     enabled: true
     server: "email-smtp.us-east-1.amazonaws.com"
-    sender: "no-reply@qualytics.co"
+    sender: "no-reply@qualytics.ai"
     port: "465"
   auth:
     # Enable email-based IDP migration
     migrateIdpByEmail: ""
     # SCIM username prefix
     scimUsernamePrefix: ""
+    # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
+    # Set to false to force all access through OIDC cookie-based auth only.
+    allowQualyticsIssuer: true
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true
-  # Enable Model Context Protocol
-  mcp:
-    enabled: false
 
 controlplaneCmd:
   resources:
     requests:
-      memory: "6Gi"
+      memory: "4Gi"
       cpu: "1000m"
     limits:
-      memory: "12Gi"
+      memory: "6Gi"
 
 #--------------------------------------------------------------------------------
 # Frontend configuration
 #--------------------------------------------------------------------------------
 frontend:
-  replicas: 1
+  replicas: 2
+  disableDownloads: false
   ingress:
     path: "/?(.*)"
     servicePort: "8080"
   resources:
     requests:
-      memory: "256Mi"
+      memory: "128Mi"
       cpu: "200m"
     limits:
       memory: "512Mi"
@@ -297,7 +284,7 @@ postgres:
   enabled: true
   pvc:
     storageSize: "100Gi"
-    backupStorageSize: "50Gi"
+    backupStorageSize: "100Gi"
   image:
     imageUrl: "postgres"
     imageTag: "17"
@@ -310,7 +297,7 @@ postgres:
       memory: "10Gi"
       cpu: "1000m"
     limits:
-      memory: "20Gi"
+      memory: "12Gi"
   cronjobs:
     snapshotter:
       resources:
@@ -327,7 +314,10 @@ postgres:
         limits:
           memory: "1Gi"
   tls:
-    enabled: false  # Requires certmanager.enabled to be true
+    # When true, Postgres mounts the `postgres-tls` Secret at /etc/certs.
+    # Create a `kubernetes.io/tls` Secret named `postgres-tls` in the release
+    # namespace before enabling. See docs/ingress-tls.md.
+    enabled: false
   # PostgreSQL schema used by the controlplane at runtime (sets search_path).
   # Override to use a custom schema instead of the default "public" schema.
   schema: "public"
@@ -336,13 +326,15 @@ postgres:
 # RabbitMQ
 #--------------------------------------------------------------------------------
 rabbitmq:
-  # Set pvc.enabled to false to use emptyDir (node-local disk) instead of PVC
+  # Defaults to emptyDir (node-local disk). RabbitMQ state is recoverable from
+  # the controlplane on restart, so a 10 GiB PVC is overkill for most installs.
+  # Set pvc.enabled to true if you need persistence across pod-host evictions.
   pvc:
-    enabled: true
+    enabled: false
     storageSize: "10Gi"
   image:
     imageUrl: "rabbitmq"
-    imageTag: "4.0-management"
+    imageTag: "4.3-management"
   resources:
     requests:
       memory: "1Gi"
@@ -350,7 +342,10 @@ rabbitmq:
     limits:
       memory: "2Gi"
   tls:
-    enabled: false  # Requires certmanager.enabled to be true
+    # When true, RabbitMQ mounts the `rabbitmq-tls` Secret and serves AMQPS on 5671.
+    # Create a `kubernetes.io/tls` Secret named `rabbitmq-tls` in the release
+    # namespace before enabling. See docs/ingress-tls.md.
+    enabled: false
   enableInbound: false  # When true, opens AMQP-TLS on port 30671 into the cluster
 
 #--------------------------------------------------------------------------------

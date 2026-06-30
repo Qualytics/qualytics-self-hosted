@@ -1,4 +1,4 @@
-# Qualytics Docker Images - v2026.3.27
+# Qualytics Docker Images - v2026.6.20
 
 Complete list of Docker images required for a Qualytics self-hosted deployment. These images must be pulled and uploaded to your private container registry before installation.
 
@@ -8,9 +8,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag |
 |---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260327-439a375` |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260327-c29be62` |
-| Frontend | `qualyticsai/frontend` | `20260327-946efb4` |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260624-1883395` |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260624-c976791` |
+| Frontend | `qualyticsai/frontend` | `20260624-ca0db6a` |
 
 ### Pull commands
 
@@ -19,9 +19,9 @@ An authentication token will be provided separately via secure message.
 ```bash
 docker login -u qualyticsai -p <token>
 
-docker pull qualyticsai/controlplane:20260327-439a375
-docker pull qualyticsai/dataplane:20260327-c29be62
-docker pull qualyticsai/frontend:20260327-946efb4
+docker pull qualyticsai/controlplane:20260624-1883395
+docker pull qualyticsai/dataplane:20260624-c976791
+docker pull qualyticsai/frontend:20260624-ca0db6a
 ```
 
 ## Infrastructure Images
@@ -30,7 +30,7 @@ These are publicly available images used by the Qualytics data tier and utilitie
 
 | Component | Image | Tag | Required |
 |---|---|---|---|
-| RabbitMQ | `rabbitmq` | `4.0-management` | Yes |
+| RabbitMQ | `rabbitmq` | `4.3-management` | Yes |
 | Busybox (init containers) | `busybox` | `latest` | Yes |
 | PostgreSQL | `postgres` | `17` | Only when `postgres.enabled: true` |
 
@@ -39,7 +39,7 @@ These are publicly available images used by the Qualytics data tier and utilitie
 ### Pull commands
 
 ```bash
-docker pull rabbitmq:4.0-management
+docker pull rabbitmq:4.3-management
 docker pull busybox:latest
 
 # Only if using the built-in PostgreSQL (postgres.enabled: true)
@@ -48,46 +48,16 @@ docker pull postgres:17
 
 ## Dependency Chart Images
 
-### Spark Operator (Required)
-
-| Component | Image |
-|---|---|
-| Controller | `ghcr.io/kubeflow/spark-operator/controller:2.4.0` |
-| Kubectl hook | `ghcr.io/kubeflow/spark-operator/kubectl:2.4.0` |
-
-```bash
-docker pull ghcr.io/kubeflow/spark-operator/controller:2.4.0
-docker pull ghcr.io/kubeflow/spark-operator/kubectl:2.4.0
-```
-
 ### Ingress NGINX (Optional - when `nginx.enabled: true`)
 
 | Component | Image |
 |---|---|
-| Controller | `registry.k8s.io/ingress-nginx/controller:v1.14.2` |
-| Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.6` |
+| Controller | `registry.k8s.io/ingress-nginx/controller:v1.15.1` |
+| Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9` |
 
 ```bash
-docker pull registry.k8s.io/ingress-nginx/controller:v1.14.2
-docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.6
-```
-
-### Cert-Manager (Optional - when `certmanager.enabled: true`)
-
-| Component | Image |
-|---|---|
-| Controller | `quay.io/jetstack/cert-manager-controller:v1.19.2` |
-| Webhook | `quay.io/jetstack/cert-manager-webhook:v1.19.2` |
-| CA Injector | `quay.io/jetstack/cert-manager-cainjector:v1.19.2` |
-| ACME Solver | `quay.io/jetstack/cert-manager-acmesolver:v1.19.2` |
-| Startup API Check | `quay.io/jetstack/cert-manager-startupapicheck:v1.19.2` |
-
-```bash
-docker pull quay.io/jetstack/cert-manager-controller:v1.19.2
-docker pull quay.io/jetstack/cert-manager-webhook:v1.19.2
-docker pull quay.io/jetstack/cert-manager-cainjector:v1.19.2
-docker pull quay.io/jetstack/cert-manager-acmesolver:v1.19.2
-docker pull quay.io/jetstack/cert-manager-startupapicheck:v1.19.2
+docker pull registry.k8s.io/ingress-nginx/controller:v1.15.1
+docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
 ```
 
 ## Re-tagging for a Private Registry
@@ -98,22 +68,22 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260327-439a375 $REGISTRY/qualyticsai/controlplane:20260327-439a375
-docker tag qualyticsai/dataplane:20260327-c29be62 $REGISTRY/qualyticsai/dataplane:20260327-c29be62
-docker tag qualyticsai/frontend:20260327-946efb4 $REGISTRY/qualyticsai/frontend:20260327-946efb4
+docker tag qualyticsai/controlplane:20260624-1883395 $REGISTRY/qualyticsai/controlplane:20260624-1883395
+docker tag qualyticsai/dataplane:20260624-c976791 $REGISTRY/qualyticsai/dataplane:20260624-c976791
+docker tag qualyticsai/frontend:20260624-ca0db6a $REGISTRY/qualyticsai/frontend:20260624-ca0db6a
 
 # Infrastructure images
-docker tag rabbitmq:4.0-management $REGISTRY/rabbitmq:4.0-management
+docker tag rabbitmq:4.3-management $REGISTRY/rabbitmq:4.3-management
 docker tag busybox:latest $REGISTRY/busybox:latest
 
 # Only if using the built-in PostgreSQL
 docker tag postgres:17 $REGISTRY/postgres:17
 
 # Push all
-docker push $REGISTRY/qualyticsai/controlplane:20260327-439a375
-docker push $REGISTRY/qualyticsai/dataplane:20260327-c29be62
-docker push $REGISTRY/qualyticsai/frontend:20260327-946efb4
-docker push $REGISTRY/rabbitmq:4.0-management
+docker push $REGISTRY/qualyticsai/controlplane:20260624-1883395
+docker push $REGISTRY/qualyticsai/dataplane:20260624-c976791
+docker push $REGISTRY/qualyticsai/frontend:20260624-ca0db6a
+docker push $REGISTRY/rabbitmq:4.3-management
 docker push $REGISTRY/busybox:latest
 
 # Only if using the built-in PostgreSQL
@@ -135,7 +105,7 @@ kubectl create secret docker-registry regcred -n qualytics \
   --docker-password=<token>
 ```
 
-### 2. Install Qualytics v2026.3.27
+### 2. Install Qualytics v2026.6.20
 
 ```bash
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
@@ -143,7 +113,8 @@ helm repo update
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
-  --version 2026.3.27 \
+  --version 2026.6.20 \
   -f values.yaml \
-  --timeout=20m
+  --wait \
+  --timeout=5m
 ```

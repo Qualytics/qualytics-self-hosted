@@ -121,7 +121,8 @@ output "next_steps" {
        helm upgrade --install qualytics qualytics/qualytics \
          --namespace qualytics \
          -f values.yaml \
-         --timeout=20m
+         --wait \
+         --timeout=5m
 
     For more information, visit:
     https://github.com/qualytics/qualytics-self-hosted

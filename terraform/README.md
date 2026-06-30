@@ -110,7 +110,8 @@ After creating the cluster:
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
      -f values.yaml \
-     --timeout=20m
+     --wait \
+     --timeout=5m
    ```
 
 ## Support

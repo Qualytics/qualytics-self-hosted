@@ -43,21 +43,6 @@ spec:
       name: postgres
       targetPort: 5432
 
-{{- if and .Values.certmanager.enabled .Values.postgres.tls.enabled }}
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: postgres-cert
-spec:
-  secretName: postgres-tls
-  dnsNames:
-  - {{ tpl .Values.global.dnsRecord . | quote }}
-  issuerRef:
-    name: letsencrypt
-    kind: ClusterIssuer
-{{- end }}
-
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -156,7 +141,7 @@ spec:
           - log_connections=off
           - -c
           - log_disconnections=off
-          {{- if and .Values.certmanager.enabled .Values.postgres.tls.enabled }}
+          {{- if .Values.postgres.tls.enabled }}
           - -c
           - ssl=on
           - -c
@@ -189,7 +174,7 @@ spec:
           mountPath: /mnt/data
         - name: pgshm
           mountPath: /dev/shm
-        {{- if and .Values.certmanager.enabled .Values.postgres.tls.enabled }}
+        {{- if .Values.postgres.tls.enabled }}
         - name: postgres-tls
           mountPath: /etc/postgres/tls
           readOnly: true
@@ -202,7 +187,7 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: "4Gi"
-        {{- if and .Values.certmanager.enabled .Values.postgres.tls.enabled }}
+        {{- if .Values.postgres.tls.enabled }}
         - name: postgres-tls
           secret:
             secretName: postgres-tls

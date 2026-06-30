@@ -1,243 +1,415 @@
 {{- if and ( eq .Values.dataplane.enabled true ) ( eq .Values.global.deploymentMode "kubernetes" ) }}
-apiVersion: "sparkoperator.k8s.io/v1beta2"
-kind: SparkApplication
+{{- if .Values.dataplane.rbac.create }}
+# Driver ServiceAccount + Role + RoleBinding. Replaces the bundle the
+# spark-operator chart used to install (templates/spark/serviceaccount.yaml,
+# templates/spark/rbac.yaml). The driver runs in client mode and creates /
+# lists / deletes executor pods directly via the Kubernetes API.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.dataplane.rbac.serviceAccountName }}
+  labels:
+    app: {{ .Release.Name }}-spark
+  {{- with .Values.dataplane.rbac.serviceAccountAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.dataplane.rbac.serviceAccountName }}
+  labels:
+    app: {{ .Release.Name }}-spark
+rules:
+- apiGroups: [""]
+  resources:
+  - pods
+  - configmaps
+  - persistentvolumeclaims
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+  - deletecollection
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.dataplane.rbac.serviceAccountName }}
+  labels:
+    app: {{ .Release.Name }}-spark
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.dataplane.rbac.serviceAccountName }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ .Values.dataplane.rbac.serviceAccountName }}
+{{- end }}
+---
+# Executor pod template, mounted into the driver and referenced via
+# --conf spark.kubernetes.executor.podTemplateFile. Spark merges spark-submit
+# settings (image, cores, memory) on top — node scheduling, kerberos volumes
+# and env, scratch volumes, and the init container have to land here. Container
+# name `spark-kubernetes-executor` is a magic string matched by the
+# spark.kubernetes.executor.podTemplateContainerName conf; renaming it
+# silently breaks the merge.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-spark-executor-template
+data:
+  executor-template.yaml: |
+    apiVersion: v1
+    kind: Pod
+    spec:
+      imagePullSecrets:
+        - name: regcred
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 120
+      {{- if .Values.executorNodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.executorNodeSelector | nindent 8 }}
+      {{- end }}
+      {{- if .Values.tolerations.executorNodeTolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 8 }}
+      {{- end }}
+      {{- if or (gt (int .Values.dataplane.numVolumes) 0) (eq .Values.dataplane.kerberos.enabled true) }}
+      volumes:
+        {{- if gt (int .Values.dataplane.numVolumes) 0 }}
+        {{- range $i := until (int .Values.dataplane.numVolumes) }}
+        - name: "spark-local-dir-{{ add1 $i }}"
+          {{- if eq $.Values.global.platform "aws" }}
+          hostPath:
+            path: "/mnt/disks/nvme{{ add1 $i }}n1/spark-local-dir-{{ add1 $i }}"
+          {{- else if eq $.Values.global.platform "gcp" }}
+          hostPath:
+            path: "/mnt/disks/ssd{{ $i }}/spark-local-dir-{{ add1 $i }}"
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        {{- if eq .Values.dataplane.kerberos.enabled true }}
+        - name: krb5-conf
+          secret:
+            items:
+              - key: krb5.conf
+                path: krb5.conf
+            secretName: krb5-conf
+        - name: keytab
+          secret:
+            items:
+              - key: app.keytab
+                path: {{ base .Values.dataplane.kerberos.keytab }}
+            secretName: hive-client-keytab
+        {{- end }}
+      {{- end }}
+      {{- if gt (int .Values.dataplane.numVolumes) 0 }}
+      initContainers:
+        - name: init-spark-local-dir
+          image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            {{- range $i := until (int .Values.dataplane.numVolumes) }}
+            - name: "spark-local-dir-{{ add1 $i }}"
+              mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
+            {{- end }}
+      {{- end }}
+      # Always emit containers stanza; Spark NPEs loading a template without it.
+      containers:
+        - name: spark-kubernetes-executor
+          {{- if or (gt (int .Values.dataplane.numVolumes) 0) (eq .Values.dataplane.kerberos.enabled true) }}
+          volumeMounts:
+            {{- if gt (int .Values.dataplane.numVolumes) 0 }}
+            {{- range $i := until (int .Values.dataplane.numVolumes) }}
+            - name: "spark-local-dir-{{ add1 $i }}"
+              mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
+            {{- end }}
+            {{- end }}
+            {{- if eq .Values.dataplane.kerberos.enabled true }}
+            - name: krb5-conf
+              mountPath: {{ .Values.dataplane.kerberos.krb5 }}
+              subPath: krb5.conf
+            - name: keytab
+              mountPath: {{ .Values.dataplane.kerberos.keytab }}
+              subPath: {{ base .Values.dataplane.kerberos.keytab }}
+            {{- end }}
+          {{- end }}
+          {{- if eq .Values.dataplane.kerberos.enabled true }}
+          env:
+            - name: KRB5_CONFIG
+              value: {{ .Values.dataplane.kerberos.krb5 | quote }}
+            - name: KRB_KEYTAB
+              value: {{ .Values.dataplane.kerberos.keytab | quote }}
+            - name: KRB_PRINCIPAL
+              value: {{ .Values.dataplane.kerberos.principal | quote }}
+            - name: SPARK_JAVA_OPT_998
+              value: "-Djava.security.krb5.conf={{ .Values.dataplane.kerberos.krb5 }}"
+            - name: SPARK_JAVA_OPT_999
+              value: "-Djavax.security.auth.useSubjectCredsOnly=false"
+          {{- end }}
+---
+# Headless Service for driver↔executor RPC. Executors connect back to the
+# driver via spark.driver.host (= this Service's DNS name) on spark.driver.port.
+# Headless (clusterIP: None) so DNS resolves directly to the driver pod IP.
+# publishNotReadyAddresses: defensive insurance (QUA-1990). The driver intentionally
+# runs liveness-only with no readiness gating, so it is Ready almost immediately and
+# this flag is not strictly required today. We keep it so the executor↔driver DNS
+# record survives even a brief not-ready window — and so a future readiness/startup
+# probe can never silently re-introduce the crash-loop (NotReady driver omitted from
+# the headless Service → executors can't connect → max executor failures).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-spark-driver
+  labels:
+    app: {{ .Release.Name }}-spark
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: {{ .Release.Name }}-spark
+    spark-role: driver
+  ports:
+    - name: driver-rpc
+      port: 7078
+      protocol: TCP
+    - name: blockmanager
+      port: 7079
+      protocol: TCP
+    - name: ui
+      port: 4040
+      protocol: TCP
+---
+# Driver Deployment. Invokes the dataplane image's `/opt/entrypoint.sh driver`
+# so its setup (SPARK_CLASSPATH, LD_LIBRARY_PATH, kerberos kinit + renewal
+# daemon, libnss_wrapper passwd entry, gosu spark) runs before spark-submit
+# starts. The entrypoint adds `--deploy-mode client` and
+# `--conf spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS` itself, so we
+# don't pass either; we just set SPARK_DRIVER_BIND_ADDRESS via the downward API.
+# Replicas stays at 1 because dynamic allocation lives inside this single
+# driver and isn't horizontally scalable.
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: {{ .Release.Name }}-spark
-  annotations:
-    "helm.sh/hook": post-install,post-upgrade
 spec:
-  type: Scala
-  mode: cluster
-  image: "{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}"
-  imagePullPolicy: IfNotPresent
-  imagePullSecrets:
-    - regcred
-  restartPolicy:
-    type: Always
-    onFailureRetries: 1000
-    onFailureRetryInterval: 10
-    onSubmissionFailureRetries: 1000
-    onSubmissionFailureRetryInterval: 10
-  sparkVersion: {{ .Values.dataplane.sparkVersion }}
-  mainClass: io.qualytics.dataplane.SparkMothership
-  mainApplicationFile: "local:///opt/spark/jars/qualytics-dataplane.jar"
-  {{- if .Values.dataplane.extraPackages }}
-  deps:
-    packages:
-    {{- range .Values.dataplane.extraPackages }}
-      - {{ . | quote }}
-    {{- end }}
-  {{- end }}
-  sparkConf:
-    spark.kubernetes.executor.podNamePrefix: "{{ .Release.Name }}-spark"
-    spark.eventLog.enabled: {{ .Values.dataplane.eventLog | quote }}
-    spark.kubernetes.memoryOverheadFactor: {{ .Values.dataplane.memoryOverheadFactor | quote }}
-    # Tweak kubernetes timeouts
-    spark.kubernetes.submission.connectionTimeout: "480000"
-    spark.kubernetes.submission.requestTimeout: "480000"
-    spark.kubernetes.driver.connectionTimeout: "480000"
-    spark.kubernetes.driver.requestTimeout: "480000"
-    # Spot resilience optimizations
-    spark.dynamicAllocation.enabled: "true"
-    spark.dynamicAllocation.shuffleTracking.enabled: "true"
-    spark.dynamicAllocation.shuffleTracking.timeout: "60s"
-    spark.dynamicAllocation.executorIdleTimeout: "300s"
-    spark.dynamicAllocation.cachedExecutorIdleTimeout: "300s"
-    spark.dynamicAllocation.sustainedSchedulerBacklogTimeout: "5s"
-    spark.dynamicAllocation.schedulerBacklogTimeout: "1s"
-    spark.jars.ivy: "/tmp"
-  {{- if or (gt ( .Values.dataplane.numVolumes | int ) 0) (eq .Values.dataplane.kerberos.enabled true) }}
-  volumes:
-    {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
-    {{- range $i := until (int .Values.dataplane.numVolumes) }}
-    - name: "spark-local-dir-{{ add1 $i }}"
-      {{- if ( eq $.Values.global.platform "aws" ) }}
-      hostPath:
-        path: "/mnt/disks/nvme{{ add1 $i }}n1/spark-local-dir-{{ add1 $i }}"
-      {{- else if ( eq $.Values.global.platform "gcp" ) }}
-      hostPath:
-        path: "/mnt/disks/ssd{{ $i }}/spark-local-dir-{{ add1 $i }}"
-      {{- else }}
-      emptyDir: {}
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-spark
+      spark-role: driver
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-spark
+        spark-role: driver
+        version: {{ .Values.dataplane.sparkVersion }}
+    spec:
+      serviceAccountName: {{ .Values.dataplane.rbac.serviceAccountName }}
+      imagePullSecrets:
+        - name: regcred
+      # QUA-1990: 60s gives the mothership's SIGTERM hook time to stop consumers and drain
+      # briefly (the previous 10s SIGKILLed it almost immediately, making the graceful-shutdown
+      # machinery dead code in k8s mode).
+      terminationGracePeriodSeconds: 60
+      {{- if .Values.driverNodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.driverNodeSelector | nindent 8 }}
       {{- end }}
-    {{- end }}
-    {{- end }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    - name: krb5-conf
-      secret:
-        items:
-          - key: krb5.conf
-            path: krb5.conf
-        secretName: krb5-conf
-    - name: keytab
-      secret:
-        items:
-          - key: app.keytab
-            path: {{ base .Values.dataplane.kerberos.keytab }}
-        secretName: hive-client-keytab
-    {{- end }}
-  {{- end }}
-  driver:
-{{- $resources := .Values.dataplane -}}
-    {{- with $resources.driver }}
-    cores: {{ .cores }}
-    memory: {{ .memory }}
-    {{- end }}
-    {{- if .Values.driverNodeSelector }}
-    nodeSelector:
-      {{- toYaml .Values.driverNodeSelector | nindent 6 }}
-    {{- end }}
-    {{- if .Values.tolerations.driverNodeTolerations }}
-    tolerations:
-      {{- toYaml .Values.tolerations.driverNodeTolerations | nindent 6 }}
-    {{- end }}
-    javaOptions:
-      "-Divy.cache.dir=/tmp
-       -Divy.home=/tmp
-       -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties
-       -Dconfig.resource=prod.conf
-       -Djava.library.path=/opt/spark/libs/
-       -Duser.timezone=UTC
-       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=35"
-#--------------------------------------------------------------------------------
-# Environments that require a proxy (Http, Socks, etc..) for egress
-#--------------------------------------------------------------------------------
-# The simplest solution is to solve for this outside of Qualytics. For example, using
-#   an istio egress configured for your proxy or another similar gateway device.
-#
-# However, if proxy-aware applications are required, the javaOptions string above can be
-#  updated to hold the relevant proxy information according to the JRE v17 spec:
-#    https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/net/doc-files/net-properties.html
-#
-#  If additionally, authentication is required for an http(s) proxy, use the following additional
-#   properties not documented on the page linked above:
-#  -Dhttps.proxyUser=your_username
-#  -Dhttps.proxyPassword=your_password
-#  -Dhttp.proxyUser=your_username
-#  -Dhttp.proxyPassword=your_password
-#
-    env:
-      - name: MOTHERSHIP_RABBIT_HOST
-        value: "{{ .Release.Name }}-rabbitmq"
-      {{- if eq .Values.rabbitmq.tls.enabled false }}
-      - name: MOTHERSHIP_RABBIT_PORT
-        value: "5672"
-      - name: MOTHERSHIP_RABBIT_USE_TLS
-        value: "false"
+      {{- if .Values.tolerations.driverNodeTolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations.driverNodeTolerations | nindent 8 }}
       {{- end }}
-      - name: MOTHERSHIP_RABBIT_USER
-        value: "user"
-      - name: MOTHERSHIP_RABBIT_PASS
-        valueFrom:
-          secretKeyRef:
-            name: qualytics-creds
-            key: rabbitmq_password
-    {{- if gt ( .Values.dataplane.parallelismScaleFactor | float64 ) 0.0 }}
-      - name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
-        value: {{ .Values.dataplane.parallelismScaleFactor | quote }}
-    {{- end }}
-      - name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
-        value: {{ .Values.dataplane.maxParallelSyncRequests | quote }}
-      - name: MOTHERSHIP_MAX_EXECUTORS
-        value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
-      - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
-        value: {{ .Values.dataplane.executor.cores | int | quote  }}
-      - name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
-        value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
-      - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
-        value: {{ .Values.dataplane.libpostalDataPath | quote  }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-      - name: MOTHERSHIP_SPARK_KRB_KRB5
-        value: {{ .Values.dataplane.kerberos.krb5 | quote  }}
-      - name: MOTHERSHIP_SPARK_KRB_KEYTAB
-        value: {{ .Values.dataplane.kerberos.keytab | quote  }}
-      - name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
-        value: {{ .Values.dataplane.kerberos.principal | quote  }}
-      - name: KERBEROS_DAEMON_ENABLED
-        value: "false"
-    {{- end }}
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    volumeMounts:
-      - name: krb5-conf
-        mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-        subPath: krb5.conf
-      - name: keytab
-        mountPath: {{ .Values.dataplane.kerberos.keytab }}
-        subPath: {{ base .Values.dataplane.kerberos.keytab }}
-    {{- end }}
-    labels:
-      version: {{ .Values.dataplane.sparkVersion }}
-    serviceAccount: {{ .Values.sparkoperator.spark.serviceAccount.name }}
-  dynamicAllocation:
-    {{- with $resources.dynamicAllocation }}
-    enabled: true
-    initialExecutors: {{ .initialExecutors }}
-    minExecutors: {{ .minExecutors }}
-    maxExecutors: {{ .maxExecutors }}
-    {{- end }}
-  executor:
-    {{- with $resources.executor }}
-    instances: {{ .instances }}
-    cores: {{ .cores }}
-    memory: {{ .memory }}
-    {{- end }}
-    javaOptions:
-      "-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties
-       -Djava.library.path=/opt/spark/libs/
-       -Duser.timezone=UTC
-       -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=35"
-    {{- if eq .Values.dataplane.kerberos.enabled true }}
-    env:
-      - name: KRB5_CONFIG
-        value: {{ .Values.dataplane.kerberos.krb5 | quote }}
-      - name: KRB_KEYTAB
-        value: {{ .Values.dataplane.kerberos.keytab | quote }}
-      - name: KRB_PRINCIPAL
-        value: {{ .Values.dataplane.kerberos.principal | quote }}
-      - name: SPARK_JAVA_OPT_998
-        value: "-Djava.security.krb5.conf={{ .Values.dataplane.kerberos.krb5 }}"
-      - name: SPARK_JAVA_OPT_999
-        value: "-Djavax.security.auth.useSubjectCredsOnly=false"
-    {{- end }}
-    labels:
-      version: {{ .Values.dataplane.sparkVersion }}
-    {{- if .Values.executorNodeSelector }}
-    nodeSelector:
-      {{- toYaml .Values.executorNodeSelector | nindent 6 }}
-    {{- end }}
-    {{- if .Values.tolerations.executorNodeTolerations }}
-    tolerations:
-      {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 6 }}
-    {{- end }}
-    {{- if or (gt ( .Values.dataplane.numVolumes | int ) 0) (eq .Values.dataplane.kerberos.enabled true) }}
-    volumeMounts:
-      {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
-      {{- range $i := until (int .Values.dataplane.numVolumes) }}
-      - name: "spark-local-dir-{{ add1 $i }}"
-        mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
-      {{- end }}
-      {{- end }}
-      {{- if eq .Values.dataplane.kerberos.enabled true }}
-      - name: krb5-conf
-        mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-        subPath: krb5.conf
-      - name: keytab
-        mountPath: {{ .Values.dataplane.kerberos.keytab }}
-        subPath: {{ base .Values.dataplane.kerberos.keytab }}
-      {{- end }}
-    {{- end }}
-    {{- if gt ( .Values.dataplane.numVolumes | int ) 0 }}
-    initContainers:
-    - name: init-spark-local-dir
-      image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
-      imagePullPolicy: IfNotPresent
-      command: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
-      securityContext:
-        runAsUser: 0
-      volumeMounts:
-      {{- range $i := until (int .Values.dataplane.numVolumes) }}
-      - name: "spark-local-dir-{{ add1 $i }}"
-        mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
-      {{- end }}
-    {{- end }}
+      volumes:
+        - name: executor-pod-template
+          configMap:
+            name: {{ .Release.Name }}-spark-executor-template
+        {{- if eq .Values.dataplane.kerberos.enabled true }}
+        - name: krb5-conf
+          secret:
+            items:
+              - key: krb5.conf
+                path: krb5.conf
+            secretName: krb5-conf
+        - name: keytab
+          secret:
+            items:
+              - key: app.keytab
+                path: {{ base .Values.dataplane.kerberos.keytab }}
+            secretName: hive-client-keytab
+        {{- end }}
+      containers:
+        - name: spark-kubernetes-driver
+          image: "{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              exec /opt/entrypoint.sh driver \
+                --master k8s://https://kubernetes.default.svc:443 \
+                --class io.qualytics.dataplane.SparkMothership \
+                --name {{ .Release.Name }}-spark \
+                {{- if .Values.dataplane.extraPackages }}
+                --packages {{ join "," .Values.dataplane.extraPackages }} \
+                {{- end }}
+                --conf spark.kubernetes.namespace={{ .Release.Namespace }} \
+                --conf spark.kubernetes.driver.pod.name=$POD_NAME \
+                --conf spark.kubernetes.container.image="{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}" \
+                --conf spark.kubernetes.container.image.pullPolicy=IfNotPresent \
+                --conf spark.kubernetes.container.image.pullSecrets=regcred \
+                --conf spark.kubernetes.authenticate.driver.serviceAccountName={{ .Values.dataplane.rbac.serviceAccountName }} \
+                --conf spark.driver.host={{ .Release.Name }}-spark-driver.{{ .Release.Namespace }}.svc.cluster.local \
+                --conf spark.driver.port=7078 \
+                --conf spark.driver.blockManager.port=7079 \
+                --conf spark.driver.cores={{ .Values.dataplane.driver.cores }} \
+                --conf spark.driver.memory={{ .Values.dataplane.driver.memory }} \
+                --conf spark.executor.instances={{ .Values.dataplane.executor.instances }} \
+                --conf spark.executor.cores={{ .Values.dataplane.executor.cores }} \
+                --conf spark.executor.memory={{ .Values.dataplane.executor.memory }} \
+                --conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml \
+                --conf spark.kubernetes.executor.podTemplateContainerName=spark-kubernetes-executor \
+                --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-spark-$(date +%s) \
+                --conf spark.kubernetes.memoryOverheadFactor={{ .Values.dataplane.memoryOverheadFactor }} \
+                --conf spark.kubernetes.submission.connectionTimeout=480000 \
+                --conf spark.kubernetes.submission.requestTimeout=480000 \
+                --conf spark.kubernetes.driver.connectionTimeout=480000 \
+                --conf spark.kubernetes.driver.requestTimeout=480000 \
+                --conf spark.dynamicAllocation.enabled={{ .Values.dataplane.dynamicAllocation.enabled }} \
+                --conf spark.dynamicAllocation.shuffleTracking.enabled=true \
+                --conf spark.dynamicAllocation.shuffleTracking.timeout=600s \
+                --conf spark.dynamicAllocation.executorIdleTimeout=300s \
+                --conf spark.dynamicAllocation.cachedExecutorIdleTimeout=300s \
+                --conf spark.dynamicAllocation.sustainedSchedulerBacklogTimeout=5s \
+                --conf spark.dynamicAllocation.schedulerBacklogTimeout=1s \
+                --conf spark.dynamicAllocation.initialExecutors={{ .Values.dataplane.dynamicAllocation.initialExecutors }} \
+                --conf spark.dynamicAllocation.minExecutors={{ .Values.dataplane.dynamicAllocation.minExecutors }} \
+                --conf spark.dynamicAllocation.maxExecutors={{ .Values.dataplane.dynamicAllocation.maxExecutors }} \
+                --conf spark.decommission.enabled=true \
+                --conf spark.storage.decommission.enabled=true \
+                --conf spark.storage.decommission.shuffleBlocks.enabled=true \
+                --conf spark.storage.decommission.rddBlocks.enabled=true \
+                --conf spark.executor.decommission.killInterval=120 \
+                --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
+                --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
+                --conf spark.jars.ivy=/tmp \
+                {{- if gt (int .Values.dataplane.numVolumes) 0 }}
+                --conf spark.local.dir={{ include "qualytics.spark.localDirs" . }} \
+                {{- end }}
+                --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Dconfig.resource=prod.conf -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
+                --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
+                --conf spark.kubernetes.driver.label.spark-role=driver \
+                local:///opt/spark/jars/qualytics-dataplane.jar
+          ports:
+            - name: driver-rpc
+              containerPort: 7078
+            - name: blockmanager
+              containerPort: 7079
+            - name: ui
+              containerPort: 4040
+          # QUA-1990: liveness-only self-healing for a deaf-but-alive JVM. The mothership refreshes
+          # /tmp/dataplane-heartbeat every 2 min while its AMQP connection + main channel + control
+          # lane are healthy (SparkMothership.writeLivenessHeartbeat); if it wedges, the file goes
+          # stale (>8 min) and the kubelet restarts the pod. Deliberately NO startup/readiness probe:
+          # the driver must stay Ready so the headless Service keeps publishing it to executors —
+          # gating readiness on the heartbeat deadlocks startup (executors can't connect → no Spark
+          # → no heartbeat → never Ready). initialDelaySeconds (720s) covers worst-case boot (Spark
+          # init + cold executor scale-up + controlplane handshake, after which the first heartbeat
+          # lands) plus ~2 heartbeat cycles of slack, so a slow-but-healthy start on a cold node is
+          # never killed before the first heartbeat is written. SREs: raise this if boots regularly
+          # approach the ceiling.
+          livenessProbe:
+            exec:
+              command: ["/bin/sh", "-c", "find /tmp/dataplane-heartbeat -mmin -8 | grep -q ."]
+            initialDelaySeconds: 720
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            # The entrypoint reads SPARK_DRIVER_BIND_ADDRESS to construct
+            # `--conf spark.driver.bindAddress=...` and propagate it to
+            # executors via spark.executorEnv.SPARK_DRIVER_POD_IP.
+            - name: SPARK_DRIVER_BIND_ADDRESS
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: MOTHERSHIP_RABBIT_HOST
+              value: "{{ .Release.Name }}-rabbitmq"
+            {{- if eq .Values.rabbitmq.tls.enabled false }}
+            - name: MOTHERSHIP_RABBIT_PORT
+              value: "5672"
+            - name: MOTHERSHIP_RABBIT_USE_TLS
+              value: "false"
+            {{- end }}
+            - name: MOTHERSHIP_RABBIT_USER
+              value: "user"
+            - name: MOTHERSHIP_RABBIT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: qualytics-creds
+                  key: rabbitmq_password
+            {{- if gt (.Values.dataplane.parallelismScaleFactor | float64) 0.0 }}
+            - name: MOTHERSHIP_PARALLELISM_SCALE_FACTOR
+              value: {{ .Values.dataplane.parallelismScaleFactor | quote }}
+            {{- end }}
+            - name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
+              value: {{ .Values.dataplane.maxParallelSyncRequests | quote }}
+            - name: MOTHERSHIP_MAX_EXECUTORS
+              value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
+            - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
+              value: {{ .Values.dataplane.executor.cores | int | quote }}
+            - name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
+              value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
+            - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
+              value: {{ .Values.dataplane.libpostalDataPath | quote }}
+            {{- if eq .Values.dataplane.kerberos.enabled true }}
+            - name: MOTHERSHIP_SPARK_KRB_KRB5
+              value: {{ .Values.dataplane.kerberos.krb5 | quote }}
+            - name: MOTHERSHIP_SPARK_KRB_KEYTAB
+              value: {{ .Values.dataplane.kerberos.keytab | quote }}
+            - name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
+              value: {{ .Values.dataplane.kerberos.principal | quote }}
+            - name: KERBEROS_DAEMON_ENABLED
+              value: "false"
+            {{- end }}
+          volumeMounts:
+            - name: executor-pod-template
+              mountPath: /opt/spark/conf/executor-template.yaml
+              subPath: executor-template.yaml
+            {{- if eq .Values.dataplane.kerberos.enabled true }}
+            - name: krb5-conf
+              mountPath: {{ .Values.dataplane.kerberos.krb5 }}
+              subPath: krb5.conf
+            - name: keytab
+              mountPath: {{ .Values.dataplane.kerberos.keytab }}
+              subPath: {{ base .Values.dataplane.kerberos.keytab }}
+            {{- end }}
+          resources:
+            requests:
+              cpu: "{{ .Values.dataplane.driver.cores }}"
+              memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
+            limits:
+              memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
 {{- end }}

@@ -99,10 +99,10 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: 2Gi
+          value: 4Gi
         documentIndex: 0
 
-  - it: should have default memory limit at 2x requests for API
+  - it: should have default memory limits for API
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
@@ -110,7 +110,7 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: 2Gi
+          value: 4Gi
         documentIndex: 0
 
   - it: should NOT set CPU limits on API
@@ -246,37 +246,6 @@ tests:
             name: SMTP_SENDER_EMAIL
         documentIndex: 0
 
-  - it: should set MCP_ENABLED to false by default
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MCP_ENABLED
-            value: "false"
-        documentIndex: 0
-
-  - it: should set MCP_ENABLED to true when enabled
-    set:
-      controlplane.mcp.enabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MCP_ENABLED
-            value: "true"
-        documentIndex: 0
-
-  - it: should set MCP_ENABLED to false when explicitly disabled
-    set:
-      controlplane.mcp.enabled: false
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MCP_ENABLED
-            value: "false"
-        documentIndex: 0
-
   # OIDC token auth method
   - it: should include OIDC_TOKEN_AUTH_METHOD when set
     set:
@@ -339,6 +308,26 @@ tests:
               secretKeyRef:
                 name: qualytics-creds
                 key: auth0_spa_client_id
+        documentIndex: 0
+
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
+            value: "true"
+        documentIndex: 0
+
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to false when configured
+    set:
+      controlplane.auth.allowQualyticsIssuer: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
+            value: "false"
         documentIndex: 0
 
   - it: should set APP_DEPLOYMENT_MODE to kubernetes by default

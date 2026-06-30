@@ -77,7 +77,8 @@ This Terraform configuration creates an Amazon EKS cluster configured for deploy
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
      -f values.yaml \
-     --timeout=20m
+     --wait \
+     --timeout=5m
    ```
 
 ## Instance Type Recommendations

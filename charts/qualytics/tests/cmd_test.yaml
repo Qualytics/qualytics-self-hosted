@@ -23,11 +23,11 @@ tests:
         documentIndex: 0
 
   # Health probes
-  - it: should have startup probe checking Python process
+  - it: should have startup probe checking python3 process
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
@@ -46,7 +46,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
@@ -61,11 +61,11 @@ tests:
           value: 3
         documentIndex: 0
 
-  - it: should have liveness probe checking Python process not dependencies
+  - it: should have liveness probe checking python3 process not dependencies
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
-          value: python
+          value: python3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
@@ -108,11 +108,14 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].command[0]
-          value: "/bin/bash"
+          value: "python3"
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].args[0]
-          value: "python /app/hub_cmd.py"
+          path: spec.template.spec.containers[0].command[1]
+          value: "/app/hub_cmd.py"
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.containers[0].args
         documentIndex: 0
 
   # Resource configuration
@@ -120,7 +123,7 @@ tests:
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "6Gi"
+          value: "4Gi"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.requests.cpu
@@ -128,18 +131,18 @@ tests:
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: "12Gi"
+          value: "6Gi"
         documentIndex: 0
 
-  - it: should have default memory limit at 2x requests for CMD
+  - it: should have default memory limits for CMD
     asserts:
       - equal:
           path: spec.template.spec.containers[0].resources.requests.memory
-          value: "6Gi"
+          value: "4Gi"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
-          value: "12Gi"
+          value: "6Gi"
         documentIndex: 0
 
   - it: should NOT set CPU limits on CMD
@@ -391,35 +394,23 @@ tests:
             name: regcred
         documentIndex: 0
 
-  # MCP configuration
-  - it: should set MCP_ENABLED to false by default
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_ENABLED
-            value: "false"
-        documentIndex: 0
-
-  - it: should set MCP_ENABLED to true when enabled
-    set:
-      controlplane.mcp.enabled: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MCP_ENABLED
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
             value: "true"
         documentIndex: 0
 
-  - it: should set MCP_ENABLED to false when explicitly disabled
+  - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to false when configured
     set:
-      controlplane.mcp.enabled: false
+      controlplane.auth.allowQualyticsIssuer: false
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: MCP_ENABLED
+            name: API_AUTH_ALLOW_QUALYTICS_ISSUER
             value: "false"
         documentIndex: 0
 
