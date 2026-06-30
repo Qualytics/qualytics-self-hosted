@@ -124,6 +124,14 @@ controlplane:
     verifyTLSCertificates: true
 
 #--------------------------------------------------------------------------------
+# Frontend Configuration (OPTIONAL)
+#--------------------------------------------------------------------------------
+frontend:
+  # Set true to hide all file-download UI controls (exports, source records,
+  # token download). Maps to VITE_QUALYTICS_DISABLE_DOWNLOADS.
+  disableDownloads: false
+
+#--------------------------------------------------------------------------------
 # Dataplane configuration
 #--------------------------------------------------------------------------------
 dataplane:

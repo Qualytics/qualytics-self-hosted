@@ -120,6 +120,39 @@ tests:
             value: "AUTH0"
         documentIndex: 0
 
+  - it: should disable downloads by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VITE_QUALYTICS_DISABLE_DOWNLOADS
+            value: "false"
+        documentIndex: 0
+
+  - it: should enable disabling downloads when set
+    set:
+      frontend.disableDownloads: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VITE_QUALYTICS_DISABLE_DOWNLOADS
+            value: "true"
+        documentIndex: 0
+
+  # Independent of auth type — set for OIDC deployments too
+  - it: should set disable downloads regardless of OIDC auth type
+    set:
+      global.authType: "OIDC"
+      frontend.disableDownloads: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VITE_QUALYTICS_DISABLE_DOWNLOADS
+            value: "true"
+        documentIndex: 0
+
   # Image pull policy
   - it: should use default image pull policy
     asserts:
