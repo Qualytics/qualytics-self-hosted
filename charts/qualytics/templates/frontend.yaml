@@ -63,6 +63,8 @@ spec:
             value: {{ tpl .Values.global.dnsRecord . | quote }}
           - name: VITE_QUALYTICS_API_LOCATION
             value: "https://$(VITE_QUALYTICS_DNS)/api"
+          - name: VITE_QUALYTICS_DISABLE_DOWNLOADS
+            value: {{ .Values.frontend.disableDownloads | quote }}
           {{- if ( eq .Values.global.authType "OIDC" ) }}
           - name: VITE_QUALYTICS_AUTH_PROVIDER
             value: OIDC

@@ -266,6 +266,7 @@ controlplaneCmd:
 #--------------------------------------------------------------------------------
 frontend:
   replicas: 2
+  disableDownloads: false
   ingress:
     path: "/?(.*)"
     servicePort: "8080"
