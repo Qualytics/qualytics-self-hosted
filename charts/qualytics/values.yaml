@@ -266,8 +266,6 @@ controlplaneCmd:
 #--------------------------------------------------------------------------------
 frontend:
   replicas: 2
-  # Hide all file-download UI controls (exports, source records, token download).
-  # Maps to VITE_QUALYTICS_DISABLE_DOWNLOADS in the frontend.
   disableDownloads: false
   ingress:
     path: "/?(.*)"
