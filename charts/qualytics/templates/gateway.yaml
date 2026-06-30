@@ -1,0 +1,309 @@
+{{/*
+=============================================================================
+Envoy Gateway (Gateway API) ingress path — alternative to templates/ingress.yaml
+(nginx). Rendered only when gateway.enabled=true. Self-contained: reads only
+gateway.* (no ingress.* / nginx.* reuse).
+
+PREREQUISITE: the Envoy Gateway controller + CRDs + GatewayClass must already exist
+(installed separately, e.g. a Terraform add-on). The chart renders only the routing
+CRs below against the pre-existing CRDs — it does NOT install the controller.
+
+Security response headers, X-Original-URI, gzip+brotli compression, retries and
+3600s timeouts are applied unconditionally here (the nginx path bakes the
+equivalents into its Ingress annotations).
+
+  Core/GA (gateway.networking.k8s.io/v1): Gateway, HTTPRoute, TLS Terminate,
+    RequestRedirect, Request/ResponseHeaderModifier, HTTPRoute.timeouts.
+  EXPERIMENTAL (gateway.envoyproxy.io/v1alpha1): BackendTrafficPolicy,
+    SecurityPolicy, EnvoyProxy — VALIDATE on a live Envoy Gateway >= v1.8.
+
+See docs/gateway-migration.md for the full nginx->EG migration matrix.
+=============================================================================
+*/}}
+
+{{/* Mutual exclusion: pick exactly one ingress path. */}}
+{{- if and .Values.ingress.enabled .Values.gateway.enabled }}
+{{- fail "Enable EITHER ingress.enabled (nginx) OR gateway.enabled (Envoy Gateway), not both. When using Envoy Gateway also set nginx.enabled=false." }}
+{{- end }}
+
+{{- if .Values.gateway.enabled }}
+{{- $host := tpl .Values.global.dnsRecord . }}
+{{- $tlsSecret := required "gateway.tls.secretName is required when gateway.enabled=true." .Values.gateway.tls.secretName }}
+{{- $gwClass := required "gateway.className is required when gateway.enabled=true." .Values.gateway.className }}
+{{- $apiSvc := printf "%s-api-service" .Release.Name }}
+{{- $frontendSvc := printf "%s-frontend-service" .Release.Name }}
+{{- $apiPort := .Values.controlplane.ingress.servicePort | int }}
+{{- $frontendPort := .Values.frontend.ingress.servicePort | int }}
+{{- $timeout := "3600s" }}
+{{- $apiReq := mul (.Values.gateway.rateLimit.requestsPerSecond | int) (.Values.gateway.rateLimit.burstMultiplier | int) }}
+{{- $frontendReq := mul (.Values.gateway.rateLimit.frontendRequestsPerSecond | int) (.Values.gateway.rateLimit.burstMultiplier | int) }}
+---
+# Gateway — HTTPS listener (TLS terminate, BYO Secret) + HTTP listener (redirect).
+# Single hostname (global.dnsRecord), so one cert covers both backends.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Release.Name }}-gateway
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  gatewayClassName: {{ $gwClass | quote }}
+  # Attach the chart-managed EnvoyProxy that schedules/scales the data-plane pods.
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: {{ .Release.Name }}-proxy
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $host | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ $tlsSecret | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: {{ $host | quote }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+# API HTTPRoute. Rule order is load-bearing: the streaming-download regex is
+# rule[0] so it matches BEFORE the broad /api prefix (within-route ties resolve to
+# the first matching rule — Gateway API does NOT guarantee cross-route regex
+# precedence, so both api rules live in ONE HTTPRoute). Both rules -> API backend.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-gateway
+      sectionName: https
+  hostnames:
+    - {{ $host | quote }}
+  rules:
+    # rule[0] — streaming source-record download (nginx priority 100).
+    - matches:
+        - path:
+            type: RegularExpression
+            value: "/api/anomalies/[0-9]+/source-record/download.*"
+      filters:
+        {{- include "qualytics.gateway.routeFilters" . | nindent 8 }}
+      timeouts:
+        request: {{ $timeout | quote }}
+        backendRequest: {{ $timeout | quote }}
+      backendRefs:
+        - name: {{ $apiSvc }}
+          port: {{ $apiPort }}
+    # rule[1] — regular API (nginx priority 10).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      filters:
+        {{- include "qualytics.gateway.routeFilters" . | nindent 8 }}
+      timeouts:
+        request: {{ $timeout | quote }}
+        backendRequest: {{ $timeout | quote }}
+      backendRefs:
+        - name: {{ $apiSvc }}
+          port: {{ $apiPort }}
+---
+# Frontend HTTPRoute. rule[0] /.well-known -> API backend (nginx serves it from the
+# frontend ingress but proxies to the API; it keeps the FRONTEND rate-limit policy,
+# not the api one). rule[1] catch-all -> frontend.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-frontend
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-gateway
+      sectionName: https
+  hostnames:
+    - {{ $host | quote }}
+  rules:
+    # rule[0] — /.well-known/* -> API backend (auth/OIDC discovery).
+    - matches:
+        - path:
+            type: RegularExpression
+            value: "/\\.well-known.*"
+      filters:
+        {{- include "qualytics.gateway.routeFilters" . | nindent 8 }}
+      timeouts:
+        request: {{ $timeout | quote }}
+        backendRequest: {{ $timeout | quote }}
+      backendRefs:
+        - name: {{ $apiSvc }}
+          port: {{ $apiPort }}
+    # rule[1] — catch-all -> frontend (identity path, no rewrite needed).
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
+        {{- include "qualytics.gateway.routeFilters" . | nindent 8 }}
+      timeouts:
+        request: {{ $timeout | quote }}
+        backendRequest: {{ $timeout | quote }}
+      backendRefs:
+        - name: {{ $frontendSvc }}
+          port: {{ $frontendPort }}
+---
+# HTTP->HTTPS redirect (nginx force-ssl-redirect). Attaches to the :80 listener; no
+# backendRefs. statusCode default 301 (Gateway API core guarantees 301/302).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Release.Name }}-redirect
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  parentRefs:
+    - name: {{ .Release.Name }}-gateway
+      sectionName: http
+  hostnames:
+    - {{ $host | quote }}
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: {{ .Values.gateway.httpsRedirectCode | int }}
+{{/*
+  BackendTrafficPolicy (EXPERIMENTAL v1alpha1) — one per HTTPRoute so the API
+  (50 rps) and frontend (500 rps) rate limits differ. Carries retry + upstream
+  timeouts (+ rate limit when enabled). Passive ejection is intentionally OMITTED
+  (off by default in EG) to reproduce nginx upstream-max-fails:0.
+*/}}
+{{- range $route := list (dict "name" (printf "%s-api" .Release.Name) "requests" $apiReq) (dict "name" (printf "%s-frontend" .Release.Name) "requests" $frontendReq) }}
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: {{ $route.name }}
+  labels:
+    app: {{ $.Release.Name }}-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ $route.name }}
+  # nginx proxy-next-upstream "error timeout http_503", tries 3.
+  retry:
+    numRetries: 3
+    retryOn:
+      triggers:
+        - connect-failure
+        - reset
+      httpStatusCodes:
+        - 503
+    perRetry:
+      timeout: {{ $timeout | quote }}
+  # nginx proxy-connect/read/send 3600s -> connect + idle timeouts.
+  timeout:
+    tcp:
+      connectTimeout: {{ $timeout | quote }}
+    http:
+      connectionIdleTimeout: {{ $timeout | quote }}
+  # gzip + brotli, negotiated by Accept-Encoding (no content-type allow-list in EG).
+  compression:
+    - type: Gzip
+      gzip: {}
+    - type: Brotli
+      brotli: {}
+  {{- if $.Values.gateway.rateLimit.enabled }}
+  # Per-IP request rate limit (burst folded into the count; Envoy has no burst-queue
+  # knob). 429 on overflow (Envoy fixed code, matches nginx).
+  rateLimit:
+    {{- if eq $.Values.gateway.rateLimit.type "global" }}
+    # Global = true per-source-IP (sourceCIDR Distinct); REQUIRES the controller's
+    # Redis rate-limit service or the policy stays unprogrammed.
+    type: Global
+    global:
+      rules:
+        - clientSelectors:
+            - sourceCIDR:
+                value: 0.0.0.0/0
+                type: Distinct
+          limit:
+            requests: {{ $route.requests }}
+            unit: Second
+    {{- else }}
+    # Local = zero infra, per-Envoy-pod bucket (effective ceiling = requests x proxy replicas).
+    type: Local
+    local:
+      rules:
+        - limit:
+            requests: {{ $route.requests }}
+            unit: Second
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.gateway.cors }}
+---
+# CORS (EXPERIMENTAL v1alpha1) — gated on gateway.cors. Attaches to the Gateway so
+# it applies to every route. allowOrigins "*" => never set allowCredentials true.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ .Release.Name }}-cors
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ .Release.Name }}-gateway
+  cors:
+    allowOrigins:
+      - "*"
+    allowMethods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - OPTIONS
+      - HEAD
+      - DELETE
+{{- end }}
+---
+# EnvoyProxy (EXPERIMENTAL v1alpha1) — schedules/scales the data-plane Envoy pods
+# (the pods serving traffic). Attached to the Gateway via infrastructure.parametersRef
+# above. Mirrors the nginx controller's nodeSelector/tolerations/replicas.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: {{ .Release.Name }}-proxy
+  labels:
+    app: {{ .Release.Name }}-gateway
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyDeployment:
+        replicas: {{ .Values.gateway.proxy.replicas | int }}
+        {{- if or .Values.gateway.proxy.nodeSelector .Values.gateway.proxy.tolerations }}
+        pod:
+          {{- if .Values.gateway.proxy.nodeSelector }}
+          nodeSelector:
+            {{- toYaml .Values.gateway.proxy.nodeSelector | nindent 12 }}
+          {{- end }}
+          {{- if .Values.gateway.proxy.tolerations }}
+          tolerations:
+            {{- toYaml .Values.gateway.proxy.tolerations | nindent 12 }}
+          {{- end }}
+        {{- end }}
+{{- end }}
