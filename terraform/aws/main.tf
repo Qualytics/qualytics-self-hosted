@@ -18,6 +18,10 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.23"
     }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.12"
+    }
   }
 }
 
@@ -37,6 +41,19 @@ provider "kubernetes" {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
     args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+  }
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", module.eks.cluster_name]
+    }
   }
 }
 
@@ -228,8 +245,9 @@ module "eks" {
       }
 
       tags = merge(local.tags, {
-        "k8s.io/cluster-autoscaler/enabled"         = "true"
-        "k8s.io/cluster-autoscaler/${local.name}"   = "owned"
+        "k8s.io/cluster-autoscaler/enabled"                      = "true"
+        "k8s.io/cluster-autoscaler/${local.name}"                = "owned"
+        "k8s.io/cluster-autoscaler/node-template/label/appNodes" = "true"
       })
     }
 
@@ -254,8 +272,9 @@ module "eks" {
       }
 
       tags = merge(local.tags, {
-        "k8s.io/cluster-autoscaler/enabled"         = "true"
-        "k8s.io/cluster-autoscaler/${local.name}"   = "owned"
+        "k8s.io/cluster-autoscaler/enabled"                         = "true"
+        "k8s.io/cluster-autoscaler/${local.name}"                   = "owned"
+        "k8s.io/cluster-autoscaler/node-template/label/driverNodes" = "true"
       })
     }
 
@@ -283,8 +302,9 @@ module "eks" {
       pre_bootstrap_user_data = var.enable_nvme_setup ? local.nvme_setup_script : ""
 
       tags = merge(local.tags, {
-        "k8s.io/cluster-autoscaler/enabled"         = "true"
-        "k8s.io/cluster-autoscaler/${local.name}"   = "owned"
+        "k8s.io/cluster-autoscaler/enabled"                           = "true"
+        "k8s.io/cluster-autoscaler/${local.name}"                     = "owned"
+        "k8s.io/cluster-autoscaler/node-template/label/executorNodes" = "true"
       })
     }
   }
@@ -335,6 +355,55 @@ module "cluster_autoscaler_irsa_role" {
   }
 
   tags = local.tags
+}
+
+# Deploys the Cluster Autoscaler controller into kube-system. It discovers the
+# node groups via their k8s.io/cluster-autoscaler/* ASG tags and assumes the
+# IRSA role above through its annotated service account.
+resource "helm_release" "cluster_autoscaler" {
+  count = var.enable_cluster_autoscaler ? 1 : 0
+
+  name             = "cluster-autoscaler"
+  namespace        = "kube-system"
+  create_namespace = false
+  repository       = "https://kubernetes.github.io/autoscaler"
+  chart            = "cluster-autoscaler"
+  version          = "9.57.0"
+
+  values = [
+    yamlencode({
+      awsRegion = var.aws_region
+
+      # Pin the autoscaler image to the cluster's Kubernetes minor version. The
+      # chart default tracks a newer Kubernetes release whose build watches
+      # Dynamic Resource Allocation APIs (ResourceSlice / DeviceClass /
+      # ResourceClaim) that an older API server does not serve, producing
+      # repeated "failed to watch ... could not find the requested resource"
+      # errors. Keep this aligned with var.kubernetes_version.
+      image = {
+        tag = "v${var.kubernetes_version}.0"
+      }
+
+      rbac = {
+        create = true
+        serviceAccount = {
+          name = "cluster-autoscaler"
+          annotations = {
+            "eks.amazonaws.com/role-arn" = module.cluster_autoscaler_irsa_role[0].iam_role_arn
+          }
+        }
+      }
+      autoDiscovery = {
+        clusterName = module.eks.cluster_name
+        enabled     = true
+      }
+    })
+  ]
+
+  depends_on = [
+    module.eks,
+    module.cluster_autoscaler_irsa_role,
+  ]
 }
 
 ################################################################################
