@@ -111,6 +111,19 @@ ingress:
     # Leave empty to keep the legacy `api-tls-cert` + `frontend-tls-cert` split pair.
     secretName: "qualytics-tls-cert"
 
+# --- Alternative: Envoy Gateway (Gateway API) instead of nginx ---
+# Expose Qualytics through Gateway API resources instead of nginx. Set
+# ingress.enabled and nginx.enabled to false, then uncomment below.
+#
+# PREREQUISITE: the Envoy Gateway controller + CRDs + GatewayClass must already exist
+# (install gateway-helm separately — e.g. a Terraform add-on on a dedicated cluster).
+# Helm can't install CRDs and use them in one release. See docs/gateway-migration.md.
+# gateway:
+#   enabled: true
+#   className: eg              # the EXISTING GatewayClass
+#   tls:
+#     secretName: qualytics-tls-cert
+
 #--------------------------------------------------------------------------------
 # Controlplane Configuration
 #--------------------------------------------------------------------------------

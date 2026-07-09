@@ -35,9 +35,6 @@ nginx:
       #   service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: 'true'
       #   service.beta.kubernetes.io/aws-load-balancer-type: nlb
 
-#--------------------------------------------------------------------------------
-# App Ingresses
-#--------------------------------------------------------------------------------
 ingress:
   enabled: false
   cors: false
@@ -66,6 +63,51 @@ ingress:
     # keep working without any values changes.
     apiSecretName: "api-tls-cert"
     frontendSecretName: "frontend-tls-cert"
+
+#--------------------------------------------------------------------------------
+# Envoy Gateway routing (Gateway API) — the `ingress` equivalent. Pick ONE path:
+# `ingress` (nginx) OR `gateway`.
+#--------------------------------------------------------------------------------
+# PREREQUISITE: the Envoy Gateway controller + its CRDs + the GatewayClass must
+# already exist on the cluster (Helm can't install CRDs and use them in one release).
+# Install gateway-helm separately — e.g. a Terraform add-on on a dedicated cluster.
+# See docs/gateway-migration.md.
+#
+# Self-contained: does NOT reuse any ingress.* / nginx.* values (nginx is removed
+# once all customers migrate). Renders the Gateway, HTTPRoutes and Envoy Gateway
+# policies. Security headers, gzip+brotli compression, X-Original-URI, retries and
+# 3600s timeouts are applied automatically (same as the nginx path bakes them into
+# annotations). Needs Envoy Gateway >= v1.8.
+gateway:
+  enabled: false
+  # Existing GatewayClass to attach to (created with the controller; default "eg").
+  className: eg
+  # TLS — Bring Your Own. Create this kubernetes.io/tls Secret before installing.
+  tls:
+    secretName: qualytics-tls-cert
+  # CORS for the API (off by default).
+  cors: false
+  # HTTP->HTTPS redirect status. Gateway API allows 301/302 only (nginx used 308).
+  httpsRedirectCode: 301
+  # Per-IP request rate limiting (429 on overflow).
+  rateLimit:
+    enabled: true
+    # local  = per-Envoy-pod bucket, no extra infra.
+    # global = true per-source-IP, but needs the controller's Redis rate-limit service.
+    type: local
+    requestsPerSecond: 50            # API routes
+    frontendRequestsPerSecond: 500   # frontend (parallel asset loads)
+    burstMultiplier: 5               # burst bucket = rps * multiplier
+  # Data-plane Envoy proxy pods (the pods serving traffic, via the EnvoyProxy CRD).
+  proxy:
+    replicas: 1
+    nodeSelector: {}
+    #   appNodes: "true"
+    tolerations: []
+    #   - key: appNodes
+    #     operator: Equal
+    #     value: "true"
+    #     effect: NoSchedule
 
 #--------------------------------------------------------------------------------
 # Global values

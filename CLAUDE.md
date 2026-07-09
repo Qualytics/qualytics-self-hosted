@@ -34,10 +34,11 @@ qualytics-self-hosted/
     │   ├── postgres.yaml               # PostgreSQL statefulset + PVC
     │   ├── rabbitmq.yaml               # RabbitMQ statefulset + PVC
     │   ├── secrets.yaml                # Secrets for credentials
-    │   ├── ingress.yaml                # Ingress with WAF (TLS is BYO Secret)
+    │   ├── ingress.yaml                # nginx Ingress with WAF (TLS is BYO Secret)
+    │   ├── gateway.yaml                # Envoy Gateway path: Gateway + HTTPRoutes + EG policy CRDs (alt to nginx)
     │   ├── psql.yaml                   # PostgreSQL utility pod
     │   └── storage-classes.yaml        # Platform-specific storage classes
-    └── tests/                          # Helm unit tests (9 test suites)
+    └── tests/                          # Helm unit tests (one suite per component)
         ├── api_test.yaml               # API deployment tests
         ├── cmd_test.yaml               # CMD processor tests
         ├── spark_test.yaml             # Spark application tests
@@ -45,6 +46,8 @@ qualytics-self-hosted/
         ├── postgres_test.yaml          # PostgreSQL statefulset tests
         ├── rabbitmq_test.yaml          # RabbitMQ tests
         ├── secrets_test.yaml           # Secrets configuration tests
+        ├── ingress_test.yaml           # nginx Ingress tests
+        ├── gateway_test.yaml           # Envoy Gateway (Gateway API) tests
         ├── templates_test.yaml         # Template helpers tests
         └── global_test.yaml            # Global configuration tests
 ```
@@ -81,7 +84,7 @@ This chart uses **helm-unittest** plugin for comprehensive unit testing:
 
 ### Test Structure
 - **Location**: `/charts/qualytics/tests/*_test.yaml` files
-- **Coverage**: 9 test suites covering all major components
+- **Coverage**: one suite per component (incl. `ingress_test.yaml` and `gateway_test.yaml`)
 - **Framework**: YAML-based assertions with helm-unittest plugin
 - **Installation**: `helm plugin install https://github.com/helm-unittest/helm-unittest`
 
@@ -94,6 +97,8 @@ Each component has a corresponding test file:
 - `postgres_test.yaml` - PostgreSQL statefulset tests
 - `rabbitmq_test.yaml` - RabbitMQ tests
 - `secrets_test.yaml` - Secrets configuration tests
+- `ingress_test.yaml` - nginx Ingress tests (incl. modsecurity-snippet apostrophe ban)
+- `gateway_test.yaml` - Envoy Gateway tests (route order, TLS, redirect, rate limit, mutual-exclusion guard)
 - `templates_test.yaml` - Template helper function tests
 - `global_test.yaml` - Global configuration tests
 
@@ -559,6 +564,19 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   - `/api/?(.*)` → API service
   - `/?(.*)` → Frontend service
 
+### Ingress alternative: Envoy Gateway (Gateway API)
+
+The chart can expose the app through **Envoy Gateway** instead of nginx — `templates/gateway.yaml`, gated on `gateway.enabled` (default `false`). nginx and Envoy Gateway are **mutually exclusive** (`ingress.enabled` vs `gateway.enabled`; a `fail` guard enforces it; keep `nginx.enabled: false` when using Envoy Gateway). The goal is to eventually retire nginx in favour of Envoy Gateway.
+
+- **Controller is a cluster PREREQUISITE, not a chart dependency.** Helm cannot install a CRD and a CR of it in one release (verified on minikube: the one-shot bundled install fails with `ensure CRDs are installed first`). nginx avoids this only because `Ingress` is a built-in API. So the Envoy Gateway controller + CRDs + `GatewayClass` are installed **separately** (gateway-helm standalone, e.g. a Terraform `helm_release` add-on on dedicated clusters); the chart renders only the gateway routing CRs against the pre-existing CRDs. `gateway.className` (default `eg`) references the prereq-created class; the chart does NOT create the GatewayClass or the controller. See docs/gateway-migration.md.
+- **Self-contained config.** The gateway path reads only `gateway.*` — it does NOT reuse any `ingress.*` / `nginx.*` values (so nginx can be deleted once everyone migrates). `gateway.tls.secretName` (default `qualytics-tls-cert`), `gateway.cors`, and `gateway.rateLimit.{requestsPerSecond,frontendRequestsPerSecond,burstMultiplier}` are its own. Security headers, gzip+brotli, X-Original-URI, retries and 3600s timeouts are baked in (no per-feature toggles, like nginx bakes its annotations).
+- **Resources rendered**: `Gateway` (HTTPS-terminate + HTTP-redirect listeners + `infrastructure.parametersRef` → EnvoyProxy), `HTTPRoute` ×3 (`<rel>-api` with the streaming-regex rule ordered before `/api`; `<rel>-frontend` with `/.well-known`→API keeping the frontend rate-limit policy, and `/`→frontend; `<rel>-redirect`), per-route `BackendTrafficPolicy` (retry / timeouts / rate limit / compression), `EnvoyProxy` (always — data-plane pod scheduling/replicas via `gateway.proxy.*`), and `SecurityPolicy` (CORS, only when `gateway.cors: true`). The controller, CRDs, and `GatewayClass` are NOT rendered (prerequisite).
+- **No WAF rendered.** Envoy Gateway has no native WAF; the chart intentionally does not render one (would need a BYO Coraza wasm artifact). It's a documented manual `EnvoyExtensionPolicy` add-on (the `common.modsecurity.snippet` helper still holds the rules) — a known gap vs the nginx ModSecurity path.
+- **Pod scheduling.** Controller pods are scheduled where you install gateway-helm (prereq, e.g. its own `deployment.pod.*` values in the Terraform add-on). Data-plane Envoy pods: `gateway.proxy.{replicas,nodeSelector,tolerations}` (rendered into the EnvoyProxy CRD), default `replicas: 1`.
+- **GA vs experimental.** Routing/TLS/redirect/header/timeout pieces are Gateway API GA. All `gateway.envoyproxy.io` policy CRDs are `v1alpha1` (experimental) — `helm unittest`/`helm template` validate rendering only; **validate on a live Envoy Gateway ≥ v1.8 controller** (minikube ritual) before shipping. Requires Gateway API v1.2+ (HTTPRoute timeouts).
+- **Cannot migrate 1:1** (see [docs/gateway-migration.md](docs/gateway-migration.md)): per-IP *connection* limit, native WAF + body-size limits (not rendered — manual Coraza add-on), compression content-type allow-list, burst-queue shaping, portable 308 redirect (defaults to 301), true per-IP rate limit without controller-side Redis.
+- **Helpers**: `common.modsecurity.snippet` (shared SecLang in `_helpers.tpl`, used by the nginx path + the manual gateway WAF add-on), `qualytics.gateway.routeFilters` (per-rule security headers + X-Original-URI, always emitted). Full report + live-validation checklist: [docs/gateway-migration.md](docs/gateway-migration.md).
+
 ### Storage Classes
 - **Creation**: Optional (controlled by `storageClass.create`)
 - **Custom Name**: Use `storageClass.name` to specify existing storage class
@@ -637,7 +655,8 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Version**: date-based (`YYYY.M.D`) — bump on every change.
 - **App Version**: same as chart version.
 - **Dependencies**:
-  1. ingress-nginx 4.15.1 (condition: `nginx.enabled`)
+  1. ingress-nginx 4.15.1 (alias `nginx`, condition: `nginx.enabled`)
+  - NOTE: the Envoy Gateway controller is intentionally NOT a dependency — Helm can't install CRDs and CRs of them in one release, so it's a cluster prerequisite (gateway-helm installed separately). See the Envoy Gateway section.
 
 ## Authentication Configuration
 
@@ -776,6 +795,7 @@ helm upgrade qualytics qualytics/qualytics \
 - Verify driver SA can manage executor pods: `kubectl auth can-i create pods --as=system:serviceaccount:qualytics:qualytics-spark -n qualytics` should return `yes`
 
 ## Recent Focus Areas
+- Envoy Gateway (Gateway API) ingress path: `templates/gateway.yaml` renders Gateway + HTTPRoutes + Envoy Gateway policy CRDs as a `gateway.enabled` alternative to nginx (mutually exclusive), against a BYO `GatewayClass`. See the "Ingress alternative" section and [docs/gateway-migration.md](docs/gateway-migration.md).
 - Native-Deployment dataplane: replaced the SparkApplication CRD + spark-operator with a chart-managed Deployment + RBAC + headless Service + executor pod template ConfigMap. Driver runs `spark-submit` in client mode and creates executor pods directly via the K8s API.
 - Spark pod-template migration (disabled the mutating admission webhook) — historical, superseded by the above
 - cert-manager removal (BYO TLS Secrets)

@@ -241,6 +241,14 @@ kubectl get ingress -n qualytics
 
 Note this IP address as it's needed for the next step!
 
+> **Exposing traffic via Envoy Gateway instead of nginx.** If your cluster already runs
+> an [Envoy Gateway](https://gateway.envoyproxy.io) controller, the chart can render
+> Gateway API resources (`Gateway` + `HTTPRoute` + Envoy Gateway policies) instead of the
+> nginx `Ingress` objects. Set `ingress.enabled: false`, `nginx.enabled: false`, and
+> `gateway.enabled: true` (with `gateway.className`). See
+> [docs/gateway-migration.md](./docs/gateway-migration.md) for the full
+> migration matrix and the behaviours that cannot be reproduced 1:1.
+
 ### 4. Configure DNS and TLS for your deployment
 
 Run Qualytics under a domain you control:
