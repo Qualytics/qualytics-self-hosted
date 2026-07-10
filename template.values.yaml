@@ -130,7 +130,9 @@ dataplane:
   enabled: true
   numVolumes: -1
   parallelismScaleFactor: -1
-  maxParallelSyncRequests: 3
+  # I/O-bound sync ceiling; the dataplane's CPU governor (values.yaml syncAdmission) scales
+  # live capacity beneath it. See values.yaml for the floor/watermark knobs (QUA-2100).
+  maxParallelSyncRequests: 24
   # RBAC the driver needs to manage executor pods (replaces the spark-operator
   # SA/Role bundle). For AWS IRSA, add the role-arn annotation here:
   rbac:

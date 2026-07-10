@@ -149,6 +149,34 @@ spec:
             cpu: {{ .Values.rabbitmq.resources.requests.cpu }}
           limits:
             memory: {{ .Values.rabbitmq.resources.limits.memory }}
+        # Budget up to 10 min: queue-index recovery after an unclean shutdown can take minutes.
+        # Needs publishNotReadyAddresses on the Service — pod DNS must exist pre-Ready or this exec probe deadlocks boot.
+        startupProbe:
+          exec:
+            command:
+              - rabbitmq-diagnostics
+              - -q
+              - ping
+          periodSeconds: 10
+          timeoutSeconds: 10
+          failureThreshold: 60
+        # tcpSocket 5672 works with TLS enabled too: listeners.tcp.default is unconditional in rabbitmq.conf.
+        readinessProbe:
+          tcpSocket:
+            port: 5672
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        # Ping only, ~3 min tolerance: a broker under memory alarm must not be killed.
+        livenessProbe:
+          exec:
+            command:
+              - rabbitmq-diagnostics
+              - -q
+              - ping
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 6
         env:
         - name: RABBIT_POD_NAME
           valueFrom:
@@ -219,11 +247,13 @@ metadata:
   labels:
     service: {{ .Release.Name }}-rabbitmq-service
 spec:
-{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled }}
-  type: NodePort
-{{- else }}
+  # Must stay headless: per-pod DNS records (FQDN nodename) are only published
+  # for headless Services; inbound NodePort lives on a dedicated Service below.
+  # clusterIP is immutable — legacy inbound clusters must delete this Service once before upgrading.
   clusterIP: None
-{{- end }}
+  # Exec probes resolve the FQDN nodename via this Service; the pod DNS record
+  # must exist before Ready or probes deadlock boot.
+  publishNotReadyAddresses: true
   ports:
   - port: 15672
     targetPort: 15672
@@ -233,12 +263,41 @@ spec:
     name: amqp
   {{- if .Values.rabbitmq.tls.enabled }}
   - port: 5671
-  {{- if .Values.rabbitmq.enableInbound }}
-    nodePort: 30671
-  {{- else }}
     targetPort: 5671
-  {{- end }}
     name: amqp-tls
   {{- end }}
   selector:
     app: {{ .Release.Name }}-rabbitmq
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-rabbitmq
+spec:
+  # With 1 replica this deliberately blocks ALL voluntary evictions/drains.
+  # Spot reclaim and node failure bypass the eviction API.
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-rabbitmq
+
+{{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-rabbitmq-inbound
+  labels:
+    service: {{ .Release.Name }}-rabbitmq-inbound-service
+spec:
+  # External AMQP-TLS entry point, kept off the governing Service so that one
+  # stays headless. nodePort 30671 is the stable external contract; TLS only.
+  type: NodePort
+  ports:
+  - port: 5671
+    nodePort: 30671
+    name: amqp-tls
+  selector:
+    app: {{ .Release.Name }}-rabbitmq
+{{- end }}
