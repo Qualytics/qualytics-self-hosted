@@ -299,6 +299,30 @@ tests:
             name: OIDC_USER_GROUPS_KEY
         documentIndex: 0
 
+  # OIDC group→Team sync toggle (opt-in; always rendered as a plain env value)
+  - it: should render OIDC_GROUP_TEAM_SYNC_ENABLED=true when enabled
+    set:
+      global.authType: "OIDC"
+      secrets.oidc.oidc_group_team_sync_enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: "true"
+        documentIndex: 0
+
+  - it: should default OIDC_GROUP_TEAM_SYNC_ENABLED to false
+    set:
+      global.authType: "OIDC"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: "false"
+        documentIndex: 0
+
   # OIDC JWT TTL
   - it: should include OIDC_JWT_TTL_MINUTES when set
     set:

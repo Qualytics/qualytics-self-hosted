@@ -157,12 +157,16 @@ secrets:
     oidc_user_lname_key: "family_name"
     oidc_user_picture_key: "picture"
     oidc_user_provider_key: "iss"
-    # Claim holding the user's group listing (maps to OIDC_USER_GROUPS_KEY). The listing is recorded
-    # per user and used for add-only, case-insensitive group→Team membership sync (a user is added to
-    # any Team whose name matches a presented group; users are never removed). Set to whatever claim
-    # your IdP emits (e.g. "groups", "roles"). Note: the IdP must actually emit this claim — that
-    # often requires requesting an extra scope via oidc_scopes above (e.g. "groups").
+    # Claim holding the user's group listing (maps to OIDC_USER_GROUPS_KEY). The listing is always
+    # recorded per user (shown in the user's IdP-groups view for diagnosing mapping). Set to whatever
+    # claim your IdP emits (e.g. "groups", "roles"). Note: the IdP must actually emit this claim —
+    # that often requires requesting an extra scope via oidc_scopes above (e.g. "groups").
     oidc_user_groups_key: "groups"
+    # Enable add-only, case-insensitive group→Team membership sync (maps to OIDC_GROUP_TEAM_SYNC_ENABLED).
+    # When true, a user is added to any Team whose name matches a presented group; users are never
+    # removed. Default false (opt-in) because it grants Team membership — and thus data access — from
+    # IdP claims. The group listing above is recorded regardless of this setting.
+    oidc_group_team_sync_enabled: false
     oidc_allow_insecure_transport: false
     # oidc_jwt_ttl_minutes: 60
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
