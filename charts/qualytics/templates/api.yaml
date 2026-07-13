@@ -216,8 +216,17 @@ spec:
                 name: qualytics-creds
                 key: oidc_user_provider_key
           {{- end }}
+          {{- if .Values.secrets.oidc.oidc_user_groups_key }}
+          - name: OIDC_USER_GROUPS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: oidc_user_groups_key
+          {{- end }}
           - name: OIDC_ALLOW_INSECURE_HTTP
             value: {{ .Values.secrets.oidc.oidc_allow_insecure_transport | quote }}
+          - name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: {{ .Values.secrets.oidc.oidc_group_team_sync_enabled | quote }}
           {{- if .Values.secrets.oidc.oidc_jwt_ttl_minutes }}
           - name: OIDC_JWT_TTL_MINUTES
             valueFrom:
