@@ -801,6 +801,45 @@ tests:
             value: "20"
         documentIndex: 5
 
+  # QUA-2100: sync-request ceiling raised to 24, governed by the CPU-watermark admission floor.
+  - it: should set the sync-admission ceiling and CPU governor env from dataplane defaults
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
+            value: "24"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNC_ADMISSION_FLOOR
+            value: "3"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNC_ADMISSION_CPU_HIGH_WATERMARK
+            value: "0.8"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNC_ADMISSION_CPU_LOW_WATERMARK
+            value: "0.5"
+        documentIndex: 5
+
+  - it: should omit the sync-admission governor env when syncAdmission is unset
+    set:
+      dataplane.syncAdmission: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNC_ADMISSION_FLOOR
+            value: "3"
+        documentIndex: 5
+
   # Driver kerberos
   - it: should set driver kerberos env + volumes when enabled
     set:

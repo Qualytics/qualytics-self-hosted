@@ -376,6 +376,14 @@ spec:
             {{- end }}
             - name: MOTHERSHIP_MAX_PARALLEL_SYNC_REQUESTS
               value: {{ .Values.dataplane.maxParallelSyncRequests | quote }}
+            {{- with .Values.dataplane.syncAdmission }}
+            - name: MOTHERSHIP_SYNC_ADMISSION_FLOOR
+              value: {{ .floor | int | quote }}
+            - name: MOTHERSHIP_SYNC_ADMISSION_CPU_HIGH_WATERMARK
+              value: {{ .cpuHighWatermark | quote }}
+            - name: MOTHERSHIP_SYNC_ADMISSION_CPU_LOW_WATERMARK
+              value: {{ .cpuLowWatermark | quote }}
+            {{- end }}
             - name: MOTHERSHIP_MAX_EXECUTORS
               value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
             - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR

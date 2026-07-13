@@ -85,13 +85,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260624-1883395"
+    controlplaneImageTag: "20260710-2bbb2d6"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260624-c976791"
+    dataplaneImageTag: "20260710-a8a46c2"
 frontendImage:
   image:
-    frontendImageTag: "20260624-ca0db6a"
+    frontendImageTag: "20260710-bc0933e"
 
 # Storage classes
 storageClass:
@@ -195,7 +195,19 @@ dataplane:
   eventLog: false
   numVolumes: -1
   parallelismScaleFactor: -1
-  maxParallelSyncRequests: 4
+  # Ceiling on concurrent synchronous operations (catalog, metadata, preview, connection tests).
+  # These are overwhelmingly datastore-I/O-bound, so the ceiling sits well above driver core count;
+  # the dataplane's CPU governor scales live capacity between syncAdmission.floor and this ceiling
+  # based on measured driver CPU (QUA-2100).
+  maxParallelSyncRequests: 24
+  # Sync-admission CPU governor. The governor halves live sync capacity when process CPU is at/above
+  # cpuHighWatermark, grows it when at/below cpuLowWatermark, and never drops below floor. Requires
+  # 0.0 <= cpuLowWatermark < cpuHighWatermark <= 1.0; invalid values fall back to the dataplane
+  # defaults (floor 3, high 0.80, low 0.50).
+  syncAdmission:
+    floor: 3
+    cpuHighWatermark: 0.80
+    cpuLowWatermark: 0.50
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
@@ -353,7 +365,10 @@ rabbitmq:
     # Create a `kubernetes.io/tls` Secret named `rabbitmq-tls` in the release
     # namespace before enabling. See docs/ingress-tls.md.
     enabled: false
-  enableInbound: false  # When true, opens AMQP-TLS on port 30671 into the cluster
+  # When true, opens AMQP-TLS on nodePort 30671 via a dedicated
+  # <release>-rabbitmq-inbound Service. clusterIP is immutable — legacy inbound
+  # clusters must delete the governing Service once before upgrading.
+  enableInbound: false
 
 #--------------------------------------------------------------------------------
 # Busybox

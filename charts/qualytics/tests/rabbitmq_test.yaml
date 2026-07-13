@@ -6,7 +6,7 @@ tests:
   - it: should create rabbitmq resources
     asserts:
       - hasDocuments:
-          count: 4
+          count: 5
 
   # Basic document checks (default = pvc disabled, so StatefulSet is doc 2)
   - it: should create rabbitmq StatefulSet
@@ -18,9 +18,9 @@ tests:
   # PVC vs emptyDir tests
   - it: should use emptyDir by default (no PVC, ephemeral state)
     asserts:
-      # Should only have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC)
+      # Should have 5 documents (ConfigMap, Secret, StatefulSet, Service, PDB - no PVC)
       - hasDocuments:
-          count: 4
+          count: 5
       - isKind:
           of: ConfigMap
         documentIndex: 0
@@ -33,6 +33,9 @@ tests:
       - isKind:
           of: Service
         documentIndex: 3
+      - isKind:
+          of: PodDisruptionBudget
+        documentIndex: 4
       # StatefulSet volume should use emptyDir
       - contains:
           path: spec.template.spec.volumes
@@ -46,7 +49,7 @@ tests:
       rabbitmq.pvc.enabled: true
     asserts:
       - hasDocuments:
-          count: 5
+          count: 6
       # PVC resource should exist
       - isKind:
           of: PersistentVolumeClaim
@@ -147,4 +150,99 @@ tests:
           path: data["rabbitmq.conf"]
           pattern: "consumer_timeout = 86400000"
         documentIndex: 0
+
+  # QUA-2084: probes guard against premature readiness and self-heal a wedged broker.
+  - it: should configure startup, readiness and liveness probes
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command
+          value:
+            - rabbitmq-diagnostics
+            - -q
+            - ping
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 60
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: 5672
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 5
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command
+          value:
+            - rabbitmq-diagnostics
+            - -q
+            - ping
+        documentIndex: 2
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.failureThreshold
+          value: 6
+        documentIndex: 2
+
+  - it: should publish not-ready addresses so exec probes can resolve the longname nodename pre-Ready
+    asserts:
+      - equal:
+          path: spec.clusterIP
+          value: "None"
+        documentIndex: 3
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+        documentIndex: 3
+
+  - it: should render PDB with minAvailable 1 matching the StatefulSet pod label
+    asserts:
+      - containsDocument:
+          kind: PodDisruptionBudget
+          apiVersion: policy/v1
+          name: RELEASE-NAME-rabbitmq
+          any: true
+      - equal:
+          path: spec.minAvailable
+          value: 1
+        documentIndex: 4
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: RELEASE-NAME-rabbitmq
+        documentIndex: 4
+
+  - it: should keep the governing service headless and expose inbound on a dedicated NodePort service
+    set:
+      rabbitmq.enableInbound: true
+      rabbitmq.tls.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 6
+      # Governing service (doc 3) stays headless with publishNotReadyAddresses even with inbound on.
+      - equal:
+          path: spec.clusterIP
+          value: "None"
+        documentIndex: 3
+      - equal:
+          path: spec.publishNotReadyAddresses
+          value: true
+        documentIndex: 3
+      # Dedicated inbound NodePort service (doc 5) carries the external AMQP-TLS contract.
+      - equal:
+          path: metadata.name
+          value: "RELEASE-NAME-rabbitmq-inbound"
+        documentIndex: 5
+      - equal:
+          path: spec.type
+          value: "NodePort"
+        documentIndex: 5
+      - equal:
+          path: spec.ports[0].nodePort
+          value: 30671
+        documentIndex: 5
+      - lengthEqual:
+          path: spec.ports
+          count: 1
+        documentIndex: 5
 

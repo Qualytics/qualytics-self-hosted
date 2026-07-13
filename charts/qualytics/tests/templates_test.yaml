@@ -66,12 +66,13 @@ tests:
         documentIndex: 2
 
   # RabbitMQ template tests — default has pvc.enabled=false (emptyDir), so the
-  # PVC document is omitted and the StatefulSet is doc 2.
+  # PVC document is omitted and the StatefulSet is doc 2. Governing Service (3)
+  # and PodDisruptionBudget (4) follow (QUA-2084).
   - it: should render rabbitmq resources
     template: rabbitmq.yaml
     asserts:
       - hasDocuments:
-          count: 4
+          count: 5
       - isKind:
           of: StatefulSet
         documentIndex: 2
