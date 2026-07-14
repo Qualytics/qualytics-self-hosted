@@ -180,8 +180,12 @@ secrets:
     password: postgres
     secrets_passphrase: ChangeMe!
   smtp:
-    smtp_sender_user: smtp_user
-    smtp_sender_password: smtp_password
+    # SMTP AUTH credentials. Leave both empty when your SMTP server does not require
+    # authentication (e.g. an internal relay on port 25) — Qualytics then sends without
+    # attempting SMTP AUTH. Setting any non-empty values here forces an AUTH attempt,
+    # which servers lacking the AUTH extension reject.
+    smtp_sender_user: ""
+    smtp_sender_password: ""
   rabbitmq:
     rabbitmq_password: ChangeMe!
 

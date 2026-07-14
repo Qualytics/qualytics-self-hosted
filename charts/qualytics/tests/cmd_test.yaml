@@ -301,6 +301,40 @@ tests:
                 key: smtp_sender_password
         documentIndex: 0
 
+  # Credentials default to empty: SMTP AUTH must only be attempted when explicitly configured
+  # (relays without the AUTH extension reject login attempts).
+  - it: should omit SMTP credential variables when credentials are not configured
+    set:
+      controlplane.smtp.enabled: true
+      controlplane.smtp.server: "relay.internal.example.com"
+      controlplane.smtp.port: "25"
+      controlplane.smtp.sender: "no-reply@example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_SERVER
+            value: "relay.internal.example.com"
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_SENDER_USER
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: smtp_sender_user
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SMTP_SENDER_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: smtp_sender_password
+        documentIndex: 0
+
   - it: should not configure SMTP environment variables when disabled
     set:
       controlplane.smtp.enabled: false

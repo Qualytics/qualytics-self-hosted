@@ -71,6 +71,12 @@ secrets:
     secrets_passphrase: ChangeMe!
   rabbitmq:
     rabbitmq_password: ChangeMe!
+  # SMTP AUTH credentials — only set when your SMTP server requires authentication.
+  # Leave unset (or empty) for relays without SMTP AUTH, e.g. an internal relay on
+  # port 25: Qualytics then sends without attempting authentication.
+  # smtp:
+  #   smtp_sender_user: "ChangeMe"
+  #   smtp_sender_password: "ChangeMe!"
 
 #--------------------------------------------------------------------------------
 # Node Scheduling (OPTIONAL - remove if not using node selectors)
@@ -123,6 +129,7 @@ ingress:
 #--------------------------------------------------------------------------------
 controlplane:
   smtp:
+    # SMTP AUTH credentials (if your server requires them) go under secrets.smtp above.
     enabled: false
     server: "email-smtp.us-east-1.amazonaws.com"
     sender: "no-reply@qualytics.co"
