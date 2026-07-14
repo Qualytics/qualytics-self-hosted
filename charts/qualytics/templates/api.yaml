@@ -109,6 +109,14 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: jwt_signing_secret
+          # QUA-2163: this deployment's Qualytics-issued identity (signed claims document).
+          # Optional so deployments without an issued identifier keep working.
+          - name: QUALYTICS_DEPLOYMENT_IDENTIFIER
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: deployment_identifier
+                optional: true
           {{- if ( eq .Values.global.authType "OIDC" ) }}
           - name: API_AUTH
             value: OIDC
