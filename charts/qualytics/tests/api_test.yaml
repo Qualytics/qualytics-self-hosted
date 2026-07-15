@@ -400,3 +400,15 @@ tests:
             name: APP_DEPLOYMENT_MODE
             value: "databricks"
         documentIndex: 0
+  # QUA-2163: identifier env is required (no optional: true — CP fails to start without it)
+  - it: should require QUALYTICS_DEPLOYMENT_IDENTIFIER from qualytics-creds
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUALYTICS_DEPLOYMENT_IDENTIFIER
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: deployment_identifier
+        documentIndex: 0

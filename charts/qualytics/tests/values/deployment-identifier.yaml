@@ -1,0 +1,5 @@
+# QUA-2163: secrets.deployment.identifier is required (secrets.yaml aborts rendering
+# without it), so suites that render secrets.yaml load this fixture.
+secrets:
+  deployment:
+    identifier: test-deployment-identifier
