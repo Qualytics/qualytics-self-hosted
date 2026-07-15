@@ -175,8 +175,10 @@ secrets:
   deployment:
     # QUA-2163: this deployment's Qualytics-issued identity — a signed claims document
     # (base64url token) provided by Qualytics alongside your image-registry credentials.
-    # Used to authenticate to Qualytics-hosted services (e.g. the Qualytics LLM provider
-    # for AgentQ). Leave empty if you have not been issued one.
+    # REQUIRED: the control plane will not start without a signed, valid identifier, and
+    # helm install/upgrade fails if this is unset. Contact Qualytics support if you have
+    # not received yours. Each deployment must use its own; it also authenticates to
+    # Qualytics-hosted services (e.g. the Qualytics LLM provider for AgentQ).
     identifier: ""
   postgres:
     host: postgres

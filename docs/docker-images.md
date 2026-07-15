@@ -17,8 +17,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 An authentication token will be provided separately via secure message. Alongside it,
 Qualytics also provides your **deployment identifier** — a signed token that identifies this
 deployment to Qualytics-hosted services (for example the Qualytics LLM provider for AgentQ).
-Set it as `secrets.deployment.identifier` in your values file; it is required and each
-deployment must use its own.
+Set it as `secrets.deployment.identifier` in your values file; it is required — the
+control plane will not start without a signed, valid identifier — and each deployment
+must use its own. Contact Qualytics support if you have not received yours.
 
 ```bash
 docker login -u qualyticsai -p <token>
