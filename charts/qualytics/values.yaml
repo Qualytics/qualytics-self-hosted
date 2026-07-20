@@ -172,6 +172,9 @@ secrets:
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:
     jwt_signing_secret: ChangeMe!
+  deployment:
+    # Required. Qualytics provides one unique identifier per deployment.
+    identifier: ""
   postgres:
     host: postgres
     port: 5432

@@ -4,6 +4,8 @@ Self-hosted Qualytics deployments require a valid license. A **31-day grace peri
 
 Licenses are binary (active or expired) — there are no tiers or feature gates.
 
+The platform license is separate from the deployment identifier configured in Helm. Qualytics provides the identifier before installation; the license request is generated from the running platform afterward.
+
 > **What happens if you don't activate a license?** After the grace period expires (or after a license expires), **dataplane operations stop** — scanning, profiling, and all Spark-based jobs are blocked. The platform UI remains accessible so admins can apply a license.
 
 ---
@@ -31,11 +33,11 @@ Only users with **Admin** or **Manager** roles can manage licenses.
 ### Step 2: Send the Request to Qualytics
 
 Send the license request to your Qualytics account manager via a **secure channel**:
-- [BitWarden Send](https://bitwarden.com/products/send/) (recommended)
+- [Bitwarden Send](https://bitwarden.com/products/send/) (recommended)
 - Encrypted email
 - Other secure file transfer
 
-> **Do not** send license requests over plain email or unencrypted channels — the request contains deployment metadata.
+> **Do not** send license requests or signed licenses over plain email or other unencrypted channels. Treat both as confidential deployment data.
 
 ### Step 3: Apply the Signed License
 
@@ -60,9 +62,9 @@ If a license expires, dataplane operations stop immediately until a new license 
 
 ---
 
-## No Helm Configuration Needed
+## License Activation Does Not Use Helm
 
-Licensing is handled entirely through the UI. No environment variables, Helm values, or `values.yaml` changes are required.
+The signed platform license is requested and applied through the UI. It does not require an environment variable or Helm value. The required `secrets.deployment.identifier` value is a separate installation credential; see the [README](../README.md#qualytics-issued-installation-credentials).
 
 ---
 
