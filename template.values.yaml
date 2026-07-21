@@ -21,6 +21,10 @@ global:
 # See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
+  # Qualytics provides one unique identifier per deployment.
+  deployment:
+    identifier: ""
+
   # --- Option A: OIDC (direct IdP integration, recommended for self-hosted) ---
   # Configure with your identity provider's details
   oidc:

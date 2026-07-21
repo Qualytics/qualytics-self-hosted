@@ -435,6 +435,18 @@ tests:
             value: "databricks"
         documentIndex: 0
 
+  - it: should require QUALYTICS_DEPLOYMENT_IDENTIFIER from qualytics-creds
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUALYTICS_DEPLOYMENT_IDENTIFIER
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: deployment_identifier
+        documentIndex: 0
+
   - it: should set POSTGRES_SCHEMA to public by default
     asserts:
       - contains:

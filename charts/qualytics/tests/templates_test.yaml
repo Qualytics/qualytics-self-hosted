@@ -4,6 +4,8 @@ templates:
   - ingress.yaml
   - postgres.yaml
   - rabbitmq.yaml
+values:
+  - values/deployment-identifier.yaml
 tests:
   # Secrets template tests
   - it: should render secrets with Auth0 configuration
