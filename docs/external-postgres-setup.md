@@ -127,7 +127,7 @@ GRANT ALL PRIVILEGES ON SCHEMA public TO qualytics_env1;
 
 ## Helm Chart Configuration
 
-Once the database and service account are ready, configure each Helm release to use the external PostgreSQL instance.
+Once the database and service account are ready, configure each Helm release to use the external PostgreSQL instance. Every deployment also requires its own identifier provided by Qualytics.
 
 **values.yaml**
 
@@ -137,6 +137,8 @@ postgres:
   schema: public   # Default; use the DBA-prepared custom schema if required
 
 secrets:
+  deployment:
+    identifier: "<provided by Qualytics>"
   postgres:
     host: <your-postgres-host>
     port: 5432
@@ -151,9 +153,12 @@ Choose the schema during the initial installation. Changing `postgres.schema` la
 **Applying the configuration**
 
 ```bash
+CHART_VERSION="<version provided by Qualytics>"
+
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
+  --version "$CHART_VERSION" \
   -f values.yaml \
   --wait \
   --timeout=5m

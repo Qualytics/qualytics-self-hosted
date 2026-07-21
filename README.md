@@ -24,7 +24,7 @@ flowchart LR
       subgraph appPool["Application Nodes — appNodes=true"]
         direction LR
         fe["Frontend"]
-        api["Controlplane API<br/>(8 replicas)"]
+        api["Controlplane API"]
         cmd["Controlplane CMD"]
         pg[("PostgreSQL<br/>StatefulSet")]
         rmq[("RabbitMQ<br/>StatefulSet, emptyDir")]
@@ -69,12 +69,12 @@ Before deploying Qualytics, ensure you have:
 - A Kubernetes cluster (recommended version 1.30+)
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
-- A Qualytics-issued image registry token and deployment identifier
+- A Qualytics-issued image registry token and a unique deployment identifier
 - Authentication configuration — either OIDC credentials from your IdP (recommended) or Auth0 credentials from your Qualytics account manager
 
 ## How should I use this chart?
 
-Work with your Qualytics account manager to receive the required installation credentials through a secure channel. If you don't yet have an account manager, [contact Qualytics](mailto:hello@qualytics.ai).
+Work with your Qualytics account manager to receive the required installation materials through a secure channel. If you don't yet have an account manager, [contact Qualytics](mailto:hello@qualytics.ai).
 
 ### 1. Create a CNCF compliant cluster
 
@@ -108,16 +108,16 @@ The table below shows **suggested** instance types for a standard **Medium-tier*
 For deployments with different data volumes, the [Cluster Sizing Guide](./docs/cluster-sizing.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto:hello@qualytics.ai) for sizing guidance.
 
 
-#### Qualytics-issued installation credentials
+#### Qualytics-provided installation configuration
 
-Obtain these two credentials before installing or upgrading Qualytics:
+Qualytics sends these items through an agreed secure channel before installation or upgrade:
 
-| Credential | Purpose |
+| Item | Purpose |
 |---|---|
-| Image registry token | Pulls the private Qualytics container images from Docker Hub. |
-| Deployment identifier | Identifies one Qualytics installation. Every deployment requires its own value. |
+| Image registry token | Credential used to pull private Qualytics container images from Docker Hub. |
+| Deployment identifier | Required configuration value that identifies one installation. Never reuse it for another deployment. |
 
-The deployment identifier is separate from the platform license requested after installation. Treat both credentials and your populated `values.yaml` as confidential.
+The registry token and deployment identifier are separate from the platform license requested after installation. Handle all three, along with your populated `values.yaml`, securely.
 
 #### Docker registry secret
 
@@ -125,7 +125,9 @@ Create the image pull Secret with the registry token provided by Qualytics. The 
 
 ```bash
 kubectl create namespace qualytics
-read -rsp "Qualytics registry token: " QUALYTICS_REGISTRY_TOKEN && echo
+printf "Qualytics registry token: "
+IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+echo
 kubectl create secret docker-registry regcred \
   --namespace qualytics \
   --docker-username qualyticsai \
@@ -159,7 +161,7 @@ Update these required settings:
    ```
 
    > [!IMPORTANT]
-   > Existing installations must add this value before upgrading to a chart release that requires deployment identifiers. If it is missing, Helm stops during rendering before changing Kubernetes resources. Use the chart version provided by Qualytics; `main` may include unreleased changes.
+   > Every installation must set this value. Existing installations must obtain an identifier from Qualytics and add it before upgrading to chart version `2026.7.21` or later. If it is missing, Helm stops during rendering before changing Kubernetes resources.
 
 2. **DNS Record** (provided by Qualytics or managed by customer):
    ```yaml
@@ -245,10 +247,13 @@ Add the Qualytics Helm repository and deploy the platform:
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
 helm repo update
 
+CHART_VERSION="<version provided by Qualytics>"
+
 # Deploy Qualytics
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
+  --version "$CHART_VERSION" \
   -f values.yaml \
   --wait \
   --timeout=5m
@@ -316,6 +321,10 @@ See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oi
 - Verify that the Docker registry Secret exists: `kubectl get secret regcred -n qualytics`
 - Check if images are accessible from your cluster
 
+**Missing deployment identifier:**
+- Obtain a unique identifier from Qualytics and set `secrets.deployment.identifier` in `values.yaml`
+- Do not reuse an identifier from another installation
+
 **Ingress not working:**
 - Ensure an ingress controller is installed and running
 - Check ingress resources: `kubectl describe ingress -n qualytics`
@@ -342,6 +351,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 ## Additional Documentation
 
 - [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
+- [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough

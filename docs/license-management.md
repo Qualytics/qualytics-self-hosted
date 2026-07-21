@@ -4,7 +4,7 @@ Self-hosted Qualytics deployments require a valid license. A **31-day grace peri
 
 Licenses are binary (active or expired) — there are no tiers or feature gates.
 
-The platform license is separate from the deployment identifier configured in Helm. Qualytics provides the identifier before installation; the license request is generated from the running platform afterward.
+The platform license is separate from the deployment identifier configured in Helm. Qualytics provides one unique identifier for every deployment before installation; the license request is generated from the running platform afterward.
 
 > **What happens if you don't activate a license?** After the grace period expires (or after a license expires), **dataplane operations stop** — scanning, profiling, and all Spark-based jobs are blocked. The platform UI remains accessible so admins can apply a license.
 
@@ -27,7 +27,7 @@ Only users with **Admin** or **Manager** roles can manage licenses.
 
 1. Navigate to **Settings > Status**
 2. Click **"Generate License Request"**
-3. This creates an encoded fingerprint of your deployment (datastore count, user count, etc.)
+3. This generates the license request for the deployment
 4. Copy the request string
 
 ### Step 2: Send the Request to Qualytics
@@ -64,7 +64,7 @@ If a license expires, dataplane operations stop immediately until a new license 
 
 ## License Activation Does Not Use Helm
 
-The signed platform license is requested and applied through the UI. It does not require an environment variable or Helm value. The required `secrets.deployment.identifier` value is a separate installation credential; see the [README](../README.md#qualytics-issued-installation-credentials).
+The signed platform license is requested and applied through the UI. It does not require an environment variable or Helm value. The required `secrets.deployment.identifier` is separate Qualytics-provided installation configuration; see the [README](../README.md#qualytics-provided-installation-configuration).
 
 ---
 

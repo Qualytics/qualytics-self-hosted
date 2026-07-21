@@ -148,16 +148,25 @@ output "next_steps" {
     2. Verify cluster access:
        kubectl get nodes
 
-    3. If you haven't already, create the Docker registry secret:
+    3. Prepare values.yaml using the repository template and set the unique
+       secrets.deployment.identifier provided by Qualytics.
+
+    4. If you haven't already, create the Docker registry secret:
+       printf "Qualytics registry token: "
+       IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+       echo
        kubectl create secret docker-registry regcred -n qualytics \
          --docker-username=qualyticsai \
-         --docker-password=<token-from-qualytics>
+         --docker-password="$QUALYTICS_REGISTRY_TOKEN"
+       unset QUALYTICS_REGISTRY_TOKEN
 
-    4. Deploy Qualytics using Helm:
+    5. Deploy Qualytics using Helm:
        helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
        helm repo update
+       CHART_VERSION="<version provided by Qualytics>"
        helm upgrade --install qualytics qualytics/qualytics \
          --namespace qualytics \
+         --version "$CHART_VERSION" \
          -f values.yaml \
          --wait \
          --timeout=5m

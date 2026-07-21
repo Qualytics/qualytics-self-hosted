@@ -9,6 +9,8 @@ This guide covers how to configure authentication for a self-hosted Qualytics de
 
 For detailed guides including IdP-specific examples, see the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) and [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) in the Qualytics UserGuide.
 
+Authentication settings supplement the required installation configuration. Every deployment must also set the Qualytics-provided `secrets.deployment.identifier` described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
+
 ---
 
 ## OIDC Configuration (Recommended)
@@ -34,7 +36,7 @@ The simplest way to configure OIDC is with a **discovery URL**. Set `oidc_discov
 | `jwks_uri` | `OIDC_JWKS_URI` |
 | `issuer` | `OIDC_ISSUER` |
 
-**With discovery, you only need 4 values** (scopes, claims mapping, and security settings all have sensible defaults):
+**For OIDC itself, discovery reduces the required IdP-specific configuration to four values** (scopes, claims mapping, and security settings have sensible defaults):
 
 ```yaml
 global:

@@ -15,13 +15,14 @@ global:
   authType: "OIDC"
 
 #--------------------------------------------------------------------------------
-# Authentication Secrets (REQUIRED)
+# Deployment and Authentication Configuration (REQUIRED)
 # Choose ONE of the following: OIDC OR Auth0
 # See: https://userguide.qualytics.io/deployments/oidc-configuration/
 # See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
-  # Qualytics provides one unique identifier per deployment.
+  # Required. Paste the identifier provided by Qualytics for this deployment.
+  # Do not reuse it for another installation.
   deployment:
     identifier: ""
 

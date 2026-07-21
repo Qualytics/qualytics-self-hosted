@@ -1,8 +1,8 @@
-# Qualytics Docker Images
+# Qualytics Docker Images - v2026.7.21
 
-The Qualytics Helm chart pulls these images directly by default. Use this guide when your organization needs to mirror them into an internal registry before installation. For a published deployment, use the chart version provided by Qualytics; `main` may contain changes awaiting the next release.
+This guide lists the images used by Qualytics chart `2026.7.21`. The chart pulls them directly by default; use the mirroring steps when your organization requires an internal registry.
 
-Qualytics provides the image registry token through a secure channel. This token only grants access to private container images; it is separate from the deployment identifier and platform license described in the [installation guide](../README.md#qualytics-issued-installation-credentials).
+Qualytics provides the image registry token through a secure channel. This token only grants access to private container images; it is separate from the deployment identifier and platform license described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
 
 ## Qualytics Application Images (Required)
 
@@ -10,24 +10,26 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag |
 |---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260710-2bbb2d6` |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260710-a8a46c2` |
-| Frontend | `qualyticsai/frontend` | `20260710-bc0933e` |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260721-6961853` |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260721-1b98096` |
+| Frontend | `qualyticsai/frontend` | `20260721-8ee8b05` |
 
 ### Pull commands
 
 Read the registry token without placing it in shell history, then authenticate with Docker's standard input:
 
 ```bash
-read -rsp "Qualytics registry token: " QUALYTICS_REGISTRY_TOKEN && echo
+printf "Qualytics registry token: "
+IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+echo
 printf '%s' "$QUALYTICS_REGISTRY_TOKEN" | docker login \
   --username qualyticsai \
   --password-stdin
 unset QUALYTICS_REGISTRY_TOKEN
 
-docker pull qualyticsai/controlplane:20260710-2bbb2d6
-docker pull qualyticsai/dataplane:20260710-a8a46c2
-docker pull qualyticsai/frontend:20260710-bc0933e
+docker pull qualyticsai/controlplane:20260721-6961853
+docker pull qualyticsai/dataplane:20260721-1b98096
+docker pull qualyticsai/frontend:20260721-8ee8b05
 ```
 
 ## Infrastructure Images
@@ -74,9 +76,9 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260710-2bbb2d6 "$REGISTRY/qualyticsai/controlplane:20260710-2bbb2d6"
-docker tag qualyticsai/dataplane:20260710-a8a46c2 "$REGISTRY/qualyticsai/dataplane:20260710-a8a46c2"
-docker tag qualyticsai/frontend:20260710-bc0933e "$REGISTRY/qualyticsai/frontend:20260710-bc0933e"
+docker tag qualyticsai/controlplane:20260721-6961853 "$REGISTRY/qualyticsai/controlplane:20260721-6961853"
+docker tag qualyticsai/dataplane:20260721-1b98096 "$REGISTRY/qualyticsai/dataplane:20260721-1b98096"
+docker tag qualyticsai/frontend:20260721-8ee8b05 "$REGISTRY/qualyticsai/frontend:20260721-8ee8b05"
 
 # Infrastructure images
 docker tag rabbitmq:4.3-management "$REGISTRY/rabbitmq:4.3-management"
@@ -86,9 +88,9 @@ docker tag busybox:latest "$REGISTRY/busybox:latest"
 docker tag postgres:17 "$REGISTRY/postgres:17"
 
 # Push all
-docker push "$REGISTRY/qualyticsai/controlplane:20260710-2bbb2d6"
-docker push "$REGISTRY/qualyticsai/dataplane:20260710-a8a46c2"
-docker push "$REGISTRY/qualyticsai/frontend:20260710-bc0933e"
+docker push "$REGISTRY/qualyticsai/controlplane:20260721-6961853"
+docker push "$REGISTRY/qualyticsai/dataplane:20260721-1b98096"
+docker push "$REGISTRY/qualyticsai/frontend:20260721-8ee8b05"
 docker push "$REGISTRY/rabbitmq:4.3-management"
 docker push "$REGISTRY/busybox:latest"
 
@@ -106,14 +108,26 @@ Use the registry token provided via secure message:
 
 ```bash
 kubectl create namespace qualytics
-read -rsp "Qualytics registry token: " QUALYTICS_REGISTRY_TOKEN && echo
+printf "Qualytics registry token: "
+IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+echo
 kubectl create secret docker-registry regcred -n qualytics \
   --docker-username=qualyticsai \
   --docker-password="$QUALYTICS_REGISTRY_TOKEN"
 unset QUALYTICS_REGISTRY_TOKEN
 ```
 
-### 2. Install Qualytics
+### 2. Configure the deployment identifier
+
+Every deployment requires its own identifier from Qualytics. Paste it into the `values.yaml` used for this installation; do not base64-encode or reuse it:
+
+```yaml
+secrets:
+  deployment:
+    identifier: "<provided by Qualytics>"
+```
+
+### 3. Install Qualytics
 
 ```bash
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
