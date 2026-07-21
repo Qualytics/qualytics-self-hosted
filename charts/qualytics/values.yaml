@@ -344,6 +344,8 @@ postgres:
     # Create a `kubernetes.io/tls` Secret named `postgres-tls` in the release
     # namespace before enabling. See docs/ingress-tls.md.
     enabled: false
+  # PostgreSQL schema used by the controlplane.
+  schema: "public"
 
 #--------------------------------------------------------------------------------
 # RabbitMQ

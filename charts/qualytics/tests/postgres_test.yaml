@@ -210,6 +210,30 @@ tests:
           path: spec.jobTemplate.spec.template.spec.containers[0].resources.limits.cpu
         documentIndex: 5
 
+  - it: should use the configured schema for maintenance
+    set:
+      postgres.enabled: true
+      postgres.schema: "qualytics"
+    asserts:
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_SCHEMA
+            value: "qualytics"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: 'psql "\$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v schema="\$POSTGRES_SCHEMA"'
+        documentIndex: 5
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: "WHERE schemaname = :'schema'"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.jobTemplate.spec.template.spec.containers[0].command[2]
+          pattern: "format\\('REINDEX TABLE CONCURRENTLY %I\\.%I;', schemaname, tablename\\)"
+        documentIndex: 5
+
   # Postgres memory calculations
   - it: should calculate shared_buffers as 40% of 10Gi memory
     set:
