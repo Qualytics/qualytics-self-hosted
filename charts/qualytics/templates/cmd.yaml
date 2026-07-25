@@ -249,6 +249,10 @@ spec:
           - name: OIDC_SIGNER_PEM_URL
             value: {{ .Values.secrets.oidc.oidc_signer_pem_url | quote }}
           {{- end }}
+          {{- else if ( eq .Values.global.authType "DB" ) }}
+          # AIDEV-NOTE: Keep CMD auth authority identical to API during the DB cutover.
+          - name: API_AUTH
+            value: DB
           {{- else }}
           - name: API_AUTH
             value: AUTH0
@@ -287,10 +291,6 @@ spec:
                 key: rabbitmq_password
           - name: VERIFY_CERTIFICATE_SIGNERS
             value: {{ .Values.controlplane.egress.verifyTLSCertificates | quote }}
-        {{- if and (.Values.controlplane.auth.migrateIdpByEmail) (ne .Values.controlplane.auth.migrateIdpByEmail "") }}
-          - name: MIGRATE_IDP_BY_EMAIL
-            value: {{ .Values.controlplane.auth.migrateIdpByEmail | quote }}
-        {{- end }}
         {{- if and (.Values.controlplane.auth.scimUsernamePrefix) (ne .Values.controlplane.auth.scimUsernamePrefix "") }}
           - name: SCIM_USERNAME_PREFIX
             value: {{ .Values.controlplane.auth.scimUsernamePrefix | quote }}

@@ -1,10 +1,11 @@
 # Authentication Configuration
 
-This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics supports two authentication modes:
+This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics supports three authentication modes:
 
 | Mode | Helm Value | Description | Air-Gapped Compatible |
 |------|-----------|-------------|:---------------------:|
 | **OIDC** | `global.authType: "OIDC"` | Direct integration with your enterprise Identity Provider (recommended) | Yes |
+| **Database-backed** | `global.authType: "DB"` | Providers configured in the Qualytics database (OIDC, SAML2, or password) | Yes |
 | **Auth0** | `global.authType: "AUTH0"` | Managed by Qualytics — requires egress to `auth.qualytics.io` | No |
 
 For detailed guides including IdP-specific examples, see the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) and [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) in the Qualytics UserGuide.
@@ -135,6 +136,33 @@ Additionally, these are set automatically by the Helm chart:
 | `OIDC_REDIRECT_URL` | `https://<dnsRecord>/api/callback` | Computed from `global.dnsRecord` and `API_ROOT_PATH` |
 | `CFA_ROOT_URL` | `https://<dnsRecord>` | Frontend URL |
 | `CORS_ORIGINS` | `<dnsRecord>` | Allowed CORS origins |
+
+---
+
+## Database-Backed Provider Cutover
+
+`global.authType: "DB"` is an explicit maintenance-window cutover to providers configured under
+**Settings → Access → Providers**. Provider rows may be staged and verified while `AUTH0` or
+`OIDC` remains authoritative. Legacy OIDC environment configuration is imported into a provider
+row on startup when no provider configurations exist, but it continues to control login until this
+value is changed to `DB`.
+
+```yaml
+global:
+  authType: "DB"
+```
+
+Changing to `DB` deliberately invalidates existing Auth0 and legacy OIDC browser sessions. Users
+must reauthenticate with an enabled database-backed provider after the deployment restarts. The
+chart does not inject legacy Auth0 or OIDC credentials into the API, CMD, or frontend DB-mode
+authentication paths.
+
+Before changing the value:
+
+1. Confirm at least one staged provider is enabled and usable.
+2. Schedule a maintenance window and notify users that reauthentication is required.
+3. Set `global.authType: "DB"` and deploy the chart.
+4. Verify the login page lists the expected database-backed providers.
 
 ---
 

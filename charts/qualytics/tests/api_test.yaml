@@ -167,6 +167,27 @@ tests:
             value: "OIDC"
         documentIndex: 0
 
+  - it: should configure DB auth without legacy provider settings
+    set:
+      global.authType: "DB"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_AUTH
+            value: "DB"
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH0_CLIENT_ID
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_CLIENT_ID
+        documentIndex: 0
+
   # Platform configuration
   - it: should configure platform environment variable
     set:

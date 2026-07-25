@@ -120,6 +120,22 @@ tests:
             value: "AUTH0"
         documentIndex: 0
 
+  - it: should configure DB auth without Auth0 client settings
+    set:
+      global.authType: "DB"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VITE_QUALYTICS_AUTH_PROVIDER
+            value: "DB"
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: VITE_QUALYTICS_AUTH0_CLIENTID
+        documentIndex: 0
+
   - it: should disable downloads by default
     asserts:
       - contains:
@@ -192,4 +208,3 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
         documentIndex: 0
-

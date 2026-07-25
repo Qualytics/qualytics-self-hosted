@@ -76,6 +76,8 @@ global:
   platform: "aws"
   deploymentMode: "kubernetes" # kubernetes | databricks
   dnsRecord: "changeme.qualytics.io"
+  # Authentication authority: AUTH0 or OIDC preserve the legacy configuration;
+  # DB enables the database-backed provider configurations.
   authType: "AUTH0"
   imageUrls:
     controlplaneImageUrl: "qualyticsai/controlplane"
@@ -272,8 +274,6 @@ controlplane:
     sender: "no-reply@qualytics.ai"
     port: "465"
   auth:
-    # Enable email-based IDP migration
-    migrateIdpByEmail: ""
     # SCIM username prefix
     scimUsernamePrefix: ""
     # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
