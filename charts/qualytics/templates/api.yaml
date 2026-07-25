@@ -104,6 +104,15 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: secrets_passphrase
+          - name: SECRETS_MIGRATION_ID
+            value: {{ .Values.secrets.postgres.secrets_migration_id | quote }}
+          {{- if .Values.secrets.postgres.new_secrets_passphrase }}
+          - name: NEW_SECRETS_PASSPHRASE
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: new_secrets_passphrase
+          {{- end }}
           - name: JWT_SIGNING_SECRET
             valueFrom:
               secretKeyRef:

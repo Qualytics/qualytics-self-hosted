@@ -188,7 +188,11 @@ secrets:
     database: surveillance_hub
     username: postgres
     password: postgres
+    # Must be replaced for a fresh install. Existing installations rotate this
+    # explicitly with new_secrets_passphrase and secrets_migration_id below.
     secrets_passphrase: ChangeMe!
+    new_secrets_passphrase: ""
+    secrets_migration_id: 1
   smtp:
     smtp_sender_user: smtp_user
     smtp_sender_password: smtp_password

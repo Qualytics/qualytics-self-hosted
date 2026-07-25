@@ -3,3 +3,5 @@
 secrets:
   deployment:
     identifier: test-deployment-identifier
+  postgres:
+    secrets_passphrase: test-secrets-passphrase

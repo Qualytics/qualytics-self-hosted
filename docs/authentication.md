@@ -237,7 +237,24 @@ secrets:
 | `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs. Changing this invalidates all active sessions. |
 | `secrets.postgres.secrets_passphrase` | `SECRETS_PASSPHRASE` | Encrypts sensitive data stored in the database (connection credentials, API keys). |
 
-> **Important:** Both `jwt_signing_secret` and `secrets_passphrase` must be changed from their defaults before deploying to production. Generate secure values with `openssl rand -base64 32`.
+> **Important:** A fresh install is rejected while `secrets_passphrase` is `ChangeMe!`.
+> Generate secure values with `openssl rand -base64 32`. Changing the passphrase directly
+> on an existing installation makes existing ciphertext unreadable; use the rotation process below.
+
+### Rotating the stored-secrets passphrase
+
+Rotation is a two-upgrade maintenance operation. It covers connection credentials, integration
+tokens, notification secrets, OIDC client secrets, and SAML certificates.
+
+1. Keep `secrets_passphrase` unchanged, set `new_secrets_passphrase` to a new strong value,
+   and increment `secrets_migration_id` by exactly one. Upgrade the release. Hub API intentionally
+   stays down while the singleton Hub CMD atomically re-encrypts and verifies current and historical secrets,
+   then exits.
+2. Copy `new_secrets_passphrase` into `secrets_passphrase`, clear
+   `new_secrets_passphrase`, retain the incremented `secrets_migration_id`, and upgrade the
+   release again. API and CMD then restart together with the new key.
+
+Do not skip the second upgrade or run application writers during the first phase.
 
 ---
 

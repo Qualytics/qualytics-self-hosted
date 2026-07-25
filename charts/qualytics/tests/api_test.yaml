@@ -177,6 +177,27 @@ tests:
             name: API_AUTH
             value: "DB"
         documentIndex: 0
+
+  - it: should expose the staged secrets rotation to API
+    set:
+      secrets.postgres.new_secrets_passphrase: "next-passphrase"
+      secrets.postgres.secrets_migration_id: 2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_SECRETS_PASSPHRASE
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: new_secrets_passphrase
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRETS_MIGRATION_ID
+            value: "2"
+        documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
