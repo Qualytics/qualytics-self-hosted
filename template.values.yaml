@@ -11,7 +11,12 @@ global:
   platform: "aws"
   # Your DNS record (REQUIRED) - the domain where Qualytics will be accessible
   dnsRecord: "your-domain.example.com"
-  # Authentication type: OIDC (recommended for self-hosted) or AUTH0
+  # Authentication authority. Exactly one of (case-sensitive — the chart rejects anything else):
+  #   "OIDC"  — direct integration with your IdP via secrets.oidc below (recommended)
+  #   "DB"    — providers (OIDC / SAML2 / password) configured in the Qualytics database,
+  #             under Settings -> Access -> Providers. Cutover is a maintenance window.
+  #   "AUTH0" — managed by Qualytics; requires egress to auth.qualytics.io (not air-gapped)
+  # See docs/authentication.md.
   authType: "OIDC"
 
 #--------------------------------------------------------------------------------
@@ -68,12 +73,44 @@ secrets:
   #   auth0_organization: org_changeme
   #   auth0_spa_client_id: spa_client_id
 
-  # System secrets (CHANGE THESE!)
+  # ------------------------------------------------------------------------------
+  # System secrets — YOU MUST REPLACE THESE BEFORE INSTALLING
+  #
+  # `jwt_signing_secret` and `secrets_passphrase` are enforced: a fresh install is
+  # rejected while either still reads `ChangeMe!`, and `helm install` fails with a
+  # message naming the value. They are left as the known-bad placeholder deliberately,
+  # so a forgotten value fails closed instead of quietly shipping a weak but working
+  # default. `password` and `rabbitmq_password` are not enforced — change them anyway.
+  #
+  # Generate each one separately:
+  #   openssl rand -base64 32
+  # ------------------------------------------------------------------------------
   auth:
+    # REQUIRED — signs browser session JWTs. Under authType "DB" this key is the sole
+    # session authority: anyone who knows it can mint valid sessions for your deployment.
+    # Replace with `openssl rand -base64 32`. Rotating it logs everyone out.
     jwt_signing_secret: ChangeMe!
   postgres:
     password: postgres
+    # REQUIRED — encrypts secrets stored in the database: datastore credentials, API keys,
+    # integration tokens, IdP client secrets, and SAML certificates.
+    # Replace with `openssl rand -base64 32`, then keep it safe: without it the encrypted
+    # columns cannot be read. Do NOT edit it in place later — rotate it with the two-upgrade
+    # process in docs/authentication.md.
     secrets_passphrase: ChangeMe!
+    # Rotation only — leave both unset for a new install.
+    #
+    # new_secrets_passphrase stages the replacement passphrase for phase 1 of the rotation.
+    # secrets_migration_id is a MONOTONIC COUNTER shared with this deployment's database
+    # (it starts at 1). Increment it by exactly one per rotation, always together with
+    # new_secrets_passphrase — the chart rejects a staged passphrase left at 1.
+    #
+    # NEVER reset or lower secrets_migration_id, and carry it forward for the lifetime of
+    # the deployment: once you have rotated, re-rendering 1 from a fresh copy of this
+    # template stops Hub API from starting while Hub CMD keeps running.
+    #
+    # new_secrets_passphrase: ""
+    # secrets_migration_id: 1
   rabbitmq:
     rabbitmq_password: ChangeMe!
   # SMTP AUTH credentials — only set when your SMTP server requires authentication.

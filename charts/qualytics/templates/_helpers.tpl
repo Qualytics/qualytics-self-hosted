@@ -34,6 +34,41 @@ Generate postgres connection URL
 {{- end -}}
 
 {{/*
+Validate global.authType. Renders nothing; fails the render on an unsupported value.
+
+The templates disagree about what an unrecognized value means: secrets.yaml emits neither
+provider's keys, while api.yaml, cmd.yaml, and frontend.yaml fall through to their AUTH0
+branch. A typo such as "db" or "Db" therefore renders API/CMD pods that reference Auth0
+keys the Secret does not contain (CreateContainerConfigError) while the frontend silently
+boots in Auth0 mode. Rejecting the value up front turns that into one clear message.
+*/}}
+{{- define "qualytics.validate.authType" -}}
+{{- $authType := .Values.global.authType | toString -}}
+{{- if not (has $authType (list "AUTH0" "OIDC" "DB")) -}}
+{{- fail (printf "global.authType must be exactly one of AUTH0, OIDC, or DB (case-sensitive); got %q" $authType) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate the secrets-passphrase rotation pair. Renders nothing; fails the render when a new
+passphrase is staged without advancing the migration id.
+
+The database counter starts at 1 and the chart default is 1, so a first rotation can never
+legitimately target id 1. Staging secrets.postgres.new_secrets_passphrase while leaving
+secrets_migration_id at 1 makes the controlplane report that the migration "has already
+completed" — indistinguishable from success. Promoting the new passphrase after that
+message re-encrypts nothing and leaves every encrypted column undecryptable.
+*/}}
+{{- define "qualytics.validate.secretsRotation" -}}
+{{- if .Values.secrets.postgres.new_secrets_passphrase -}}
+{{- $migrationId := .Values.secrets.postgres.secrets_migration_id | int -}}
+{{- if lt $migrationId 2 -}}
+{{- fail (printf "secrets.postgres.secrets_migration_id must be incremented to one more than the last completed migration (>= 2) whenever secrets.postgres.new_secrets_passphrase is set; got %d. The database counter starts at 1, so a rotation left at 1 targets an already-completed migration: the controlplane logs \"has already completed\" instead of re-encrypting, and promoting the new passphrase afterwards makes every encrypted column undecryptable." $migrationId) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Determine deployment size based on dataplane.driver.cores
 */}}
 {{- define "qualytics.global.size" -}}

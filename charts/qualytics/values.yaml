@@ -177,6 +177,10 @@ secrets:
     # oidc_jwt_ttl_minutes: 60
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:
+    # Must be replaced for a fresh install — the chart rejects the ChangeMe! default.
+    # This key signs the browser session JWTs and is the sole session authority under
+    # global.authType "DB", so a published default lets anyone mint valid sessions.
+    # Generate with: openssl rand -base64 32
     jwt_signing_secret: ChangeMe!
   deployment:
     # QUA-2163: this deployment's Qualytics-issued identity — a signed claims document
@@ -194,8 +198,16 @@ secrets:
     password: postgres
     # Must be replaced for a fresh install. Existing installations rotate this
     # explicitly with new_secrets_passphrase and secrets_migration_id below.
+    # See docs/authentication.md for the two-upgrade rotation runbook.
     secrets_passphrase: ChangeMe!
     new_secrets_passphrase: ""
+    # Monotonic counter shared with the qualytics_metadata.secrets_migration_id column in
+    # this deployment's database. NEVER reset or lower it — it must be preserved for the
+    # lifetime of the deployment. After the first rotation the database counter is
+    # permanently >= 2; re-rendering 1 from a regenerated values file makes Hub API refuse
+    # to start while Hub CMD (which performs no parity check) keeps running — an asymmetric
+    # split-brain. Increment by exactly one per rotation, and only alongside
+    # new_secrets_passphrase; the chart rejects a staged passphrase left at id 1.
     secrets_migration_id: 1
   smtp:
     # SMTP AUTH credentials. Leave both empty when your SMTP server does not require

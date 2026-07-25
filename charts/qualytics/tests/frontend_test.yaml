@@ -120,6 +120,15 @@ tests:
             value: "AUTH0"
         documentIndex: 0
 
+  # Without validation the frontend silently boots in Auth0 mode on a typo, which is the
+  # least visible of the three failure modes.
+  - it: should reject an invalid authType
+    set:
+      global.authType: "db"
+    asserts:
+      - failedTemplate:
+          errorPattern: global.authType must be exactly one of AUTH0, OIDC, or DB
+
   - it: should configure DB auth without Auth0 client settings
     set:
       global.authType: "DB"

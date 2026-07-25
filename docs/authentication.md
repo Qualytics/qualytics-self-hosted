@@ -166,6 +166,58 @@ Before changing the value:
 3. Set `global.authType: "DB"` and deploy the chart.
 4. Verify the login page lists the expected database-backed providers.
 
+`global.authType` is validated by the chart: anything other than exactly `AUTH0`, `OIDC`, or `DB`
+(case-sensitive) fails the render. A typo such as `"db"` used to render API and CMD pods that
+referenced Auth0 Secret keys the chart no longer emits — `CreateContainerConfigError` — while the
+frontend silently booted in Auth0 mode.
+
+### SAML2 and the API ingress WAF
+
+A SAML2 provider adds a browser **form POST** from your IdP to
+`https://<dnsRecord>/api/auth/saml2/acs`, carrying a large base64 `SAMLResponse` field. That path is
+fronted by the `<release>-api-ingress` Ingress, which enables ModSecurity with the OWASP Core Rule
+Set and per-IP rate limiting. Base64 assertion blobs are a classic CRS false-positive trigger, and
+signed/encrypted assertions from IdPs that embed certificate chains or many group attributes can be
+large.
+
+| Symptom | Likely cause | Where to fix |
+|---------|-------------|--------------|
+| SAML login fails with a `403` served by nginx (not the app), ModSecurity audit JSON in the ingress-controller log naming a CRS rule id | OWASP CRS matched the base64 `SAMLResponse` body | Add a targeted `ctl:ruleRemoveTargetById`/`ctl:ruleRemoveById` for that rule id, scoped to the ACS path, in the `nginx.ingress.kubernetes.io/modsecurity-snippet` of `<release>-api-ingress` |
+| `413 Request Entity Too Large` | Assertion exceeds `nginx.ingress.kubernetes.io/proxy-body-size` (`20m` on the API ingress) | Raise `proxy-body-size` on `<release>-api-ingress` |
+| `403` with a ModSecurity body-limit message on a large assertion | The ACS POST is a non-file body, so it is capped by `SecRequestBodyNoFilesLimit` (**2.6 MB**), well below the 20 MB `SecRequestBodyLimit` | Raise `SecRequestBodyNoFilesLimit` in the same `modsecurity-snippet` |
+| Intermittent `429` during a login wave | Per-IP rate limiting; many users share one egress IP behind corporate NAT | Raise `ingress.maxRequestsPerSecondPerIP` / `ingress.burstMultiplier` in `values.yaml` |
+
+**Do not disable the WAF for the whole API ingress** (`enable-owasp-core-rules: "false"`) to make
+SAML work — that removes CRS from every authenticated API endpoint. Scope the change to the ACS
+path.
+
+Only the rate-limit knobs (`ingress.maxRequestsPerSecondPerIP`, `ingress.burstMultiplier`,
+`ingress.maxConnectionsPerIP`, `ingress.frontendMaxRequestsPerSecondPerIP`,
+`ingress.frontendMaxConnectionsPerIP`), `ingress.cors`, and `ingress.tls.*` are exposed as values
+today. There is no values knob for arbitrary ingress annotations, so a CRS exclusion or a body-size
+override for the ACS path is made by editing `charts/qualytics/templates/ingress.yaml` — in the
+`<release>-api-ingress` annotations block — and deploying the chart from your fork or overlay. Get
+the rule id from the ingress-controller log first, then exclude only that id and only for the ACS
+path, for example:
+
+```yaml
+# charts/qualytics/templates/ingress.yaml, annotations of {{ .Release.Name }}-api-ingress
+nginx.ingress.kubernetes.io/modsecurity-snippet: |
+  {{- include "common.modsecurity.snippet" . | nindent 6 }}
+  SecRequestBodyLimit 20971520          # 20MB
+  SecRequestBodyNoFilesLimit 2621440    # 2.6MB — raise if large assertions are rejected
+  SecRequestBodyLimitAction Reject
+  # SAML2 ACS: the IdP form-POSTs a base64 SAMLResponse here. Disable only the rule ids
+  # the audit log shows firing, and only for this path.
+  SecRule REQUEST_URI "@beginsWith /api/auth/saml2/acs" \
+    "id:14860,phase:1,pass,nolog,ctl:ruleRemoveById=<RULE_ID>"
+```
+
+If you prefer to keep the packaged chart unmodified, define a separate Ingress for
+`/api/auth/saml2/acs` with a higher `nginx.ingress.kubernetes.io/priority` than the API ingress
+(`10`) and the relaxed annotations on that Ingress alone — the same pattern the chart already uses
+for the streaming ingress.
+
 ---
 
 ## Auth0 Configuration
@@ -236,10 +288,11 @@ secrets:
 
 | Helm Value | Environment Variable | Description |
 |-----------|---------------------|-------------|
-| `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs. Changing this invalidates all active sessions. |
-| `secrets.postgres.secrets_passphrase` | `SECRETS_PASSPHRASE` | Encrypts sensitive data stored in the database (connection credentials, API keys). |
+| `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs. Under `authType: "DB"` this key is the sole browser-session authority. Changing it invalidates all active sessions. |
+| `secrets.postgres.secrets_passphrase` | `SECRETS_PASSPHRASE` | Encrypts sensitive data stored in the database (connection credentials, API keys, IdP client secrets, SAML certificates). |
 
-> **Important:** A fresh install is rejected while `secrets_passphrase` is `ChangeMe!`.
+> **Important:** A fresh install is rejected while **either** `secrets_passphrase` **or**
+> `jwt_signing_secret` is still `ChangeMe!`. Both are enforced by the chart at install time.
 > Generate secure values with `openssl rand -base64 32`. Changing the passphrase directly
 > on an existing installation makes existing ciphertext unreadable; use the rotation process below.
 
@@ -257,6 +310,64 @@ tokens, notification secrets, OIDC client secrets, and SAML certificates.
    release again. API and CMD then restart together with the new key.
 
 Do not skip the second upgrade or run application writers during the first phase.
+
+`secrets_migration_id` must be incremented whenever `new_secrets_passphrase` is set: the counter
+starts at 1, so the chart rejects a staged passphrase that leaves it at 1. Without that guard the
+controlplane reports `Secrets migration 1 has already completed` — indistinguishable from success —
+and promoting a passphrase that never re-encrypted anything makes every encrypted column
+undecryptable.
+
+#### Phase-1 upgrade command: drop `--wait` and `--atomic`
+
+The [installation command](../README.md#3-deploy-qualytics-to-your-cluster) uses `--wait --timeout=5m`.
+**Do not use `--wait`, and never use `--atomic`, for the phase-1 (step 1) upgrade.** By design in
+that phase:
+
+- Hub API exits rather than serving against a half-rotated database, so its pods never become ready.
+- Hub CMD raises `EnvironmentError` even when the rotation *succeeds* (that is how it reports
+  "now promote the passphrase"), then restarts and crashloops on the "already completed" branch.
+
+`--wait` therefore **always** reports failure regardless of the real outcome, and `--atomic` would
+roll the release back mid-window — restoring the old passphrase against an already re-encrypted
+database. Run phase 1 as:
+
+```bash
+helm upgrade qualytics qualytics/qualytics \
+  --namespace qualytics \
+  --version "$CHART_VERSION" \
+  -f values.yaml
+  # no --wait, no --atomic
+```
+
+A crashlooping `qualytics-cmd` pod after phase 1 is **expected**. Confirm the rotation actually
+succeeded before starting phase 2 — do not rely on the Helm exit status or on pod health:
+
+```bash
+# 1. The completion log line (emitted once, before the intentional EnvironmentError)
+kubectl logs -n qualytics deployment/qualytics-cmd --all-containers --previous \
+  | grep "completed and verified"
+# -> Secrets migration <N> completed and verified for <rows> rows
+
+# 2. The authoritative check — the counter in the database must equal the configured id.
+#    (Bundled Postgres shown; with an external database, run the same query against it.)
+kubectl exec -n qualytics statefulset/qualytics-postgres -- \
+  psql -U postgres -d surveillance_hub -tAc \
+  "select secrets_migration_id from qualytics_metadata order by created desc limit 1;"
+```
+
+When the database value equals your `secrets_migration_id`, phase 1 is complete: proceed to
+step 2. Restore `--wait --timeout=5m` for the phase-2 upgrade, which is an ordinary restart.
+
+#### `secrets_migration_id` is a lifetime-of-the-deployment counter
+
+`secrets_migration_id` mirrors `qualytics_metadata.secrets_migration_id` in your database. It is a
+**monotonic counter that must never be reset or lowered** — preserve it in your values file for the
+lifetime of the deployment. After the first rotation the database counter is permanently `>= 2`, so
+a deploy from a regenerated or reset values file re-renders `1`: Hub API refuses to start
+("configured secrets migration id ... differs from the current state") while Hub CMD performs no
+parity check and keeps running. The result is an asymmetric split-brain that is easy to mistake for
+an API-only outage. Treat the value as deployment state, not as a default — especially under GitOps,
+where drift silently reintroduces it.
 
 ---
 
@@ -287,7 +398,9 @@ For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's
 |---------|-------------|----------|
 | 401 after login callback | Redirect URI mismatch | Ensure your IdP has `https://<dnsRecord>/api/callback` as an allowed redirect URI |
 | CORS errors in browser | `CORS_ORIGINS` not set correctly | Check that `global.dnsRecord` matches the URL in the browser |
-| Login page not loading | Wrong `authType` | Verify `global.authType` matches your auth provider (`OIDC` or `AUTH0`) |
+| Login page not loading | Wrong `authType` | Verify `global.authType` matches your auth provider (`OIDC`, `DB`, or `AUTH0`) |
+| `helm install`/`upgrade` fails on `global.authType` | Value is not exactly `AUTH0`, `OIDC`, or `DB` | Fix the case/spelling — the chart rejects anything else rather than falling back to Auth0 |
+| SAML login returns 403 or 413 from nginx, never reaching the app | OWASP CRS or a body-size limit on the API ingress rejected the `SAMLResponse` POST | See [SAML2 and the API ingress WAF](#saml2-and-the-api-ingress-waf) |
 | "Invalid client" error | Wrong client credentials | Double-check `oidc_client_id` and `oidc_client_secret` match your IdP |
 | Auth0 connection timeout | No egress to auth.qualytics.io | Ensure firewall allows outbound HTTPS to `auth.qualytics.io` |
 | User attributes missing | Claims mapping mismatch | Adjust `oidc_user_*_key` values to match your IdP's claim names |

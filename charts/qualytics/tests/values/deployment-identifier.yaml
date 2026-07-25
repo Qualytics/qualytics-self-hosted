@@ -1,7 +1,14 @@
 # QUA-2163: secrets.deployment.identifier is required (secrets.yaml aborts rendering
 # without it), so suites that render secrets.yaml load this fixture.
+#
+# secrets.yaml also rejects the shipped `ChangeMe!` defaults for the stored-secrets
+# passphrase and the JWT signing secret on a fresh install, so this fixture supplies
+# replacements for both. Suites asserting those guards override the value back to
+# `ChangeMe!` explicitly.
 secrets:
   deployment:
     identifier: test-deployment-identifier
   postgres:
     secrets_passphrase: test-secrets-passphrase
+  auth:
+    jwt_signing_secret: test-jwt-signing-secret

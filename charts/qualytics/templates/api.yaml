@@ -1,3 +1,5 @@
+{{- include "qualytics.validate.authType" . -}}
+{{- include "qualytics.validate.secretsRotation" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:

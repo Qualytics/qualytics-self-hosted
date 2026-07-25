@@ -217,6 +217,20 @@ tests:
             value: "gcp"
         documentIndex: 0
 
+  - it: should reject an invalid authType
+    set:
+      global.authType: "Db"
+    asserts:
+      - failedTemplate:
+          errorPattern: global.authType must be exactly one of AUTH0, OIDC, or DB
+
+  - it: should reject a staged passphrase without an incremented migration id
+    set:
+      secrets.postgres.new_secrets_passphrase: "next-passphrase"
+    asserts:
+      - failedTemplate:
+          errorPattern: secrets.postgres.secrets_migration_id must be incremented
+
   - it: should expose the staged secrets rotation to CMD
     set:
       secrets.postgres.new_secrets_passphrase: "next-passphrase"
