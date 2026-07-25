@@ -79,7 +79,7 @@ Assuming the recommended default of 12 executor nodes:
 
 ### Infrastructure Notes
 
-- **Kubernetes version**: 1.27+ recommended
+- **Kubernetes version**: 1.30+ recommended
 - **Container runtime**: containerd (recommended) or CRI-O
 - **Node labels**: Apply `appNodes=true`, `driverNodes=true`, and `executorNodes=true` to the respective node pools
 - **Networking**: 10 Gbps minimum between executor nodes (25 Gbps recommended for Large and above)

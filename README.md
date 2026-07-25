@@ -24,7 +24,7 @@ flowchart LR
       subgraph appPool["Application Nodes — appNodes=true"]
         direction LR
         fe["Frontend"]
-        api["Controlplane API<br/>(8 replicas)"]
+        api["Controlplane API"]
         cmd["Controlplane CMD"]
         pg[("PostgreSQL<br/>StatefulSet")]
         rmq[("RabbitMQ<br/>StatefulSet, emptyDir")]
@@ -69,12 +69,12 @@ Before deploying Qualytics, ensure you have:
 - A Kubernetes cluster (recommended version 1.30+)
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
-- Docker registry credentials from your Qualytics account manager
+- A Qualytics-issued image registry token and a unique deployment identifier
 - Authentication configuration — either OIDC credentials from your IdP (recommended) or Auth0 credentials from your Qualytics account manager
 
 ## How should I use this chart?
 
-Please work with your account manager at Qualytics to secure the right values for your licensed deployment. If you don't yet have an account manager, [please write us here](mailto://hello@qualytics.ai) to say hello!
+Work with your Qualytics account manager to receive the required installation materials through a secure channel. If you don't yet have an account manager, [contact Qualytics](mailto:hello@qualytics.ai).
 
 ### 1. Create a CNCF compliant cluster
 
@@ -105,20 +105,38 @@ The table below shows **suggested** instance types for a standard **Medium-tier*
 | GKE      | n4-standard-8 (8 vCPUs, 32 GB)      | n4-highmem-8 (8 vCPUs, 64 GB)                   | n2-highmem-8 + Local SSD (8 vCPUs, 64 GB)        |
 | AKS      | Standard_D8s_v6 (8 vCPUs, 32 GB)    | Standard_E8s_v6 (8 vCPUs, 64 GB)                | Standard_E8ds_v5 (8 vCPUs, 64 GB, 300 GB SSD)    |
 
-For deployments with different data volumes, the [Cluster Sizing Guide](./docs/cluster-sizing.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto://hello@qualytics.ai) for sizing guidance.
+For deployments with different data volumes, the [Cluster Sizing Guide](./docs/cluster-sizing.md) covers all six tiers (Small through 4X-Large), on-premises bare-metal specifications, cloud instance types for EKS/GKE/AKS, and Helm configurations. Contact your [Qualytics account manager](mailto:hello@qualytics.ai) for sizing guidance.
 
 
-#### Docker Registry Secrets
+#### Qualytics-provided installation configuration
 
-Execute the command below using the credentials supplied by your account manager as a replacement for "&lt;token&gt;". The secret created will provide access to Qualytics private registry on dockerhub and the required images that are available there.
+Qualytics sends these items through an agreed secure channel before installation or upgrade:
+
+| Item | Purpose |
+|---|---|
+| Image registry token | Credential used to pull private Qualytics container images from Docker Hub. |
+| Deployment identifier | Required configuration value that identifies one installation. Never reuse it for another deployment. |
+
+The registry token and deployment identifier are separate from the platform license requested after installation. Handle all three, along with your populated `values.yaml`, securely.
+
+#### Docker registry secret
+
+Create the image pull Secret with the registry token provided by Qualytics. The prompt keeps the token out of your shell history.
 
 ```bash
 kubectl create namespace qualytics
-kubectl create secret docker-registry regcred -n qualytics --docker-username=qualyticsai --docker-password=<token>
+printf "Qualytics registry token: "
+IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+echo
+kubectl create secret docker-registry regcred \
+  --namespace qualytics \
+  --docker-username qualyticsai \
+  --docker-password "$QUALYTICS_REGISTRY_TOKEN"
+unset QUALYTICS_REGISTRY_TOKEN
 ```
 
 > [!IMPORTANT]
-> The above configuration will connect your cluster directly to our private dockerhub repositories for pulling our images. If you are unable to directly connect your cluster to our image repository for technical or compliance reasons, then you can instead import our images into your preferred registry using these same credentials (`docker login -u qualyticsai -p <token>`). You'll need to update the image URLs in the values.yaml file in the next step to point to your repository instead of ours.
+> This connects the cluster to the private Qualytics repositories on Docker Hub. If policy requires an internal registry, follow the secure mirroring instructions in [Qualytics Docker Images](./docs/docker-images.md), then update the image URLs in `values.yaml`.
 
 
 ### 2. Create your configuration file
@@ -127,17 +145,31 @@ For a quick start, copy the simplified template configuration:
 
 ```bash
 cp template.values.yaml values.yaml
+chmod 600 values.yaml
 ```
 
-The `template.values.yaml` file contains essential configurations with sensible defaults. You'll need to update these required settings:
+The root `values.yaml` is ignored by Git. Do not commit or share a populated values file; GitOps users should store sensitive values with their organization's encrypted secret-management workflow.
 
-1. **DNS Record** (provided by Qualytics or managed by customer):
+Update these required settings:
+
+1. **Deployment identifier** — paste the value provided by Qualytics exactly as received. Do not base64-encode it or reuse it for another deployment.
+
+   ```yaml
+   secrets:
+     deployment:
+       identifier: "<provided by Qualytics>"
+   ```
+
+   > [!IMPORTANT]
+   > Every installation must set this value. Existing installations must obtain an identifier from Qualytics and add it before upgrading to chart version `2026.7.21` or later. If it is missing, Helm stops during rendering before changing Kubernetes resources.
+
+2. **DNS Record** (provided by Qualytics or managed by customer):
    ```yaml
    global:
      dnsRecord: "your-company.qualytics.io"  # or your custom domain
    ```
 
-2. **Authentication** — choose one of the following:
+3. **Authentication** — choose one of the following:
 
    **Option A: OIDC — Direct IdP Integration (Recommended)**
 
@@ -169,7 +201,7 @@ The `template.values.yaml` file contains essential configurations with sensible 
 
    **Option B: Auth0 — Managed by Qualytics**
 
-   Contact your [Qualytics account manager](mailto://hello@qualytics.ai) to request Auth0 resources, then configure the provided values:
+   Contact your [Qualytics account manager](mailto:hello@qualytics.ai) to request Auth0 resources, then configure the provided values:
 
    ```yaml
    global:
@@ -184,7 +216,7 @@ The `template.values.yaml` file contains essential configurations with sensible 
 
    > See the [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) for details on how to request Auth0 resources from Qualytics.
 
-3. **Security Secrets** (generate secure random values):
+4. **Security Secrets** (generate secure random values):
    ```yaml
    secrets:
      auth:
@@ -204,7 +236,7 @@ The `template.values.yaml` file contains essential configurations with sensible 
 
 For advanced configuration, refer to the full `charts/qualytics/values.yaml` file which contains all available options.
 
-Contact your [Qualytics account manager](mailto://hello@qualytics.ai) for assistance.
+Contact your [Qualytics account manager](mailto:hello@qualytics.ai) for assistance.
 
 ### 3. Deploy Qualytics to your cluster
 
@@ -215,10 +247,13 @@ Add the Qualytics Helm repository and deploy the platform:
 helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
 helm repo update
 
+CHART_VERSION="<version provided by Qualytics>"
+
 # Deploy Qualytics
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
+  --version "$CHART_VERSION" \
   -f values.yaml \
   --wait \
   --timeout=5m
@@ -250,7 +285,17 @@ Run Qualytics under a domain you control:
 3. Mint a TLS certificate for that hostname (corporate CA, Let's Encrypt, cloud-provider managed cert, etc.) and create a Kubernetes `tls` Secret from it — see [docs/ingress-tls.md](./docs/ingress-tls.md) for the recommended single-Secret pattern and the per-ingress Secret option.
 4. Update any firewall rules to allow traffic to your domain.
 
-Contact your [account manager](mailto://hello@qualytics.ai) if you need assistance.
+Contact your [account manager](mailto:hello@qualytics.ai) if you need assistance.
+
+### 5. Activate your license
+
+After the deployment is accessible, sign in as an Admin or Manager and open **Settings > Status**:
+
+1. Select **Generate License Request**.
+2. Send the request to your Qualytics account manager through the agreed secure channel.
+3. Apply the signed license returned by Qualytics using **Update License**.
+
+The license request, signed license, registry token, and deployment identifier are separate artifacts and should all be handled securely. A 31-day grace period begins when the first datastore is created; see [License Management](./docs/license-management.md) for activation and renewal details.
 
 ## Can I run a fully "air-gapped" deployment?
 
@@ -273,8 +318,12 @@ See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oi
 - Ensure storage classes are available
 
 **Image pull errors:**
-- Verify Docker registry secret: `kubectl get secret regcred -n qualytics -o yaml`
+- Verify that the Docker registry Secret exists: `kubectl get secret regcred -n qualytics`
 - Check if images are accessible from your cluster
+
+**Missing deployment identifier:**
+- Obtain a unique identifier from Qualytics and set `secrets.deployment.identifier` in `values.yaml`
+- Do not reuse an identifier from another installation
 
 **Ingress not working:**
 - Ensure an ingress controller is installed and running
@@ -302,6 +351,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 ## Additional Documentation
 
 - [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
+- [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough

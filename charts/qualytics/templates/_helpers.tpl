@@ -18,6 +18,21 @@ Generate postgres connection URL
 {{- printf "%s:%s@%s:%s/%s?sslmode=%s" .Values.secrets.postgres.username .Values.secrets.postgres.password $host $port .Values.secrets.postgres.database $sslMode -}}
 {{- end -}}
 
+{{/* Return a PostgreSQL schema name that is safe to quote in application SQL. */}}
+{{- define "qualytics.postgres.schema" -}}
+{{- $schema := "public" -}}
+{{- if hasKey .Values.postgres "schema" -}}
+{{- $schema = get .Values.postgres "schema" -}}
+{{- end -}}
+{{- if not (kindIs "string" $schema) -}}
+{{- fail "postgres.schema must be a string" -}}
+{{- end -}}
+{{- if not (regexMatch "^[A-Za-z_][A-Za-z0-9_]{0,62}$" $schema) -}}
+{{- fail "postgres.schema must be a PostgreSQL identifier of 1-63 letters, numbers, or underscores" -}}
+{{- end -}}
+{{- $schema -}}
+{{- end -}}
+
 {{/*
 Determine deployment size based on dataplane.driver.cores
 */}}

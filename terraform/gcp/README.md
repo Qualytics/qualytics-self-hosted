@@ -21,7 +21,7 @@ This Terraform configuration creates a Google Kubernetes Engine (GKE) cluster co
 - [Terraform](https://www.terraform.io/downloads) >= 1.3.0
 - [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) configured with appropriate credentials
 - A GCP project with billing enabled
-- Docker registry credentials from your Qualytics account manager
+- A Qualytics-issued image registry token and a unique deployment identifier
 
 ## Quick Start
 
@@ -72,18 +72,40 @@ This Terraform configuration creates a Google Kubernetes Engine (GKE) cluster co
 7. **Create Docker registry secret** (if not using `docker_registry_token` variable):
 
    ```bash
+   printf "Qualytics registry token: "
+   IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+   echo
    kubectl create secret docker-registry regcred -n qualytics \
      --docker-username=qualyticsai \
-     --docker-password=<token-from-qualytics>
+     --docker-password="$QUALYTICS_REGISTRY_TOKEN"
+   unset QUALYTICS_REGISTRY_TOKEN
    ```
 
-8. **Deploy Qualytics using Helm:**
+8. **Prepare the Helm configuration:**
+
+   Return to the repository root, copy the customer template, and set the unique deployment identifier provided by Qualytics:
+
+   ```bash
+   cd ../..
+   cp template.values.yaml values.yaml
+   chmod 600 values.yaml
+   ```
+
+   ```yaml
+   secrets:
+     deployment:
+       identifier: "<provided by Qualytics>"
+   ```
+
+9. **Deploy Qualytics using Helm:**
 
    ```bash
    helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
    helm repo update
+   CHART_VERSION="<version provided by Qualytics>"
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
+     --version "$CHART_VERSION" \
      -f values.yaml \
      --wait \
      --timeout=5m
@@ -119,6 +141,10 @@ See `variables.tf` for all available configuration options, including:
 When deploying Qualytics, ensure your `values.yaml` includes the appropriate node selectors:
 
 ```yaml
+secrets:
+  deployment:
+    identifier: "<provided by Qualytics>"
+
 global:
   platform: "gcp"
 

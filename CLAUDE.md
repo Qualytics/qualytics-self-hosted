@@ -4,25 +4,25 @@
 
 This Helm chart deploys a single-tenant instance of the Qualytics data quality platform to a CNCF-compliant Kubernetes cluster. The deployment includes:
 
-- **Control Plane**: API service (6 replicas), CMD background processor
+- **Control Plane**: API service and CMD background processor
 - **Data Plane**: Apache Spark 4.1.1 driver as a native `Deployment` running `spark-submit` in client mode; executor pods created directly via the Kubernetes API (dynamic executor scaling 1-12). No spark-operator dependency.
-- **Frontend**: React/Vue web UI (1 replica)
-- **Data Tier**: PostgreSQL 17 (StatefulSet with 100Gi storage), RabbitMQ 4.0 message broker
+- **Frontend**: Web UI
+- **Data Tier**: PostgreSQL 17 and RabbitMQ 4.3
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
 - **Dependencies**: nginx-ingress 4.15.1 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
 
-Chart version: **2026.4.20** (application type)
+The current chart and application versions are defined in `charts/qualytics/Chart.yaml`.
 
 ## Directory Structure
 
 ```
 qualytics-self-hosted/
 ├── README.md                           # User-facing deployment documentation (incl. Mermaid architecture diagram)
-├── template.values.yaml                # Simplified configuration template (128 lines)
+├── template.values.yaml                # Simplified customer configuration template
 ├── LICENSE                             # License file
 └── charts/qualytics/
     ├── Chart.yaml                      # Chart metadata and dependencies
-    ├── values.yaml                     # Default configuration (297 lines)
+    ├── values.yaml                     # Complete default configuration
     ├── charts/                         # Packaged chart dependencies (.tgz)
     │   └── ingress-nginx-4.15.1.tgz    # NGINX ingress controller
     ├── templates/                      # template files + helpers
@@ -37,14 +37,17 @@ qualytics-self-hosted/
     │   ├── ingress.yaml                # Ingress with WAF (TLS is BYO Secret)
     │   ├── psql.yaml                   # PostgreSQL utility pod
     │   └── storage-classes.yaml        # Platform-specific storage classes
-    └── tests/                          # Helm unit tests (9 test suites)
+    └── tests/                          # Helm unit tests
         ├── api_test.yaml               # API deployment tests
         ├── cmd_test.yaml               # CMD processor tests
         ├── spark_test.yaml             # Spark application tests
         ├── frontend_test.yaml          # Frontend deployment tests
+        ├── ingress_test.yaml           # Ingress tests
         ├── postgres_test.yaml          # PostgreSQL statefulset tests
+        ├── psql_test.yaml              # PostgreSQL utility pod tests
         ├── rabbitmq_test.yaml          # RabbitMQ tests
         ├── secrets_test.yaml           # Secrets configuration tests
+        ├── storage_classes_test.yaml   # Storage class tests
         ├── templates_test.yaml         # Template helpers tests
         └── global_test.yaml            # Global configuration tests
 ```
@@ -52,16 +55,17 @@ qualytics-self-hosted/
 ## Commands
 
 ### Development & Testing
-- **Lint chart**: `helm lint charts/qualytics`
+- **Lint chart**: `helm lint charts/qualytics -f template.values.yaml -f charts/qualytics/tests/values/deployment-identifier.yaml`
 - **Run unit tests**: `helm unittest charts/qualytics` (requires helm-unittest plugin)
-- **Template chart**: `helm template qualytics charts/qualytics -f values.yaml`
-- **Validate manifests**: `helm template qualytics charts/qualytics -f values.yaml | kubectl apply --dry-run=client -f -`
+- **Template chart**: `helm template qualytics charts/qualytics -f template.values.yaml -f charts/qualytics/tests/values/deployment-identifier.yaml`
+- **Validate manifests**: `helm template qualytics charts/qualytics -f template.values.yaml -f charts/qualytics/tests/values/deployment-identifier.yaml | kubectl apply --dry-run=client -f -`
 - **Package chart**: `helm package charts/qualytics`
 
 ### Installation & Updates
 - **Add repository**: `helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted`
-- **Install chart**: `helm upgrade --install qualytics qualytics/qualytics --namespace qualytics --create-namespace -f values.yaml --wait --timeout=5m`
-- **Upgrade release**: `helm upgrade qualytics qualytics/qualytics --namespace qualytics -f values.yaml --wait --timeout=5m`
+- **Set chart version**: `CHART_VERSION="<version provided by Qualytics>"`
+- **Install chart**: `helm upgrade --install qualytics qualytics/qualytics --namespace qualytics --create-namespace --version "$CHART_VERSION" -f values.yaml --wait --timeout=5m`
+- **Upgrade release**: `helm upgrade qualytics qualytics/qualytics --namespace qualytics --version "$CHART_VERSION" -f values.yaml --wait --timeout=5m`
 
 - **Uninstall release**: `helm uninstall qualytics --namespace qualytics`
 - **List releases**: `helm list --namespace qualytics`
@@ -81,7 +85,7 @@ This chart uses **helm-unittest** plugin for comprehensive unit testing:
 
 ### Test Structure
 - **Location**: `/charts/qualytics/tests/*_test.yaml` files
-- **Coverage**: 9 test suites covering all major components
+- **Coverage**: 12 test suites covering all major components
 - **Framework**: YAML-based assertions with helm-unittest plugin
 - **Installation**: `helm plugin install https://github.com/helm-unittest/helm-unittest`
 
@@ -91,9 +95,12 @@ Each component has a corresponding test file:
 - `cmd_test.yaml` - CMD processor tests
 - `spark_test.yaml` - Spark dataplane tests (Deployment + RBAC + Service + ConfigMap)
 - `frontend_test.yaml` - Frontend deployment tests
+- `ingress_test.yaml` - Ingress tests
 - `postgres_test.yaml` - PostgreSQL statefulset tests
+- `psql_test.yaml` - PostgreSQL utility pod tests
 - `rabbitmq_test.yaml` - RabbitMQ tests
 - `secrets_test.yaml` - Secrets configuration tests
+- `storage_classes_test.yaml` - Storage class tests
 - `templates_test.yaml` - Template helper function tests
 - `global_test.yaml` - Global configuration tests
 
@@ -233,6 +240,8 @@ dataplane:
     minExecutors: 1
     maxExecutors: 1
 secrets:
+  deployment:
+    identifier: test-deployment-identifier
   auth0:
     auth0_domain: auth.test.local
     auth0_audience: test
@@ -450,7 +459,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 
 ### Dataplane (Spark)
 - **Version**: Spark 4.1.1
-- **Shape**: native Kubernetes `Deployment` (replicas: 1, strategy: Recreate) running `/opt/entrypoint.sh driver` which `exec`s `spark-submit --deploy-mode client …`. The pod's PID 1 IS the driver JVM. Executors are created by the driver directly via the K8s API. No SparkApplication CRD, no spark-operator. See [project_dataplane_image_entrypoint.md](memory) for the entrypoint contract.
+- **Shape**: native Kubernetes `Deployment` (replicas: 1, strategy: Recreate) running `/opt/entrypoint.sh driver` which `exec`s `spark-submit --deploy-mode client …`. The pod's PID 1 is the driver JVM. Executors are created directly through the Kubernetes API. The entrypoint contract is documented below.
 - **Driver pod naming**: `<release>-spark-<rs-hash>-<pod-hash>` (Deployment-managed, random suffix). Use `kubectl logs deployment/<release>-spark` or `-l spark-role=driver` rather than hardcoding pod names. Deployment was chosen over StatefulSet for auto-recovery on node failure (StatefulSet pods stay `Terminating` indefinitely on vanilla EKS until the `out-of-service` taint is applied, which nothing in EKS does automatically).
 - **Resources rendered into the chart bundle** (when `dataplane.enabled=true` and `global.deploymentMode="kubernetes"`):
   1. `ServiceAccount` (`qualytics-spark` by default; gated on `dataplane.rbac.create`)
@@ -485,9 +494,9 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 3. **`spark-local-dir-` prefix is no longer load-bearing**, since the chart now writes scratch volumes directly into the executor pod template (rather than relying on the operator's CR-volume translation that only matched that prefix). The prefix is still used by convention.
 
 ### Control Plane API
-- **Replicas**: 6 (configurable via `controlplane.replicas`)
-- **Resources**: 2Gi memory, 500m CPU (default)
-- **Image**: `qualyticsai/controlplane:20251017-5b48a50`
+- **Replicas**: Configurable via `controlplane.replicas`
+- **Resources**: Configurable via `controlplane.resources`
+- **Image**: Configured by `global.imageUrls.controlplaneImageUrl` and `controlplaneImage.image.controlplaneImageTag`
 - **Port**: 8000
 - **Features**:
   - SMTP email notifications (optional)
@@ -499,14 +508,14 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 ### Control Plane CMD
 - **Replicas**: 1
-- **Resources**: 2Gi memory, 500m CPU (default)
+- **Resources**: Configurable via `controlplaneCmd.resources`
 - **Purpose**: Background job processor
 - **Similar configuration to API**: Same image and environment variables
 
 ### Frontend
-- **Replicas**: 1 (configurable via `frontend.replicas`)
-- **Resources**: 256Mi memory, 200m CPU (default)
-- **Image**: `qualyticsai/frontend:20251015-1d44645`
+- **Replicas**: Configurable via `frontend.replicas`
+- **Resources**: Configurable via `frontend.resources`
+- **Image**: Configured by `global.imageUrls.frontendImageUrl` and `frontendImage.image.frontendImageTag`
 - **Port**: 8080
 - **Strategy**: Recreate deployment
 
@@ -515,8 +524,8 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Replicas**: 1
 - **Image**: `postgres:17`
 - **Storage**: 100Gi persistent volume (default)
-- **Backup Storage**: 50Gi persistent volume (default)
-- **Resources**: 10Gi memory, 2000m CPU (default)
+- **Backup Storage**: Configurable via `postgres.pvc.backupStorageSize`
+- **Resources**: Configurable via `postgres.resources`
 - **TLS**: Optional — set `postgres.tls.enabled: true` and pre-create the `postgres-tls` Secret in the namespace.
 - **Service**: Headless service (clusterIP: None)
 - **Port**: 5432
@@ -525,9 +534,9 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 ### RabbitMQ
 - **Type**: StatefulSet
 - **Replicas**: 1
-- **Image**: `rabbitmq:4.0-management`
-- **Storage**: 10Gi persistent volume (default)
-- **Resources**: 1Gi memory, 500m CPU (default)
+- **Image**: Configured by `rabbitmq.image`; currently RabbitMQ 4.3
+- **Storage**: Uses `emptyDir` by default; persistence is optional via `rabbitmq.pvc.enabled`
+- **Resources**: Configurable via `rabbitmq.resources`
 - **TLS**: Optional — set `rabbitmq.tls.enabled: true` and pre-create the `rabbitmq-tls` Secret in the namespace.
 - **Ports**:
   - 5672 (AMQP)
@@ -609,7 +618,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   4. Image tags (controlplane, dataplane, frontend)
   5. Storage class configuration
   6. Node scheduling (selectors and tolerations)
-  7. Secrets (auth0, oidc, auth, postgres, smtp, rabbitmq)
+  7. Deployment identifier and secrets (auth0, oidc, auth, postgres, smtp, rabbitmq)
   8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`)
   9. Controlplane configuration (API and CMD)
   10. Frontend configuration
@@ -618,12 +627,11 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   13. Busybox utility image
 
 ### template.values.yaml (Simplified Configuration)
-- **Lines**: 128
 - **Purpose**: Quick start configuration template
 - **Includes**: Essential settings only
 - **Sections**:
   1. Global configuration (platform, DNS, auth type)
-  2. Authentication secrets (auth0, auth, postgres, rabbitmq)
+  2. Deployment identifier and authentication secrets (auth0, auth, postgres, rabbitmq)
   3. Node scheduling (with default enabled selectors)
   4. Dependencies (with node selectors)
   5. Ingress configuration
@@ -697,31 +705,40 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 1. CNCF-compliant Kubernetes cluster (v1.30+)
 2. `kubectl` configured for cluster access
 3. `helm` CLI (v3.12+)
-4. Docker registry credentials from Qualytics
-5. Auth0 configuration details from Qualytics
+4. Qualytics-issued container-registry token
+5. Unique deployment identifier provided by Qualytics
+6. Auth0 or OIDC configuration details
 
 ### Initial Setup
 1. **Create namespace and registry secret**:
    ```bash
    kubectl create namespace qualytics
+   printf "Qualytics registry token: "
+   IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+   echo
    kubectl create secret docker-registry regcred -n qualytics \
      --docker-username=qualyticsai \
-     --docker-password=<token>
+     --docker-password="$QUALYTICS_REGISTRY_TOKEN"
+   unset QUALYTICS_REGISTRY_TOKEN
    ```
 
 2. **Create configuration file**:
    ```bash
    cp template.values.yaml values.yaml
-   # Edit values.yaml with your settings
+   chmod 600 values.yaml
+   # Set secrets.deployment.identifier to the value provided by Qualytics,
+   # then edit the remaining customer-specific settings.
    ```
 
 3. **Deploy Qualytics**:
    ```bash
    helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
    helm repo update
+   CHART_VERSION="<version provided by Qualytics>"
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
      --create-namespace \
+     --version "$CHART_VERSION" \
      -f values.yaml \
      --wait \
      --timeout=5m
@@ -735,8 +752,10 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 ### Upgrades
 ```bash
+CHART_VERSION="<version provided by Qualytics>"
 helm upgrade qualytics qualytics/qualytics \
   --namespace qualytics \
+  --version "$CHART_VERSION" \
   -f values.yaml \
   --wait \
   --timeout=5m
@@ -779,7 +798,7 @@ helm upgrade qualytics qualytics/qualytics \
 - Native-Deployment dataplane: replaced the SparkApplication CRD + spark-operator with a chart-managed Deployment + RBAC + headless Service + executor pod template ConfigMap. Driver runs `spark-submit` in client mode and creates executor pods directly via the K8s API.
 - Spark pod-template migration (disabled the mutating admission webhook) — historical, superseded by the above
 - cert-manager removal (BYO TLS Secrets)
-- Apache Spark 4.1 + RabbitMQ 4.0 upgrades
+- Apache Spark 4.1 + RabbitMQ 4.3 upgrades
 - PostgreSQL 17 upgrade support
 - Enhanced ingress security (ModSecurity WAF, rate limiting)
 - Multi-platform storage class support

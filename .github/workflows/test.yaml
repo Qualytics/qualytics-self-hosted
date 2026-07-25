@@ -35,7 +35,10 @@ jobs:
         run: helm dependency build charts/qualytics
 
       - name: Lint charts
-        run: helm lint charts/qualytics
+        run: >-
+          helm lint charts/qualytics
+          -f template.values.yaml
+          -f charts/qualytics/tests/values/deployment-identifier.yaml
 
       - name: Run unit tests
         run: helm unittest charts/qualytics
@@ -43,88 +46,101 @@ jobs:
       - name: Template validation tests for template.values.yaml configurations
         run: |
           echo "Testing template.values.yaml key configurations..."
-          
+          values_args=(-f template.values.yaml -f charts/qualytics/tests/values/deployment-identifier.yaml)
+
           # Test global platform configurations
           echo "  Testing AWS platform configuration..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set global.platform=aws \
             --set global.dnsRecord=test-aws.qualytics.io \
             --set dataplane.numVolumes=2 > /dev/null
-            
+
           echo "  Testing GCP platform configuration..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set global.platform=gcp \
             --set global.dnsRecord=test-gcp.qualytics.io \
             --set dataplane.numVolumes=1 > /dev/null
-            
+
           echo "  Testing Azure platform configuration..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set global.platform=azure \
             --set global.dnsRecord=test-azure.qualytics.io > /dev/null
-          
+
           # Test authentication configurations
           echo "  Testing AUTH0 authentication..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set global.authType=AUTH0 \
             --set secrets.auth0.auth0_domain=test.auth0.com \
             --set secrets.auth0.auth0_audience=test-api > /dev/null
-            
+
           echo "  Testing OIDC authentication..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set global.authType=OIDC > /dev/null
-          
+
           # Test node selector configurations
           echo "  Testing node selectors..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set appNodeSelector.appNodes=true \
             --set driverNodeSelector.driverNodes=true \
             --set executorNodeSelector.executorNodes=true > /dev/null
-          
+
           # Test dataplane resource configurations
           echo "  Testing dataplane resource configurations..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set dataplane.driver.cores=4 \
             --set dataplane.driver.memory=32000m \
             --set dataplane.executor.cores=8 \
             --set dataplane.executor.memory=64000m \
             --set dataplane.dynamicAllocation.maxExecutors=20 > /dev/null
-          
+
           # Test volume configurations
           echo "  Testing volume configurations..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set dataplane.numVolumes=3 \
             --set global.platform=aws > /dev/null
-          
+
           # Test storage configurations
           echo "  Testing storage configurations..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set postgres.enabled=true \
             --set postgres.pvc.storageSize=100Gi \
             --set postgres.pvc.backupStorageSize=50Gi \
             --set rabbitmq.pvc.storageSize=10Gi > /dev/null
-          
+
           # Test SMTP configurations
           echo "  Testing SMTP configurations..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set controlplane.smtp.enabled=true \
             --set controlplane.smtp.server=mail.company.com \
             --set controlplane.smtp.sender=test@company.com \
             --set controlplane.smtp.port=587 > /dev/null
-          
+
           # Test ingress configurations
           echo "  Testing ingress configurations..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set ingress.enabled=true \
             --set ingress.cors=true \
             --set global.dnsRecord=test.qualytics.io > /dev/null
-          
+
           # Test minimal configuration (customer might disable components)
           echo "  Testing minimal configuration..."
           helm template test-release charts/qualytics \
+            "${values_args[@]}" \
             --set dataplane.numVolumes=-1 \
             --set controlplane.smtp.enabled=false \
             --set postgres.enabled=false > /dev/null
-          
+
           echo "All template.values.yaml configuration tests passed! ✅"
 
   # Integration testing with Kind
@@ -162,5 +178,7 @@ jobs:
           kubectl create namespace qualytics-test || true
           helm install test-release charts/qualytics \
             --namespace qualytics-test \
+            -f template.values.yaml \
+            -f charts/qualytics/tests/values/deployment-identifier.yaml \
             --dry-run \
             --debug

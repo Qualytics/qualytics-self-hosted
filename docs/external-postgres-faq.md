@@ -70,25 +70,18 @@ Application-layer encryption is an industry best practice for credential storage
 
 ### Can Qualytics use a custom schema instead of `public`?
 
-While technically possible with engineering changes, **we do not currently recommend or support it.** This is not a blocker — it is an explanation of why the current default is the right choice given the setup.
+Yes. Set `postgres.schema` in your Helm values when database policy requires a non-public schema:
 
-### Your database is already isolated
+```yaml
+postgres:
+  schema: qualytics
+```
 
-The standard Qualytics setup creates a **dedicated database** (e.g., `qualytics`) and a **dedicated service account** (e.g., `qualytics_user`). No other application shares this database.
+`public` remains the default and recommended schema. The standard deployment model already gives every Qualytics installation a dedicated database and service account, so a custom schema usually does not add isolation.
 
-Given this isolation model, the `public` schema within the dedicated database is effectively private to Qualytics. There is no material security or organizational benefit to adding a second layer of namespace isolation via a custom schema — the dedicated database already provides full separation from all other workloads.
+Custom names must be PostgreSQL identifiers of 1-63 ASCII letters, numbers, or underscores, starting with a letter or underscore. Ask your DBA to prepare the schema and privileges described in the [External PostgreSQL Setup Guide](https://github.com/Qualytics/qualytics-self-hosted/blob/main/docs/external-postgres-setup.md).
 
-### Why the `public` schema is the right default
-
-Using a dedicated database with the `public` schema gives you full isolation from other applications, works out of the box with default PostgreSQL behavior, and is the standard, fully tested configuration for Qualytics. Adding a custom schema on top of an already-dedicated database does not improve isolation — it only adds unused complexity and additional configuration to manage.
-
-### What would a custom schema require?
-
-Switching to a non-public schema would require Qualytics engineering changes across multiple layers of the application, including the data model definitions, database migration system, and connection configuration. This is significant effort with no security benefit given that Qualytics already operates in a dedicated database.
-
-### Recommendation
-
-Use the `public` schema within the dedicated Qualytics database. The database-level isolation already provides the separation that a custom schema would aim to achieve. If your organization has a policy requiring non-public schemas regardless of database isolation, please contact Qualytics support so we can evaluate the specific requirements.
+Choose the schema during the initial installation. Changing this value later does not migrate existing tables; contact Qualytics Support before changing it for an existing deployment.
 
 ---
 
@@ -97,4 +90,4 @@ Use the `public` schema within the dedicated Qualytics database. The database-le
 - **Is `pgcrypto` required?** — Optional. Recommended best practice included in the setup script, but not a hard requirement. Qualytics works without it.
 - **What is `pgcrypto`?** — An official PostgreSQL extension bundled with every standard distribution — trusted, widely used, and non-invasive.
 - **Are credentials encrypted?** — Yes. AES-256-GCM at the application layer — the database never sees plaintext.
-- **Can we use a non-public schema?** — Not recommended. The dedicated database already provides full isolation. Using `public` within it is standard and supported.
+- **Can we use a non-public schema?** — Yes, when required. `public` remains the default and recommended schema for a dedicated Qualytics database.

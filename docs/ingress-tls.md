@@ -60,16 +60,6 @@ ingress:
   enabled: true
 ```
 
-To use different Secret names, override the per-ingress fields:
-
-```yaml
-ingress:
-  enabled: true
-  tls:
-    apiSecretName: my-api-cert
-    frontendSecretName: my-frontend-cert
-```
-
 If you want explicit names that differ from the defaults:
 
 ```yaml

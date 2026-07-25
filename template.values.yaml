@@ -15,12 +15,17 @@ global:
   authType: "OIDC"
 
 #--------------------------------------------------------------------------------
-# Authentication Secrets (REQUIRED)
+# Deployment and Authentication Configuration (REQUIRED)
 # Choose ONE of the following: OIDC OR Auth0
 # See: https://userguide.qualytics.io/deployments/oidc-configuration/
 # See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
+  # Required. Paste the identifier provided by Qualytics for this deployment.
+  # Do not reuse it for another installation.
+  deployment:
+    identifier: ""
+
   # --- Option A: OIDC (direct IdP integration, recommended for self-hosted) ---
   # Configure with your identity provider's details
   oidc:
@@ -71,6 +76,12 @@ secrets:
     secrets_passphrase: ChangeMe!
   rabbitmq:
     rabbitmq_password: ChangeMe!
+  # SMTP AUTH credentials — only set when your SMTP server requires authentication.
+  # Leave unset (or empty) for relays without SMTP AUTH, e.g. an internal relay on
+  # port 25: Qualytics then sends without attempting authentication.
+  # smtp:
+  #   smtp_sender_user: "ChangeMe"
+  #   smtp_sender_password: "ChangeMe!"
 
 #--------------------------------------------------------------------------------
 # Node Scheduling (OPTIONAL - remove if not using node selectors)
@@ -123,6 +134,7 @@ ingress:
 #--------------------------------------------------------------------------------
 controlplane:
   smtp:
+    # SMTP AUTH credentials (if your server requires them) go under secrets.smtp above.
     enabled: false
     server: "email-smtp.us-east-1.amazonaws.com"
     sender: "no-reply@qualytics.co"
@@ -164,6 +176,8 @@ dataplane:
 # Storage Configuration
 #--------------------------------------------------------------------------------
 postgres:
+  # Use a custom schema only when required by your database policy.
+  schema: "public"
   enabled: true
   pvc:
     storageSize: "50Gi"

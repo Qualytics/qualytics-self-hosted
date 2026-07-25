@@ -15,7 +15,7 @@ postgres_server
 
 ## Per-Deployment Setup
 
-Repeat the following steps for each Qualytics deployment, substituting `<tenant>` with a short identifier (e.g. `env1`, `test`) and `<strong_password>` with a secure password.
+Repeat the following steps for each Qualytics deployment, substituting `<tenant>` with a short identifier (e.g. `env1`, `test`) and `<strong_password>` with a secure password. The examples use the default `public` schema. If your database policy requires a custom schema, choose a lower-case PostgreSQL identifier such as `qualytics` and use it consistently in the SQL and Helm configuration below.
 
 ### 1. Create the service account
 
@@ -39,38 +39,50 @@ ALTER DATABASE qualytics_<tenant> OWNER TO qualytics_<tenant>;
 
 Ownership grants full DDL rights within the database, which is required to run schema migrations.
 
-### 3. Connect to the tenant database and grant schema privileges
+### 3. Prepare the schema
 
 ```sql
 \c qualytics_<tenant>
 ```
 
-Grant explicit access on the public schema. This is required on PostgreSQL 15+, where the default `CREATE` privilege on `public` was revoked from all non-superuser roles:
+For the default `public` schema, grant explicit access. This is required on PostgreSQL 15+, where the default `CREATE` privilege on `public` was revoked from all non-superuser roles:
 
 ```sql
 GRANT ALL PRIVILEGES ON SCHEMA public TO qualytics_<tenant>;
 ```
 
-### 4. Grant privileges on existing objects
-
-If the database is being reused and already contains objects:
+If policy requires a custom schema, create it with the Qualytics service account as owner instead:
 
 ```sql
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO qualytics_<tenant>;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO qualytics_<tenant>;
-GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO qualytics_<tenant>;
+CREATE SCHEMA qualytics AUTHORIZATION qualytics_<tenant>;
+```
+
+For an existing custom schema in this dedicated database, transfer ownership before installing Qualytics:
+
+```sql
+ALTER SCHEMA qualytics OWNER TO qualytics_<tenant>;
+```
+
+### 4. Grant privileges on existing objects
+
+If the database is being reused and already contains objects, replace `<schema>` with `public` or the custom schema prepared above:
+
+```sql
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA <schema> TO qualytics_<tenant>;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA <schema> TO qualytics_<tenant>;
+GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA <schema> TO qualytics_<tenant>;
 ```
 
 ### 5. Set default privileges for future objects
 
-Without this, tables created by migrations will not automatically inherit the correct permissions if any other role creates objects in the schema.
+This is only needed when a different role creates objects in the schema. Run these statements for that object-owning role:
 
 ```sql
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE <object_owner> IN SCHEMA <schema>
     GRANT ALL ON TABLES TO qualytics_<tenant>;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE <object_owner> IN SCHEMA <schema>
     GRANT ALL ON SEQUENCES TO qualytics_<tenant>;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
+ALTER DEFAULT PRIVILEGES FOR ROLE <object_owner> IN SCHEMA <schema>
     GRANT ALL ON FUNCTIONS TO qualytics_<tenant>;
 ```
 
@@ -109,28 +121,24 @@ CREATE DATABASE qualytics_env1 OWNER qualytics_env1;
 
 GRANT ALL PRIVILEGES ON SCHEMA public TO qualytics_env1;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT ALL ON TABLES TO qualytics_env1;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT ALL ON SEQUENCES TO qualytics_env1;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-    GRANT ALL ON FUNCTIONS TO qualytics_env1;
-
 -- Optional: enable pgcrypto (not required, see FAQ)
 -- CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
 ```
 
 ## Helm Chart Configuration
 
-Once the database and service account are ready, configure each Helm release to use the external PostgreSQL instance.
+Once the database and service account are ready, configure each Helm release to use the external PostgreSQL instance. Every deployment also requires its own identifier provided by Qualytics.
 
 **values.yaml**
 
 ```yaml
 postgres:
   enabled: false   # Disable the bundled PostgreSQL StatefulSet
+  schema: public   # Default; use the DBA-prepared custom schema if required
 
 secrets:
+  deployment:
+    identifier: "<provided by Qualytics>"
   postgres:
     host: <your-postgres-host>
     port: 5432
@@ -140,12 +148,17 @@ secrets:
     secrets_passphrase: <passphrase>
 ```
 
+Choose the schema during the initial installation. Changing `postgres.schema` later points Qualytics at a different schema; it does not move existing tables. Contact Qualytics Support before changing it for an existing deployment.
+
 **Applying the configuration**
 
 ```bash
+CHART_VERSION="<version provided by Qualytics>"
+
 helm upgrade --install qualytics qualytics/qualytics \
   --namespace qualytics \
   --create-namespace \
+  --version "$CHART_VERSION" \
   -f values.yaml \
   --wait \
   --timeout=5m
@@ -157,10 +170,14 @@ Because Qualytics migrations use enums, sequences, functions, and triggers, vali
 
 ```bash
 export PGPASSWORD='<strong_password>'
-psql "host=<your-postgres-host> port=5432 dbname=qualytics_<tenant> user=qualytics_<tenant>" -v ON_ERROR_STOP=1 <<'SQL'
+psql "host=<your-postgres-host> port=5432 dbname=qualytics_<tenant> user=qualytics_<tenant>" \
+  -v ON_ERROR_STOP=1 -v qualytics_schema=public <<'SQL'
 
 \timing on
 \echo 'Starting Qualytics external Postgres validation'
+
+SELECT format('SET search_path TO %I', :'qualytics_schema') \gexec
+SHOW search_path;
 
 -- Table + index DDL (covers CREATE, ALTER, DROP on tables and indexes)
 DROP TABLE IF EXISTS qualytics_permission_probe CASCADE;

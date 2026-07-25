@@ -90,7 +90,7 @@ Each template supports cost optimization features:
   - AWS: `aws configure`
   - GCP: `gcloud auth application-default login`
   - Azure: `az login`
-- Docker registry credentials from your Qualytics account manager
+- A Qualytics-issued image registry token and a unique deployment identifier
 
 ## Post-Deployment
 
@@ -99,16 +99,33 @@ After creating the cluster:
 1. Verify cluster access: `kubectl get nodes`
 2. Create Docker registry secret (if not done automatically):
    ```bash
+   printf "Qualytics registry token: "
+   IFS= read -rs QUALYTICS_REGISTRY_TOKEN
+   echo
    kubectl create secret docker-registry regcred -n qualytics \
      --docker-username=qualyticsai \
-     --docker-password=<token-from-qualytics>
+     --docker-password="$QUALYTICS_REGISTRY_TOKEN"
+   unset QUALYTICS_REGISTRY_TOKEN
    ```
-3. Deploy Qualytics using Helm:
+3. Return to the repository root, prepare the Helm configuration, and set the unique deployment identifier provided by Qualytics:
+   ```bash
+   cd ../..
+   cp template.values.yaml values.yaml
+   chmod 600 values.yaml
+   ```
+   ```yaml
+   secrets:
+     deployment:
+       identifier: "<provided by Qualytics>"
+   ```
+4. Deploy Qualytics using Helm:
    ```bash
    helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
    helm repo update
+   CHART_VERSION="<version provided by Qualytics>"
    helm upgrade --install qualytics qualytics/qualytics \
      --namespace qualytics \
+     --version "$CHART_VERSION" \
      -f values.yaml \
      --wait \
      --timeout=5m

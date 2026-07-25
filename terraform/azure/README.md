@@ -7,7 +7,7 @@ This Terraform template creates an Azure Kubernetes Service (AKS) cluster config
 - [Terraform](https://www.terraform.io/downloads) >= 1.3.0
 - [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) >= 2.50.0
 - Azure subscription with permissions to create resources
-- Docker registry credentials from Qualytics
+- A Qualytics-issued image registry token and a unique deployment identifier
 
 ## What This Template Creates
 
@@ -96,9 +96,10 @@ The node pools are labeled to support Qualytics workload scheduling:
 
 After the cluster is created:
 
-1. Deploy NGINX Ingress Controller
-2. Configure DNS for your domain
-3. Deploy Qualytics using Helm (see main README)
+1. Obtain the image registry token and a unique deployment identifier from Qualytics
+2. Deploy NGINX Ingress Controller
+3. Configure DNS for your domain
+4. Prepare `values.yaml` and deploy Qualytics using Helm by following the [main README](../../README.md)
 
 ## Cleanup
 

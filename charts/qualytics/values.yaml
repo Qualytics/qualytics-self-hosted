@@ -87,13 +87,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260710-2bbb2d6"
+    controlplaneImageTag: "20260721-6961853"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260710-a8a46c2"
+    dataplaneImageTag: "20260721-1b98096"
 frontendImage:
   image:
-    frontendImageTag: "20260710-bc0933e"
+    frontendImageTag: "20260721-8ee8b05"
 
 # Storage classes
 storageClass:
@@ -129,6 +129,10 @@ tolerations:
 # Secrets
 #--------------------------------------------------------------------------------
 secrets:
+  deployment:
+    # Required. Paste the identifier provided by Qualytics for this deployment.
+    # Do not reuse it for another installation.
+    identifier: ""
   auth0: # required for authType AUTH0 (the default)
     auth0_domain: auth.qualytics.io
     auth0_audience: changeme-api
@@ -194,8 +198,12 @@ secrets:
     new_secrets_passphrase: ""
     secrets_migration_id: 1
   smtp:
-    smtp_sender_user: smtp_user
-    smtp_sender_password: smtp_password
+    # SMTP AUTH credentials. Leave both empty when your SMTP server does not require
+    # authentication (e.g. an internal relay on port 25) — Qualytics then sends without
+    # attempting SMTP AUTH. Setting any non-empty values here forces an AUTH attempt,
+    # which servers lacking the AUTH extension reject.
+    smtp_sender_user: ""
+    smtp_sender_password: ""
   rabbitmq:
     rabbitmq_password: ChangeMe!
 
@@ -352,6 +360,8 @@ postgres:
     # Create a `kubernetes.io/tls` Secret named `postgres-tls` in the release
     # namespace before enabling. See docs/ingress-tls.md.
     enabled: false
+  # PostgreSQL schema used by the controlplane.
+  schema: "public"
 
 #--------------------------------------------------------------------------------
 # RabbitMQ
