@@ -210,6 +210,11 @@ helm upgrade --install qualytics qualytics/qualytics \
   --timeout=5m
 ```
 
+> **Exception:** drop `--wait` (and never add `--atomic`) for the *first* upgrade of a
+> stored-secrets passphrase rotation. Hub API stays down and Hub CMD crashloops by design during
+> that phase, so `--wait` always reports failure and `--atomic` would roll back mid-rotation. See
+> [Rotating the stored-secrets passphrase](docs/authentication.md#rotating-the-stored-secrets-passphrase).
+
 **Monitor the deployment:**
 ```bash
 # Check deployment status

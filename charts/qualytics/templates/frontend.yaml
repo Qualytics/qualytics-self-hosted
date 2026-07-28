@@ -1,3 +1,4 @@
+{{- include "qualytics.validate.authType" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -68,6 +69,10 @@ spec:
           {{- if ( eq .Values.global.authType "OIDC" ) }}
           - name: VITE_QUALYTICS_AUTH_PROVIDER
             value: OIDC
+          {{- else if ( eq .Values.global.authType "DB" ) }}
+          # AIDEV-NOTE: DB auth uses cookie sessions and must not receive Auth0 client settings.
+          - name: VITE_QUALYTICS_AUTH_PROVIDER
+            value: DB
           {{- else }}
           - name: VITE_QUALYTICS_AUTH_PROVIDER
             value: AUTH0

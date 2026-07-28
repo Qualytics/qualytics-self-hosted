@@ -1,3 +1,5 @@
+{{- include "qualytics.validate.authType" . -}}
+{{- include "qualytics.validate.secretsRotation" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -110,11 +112,22 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: secrets_passphrase
+          - name: SECRETS_MIGRATION_ID
+            value: {{ .Values.secrets.postgres.secrets_migration_id | quote }}
+          {{- if .Values.secrets.postgres.new_secrets_passphrase }}
+          - name: NEW_SECRETS_PASSPHRASE
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: new_secrets_passphrase
+          {{- end }}
           - name: JWT_SIGNING_SECRET
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: jwt_signing_secret
+          # QUA-2163: this deployment's Qualytics-issued identity (signed claims document).
+          # REQUIRED — the control plane fails to start without a signed, valid identifier.
           - name: QUALYTICS_DEPLOYMENT_IDENTIFIER
             valueFrom:
               secretKeyRef:
@@ -249,6 +262,10 @@ spec:
           - name: OIDC_SIGNER_PEM_URL
             value: {{ .Values.secrets.oidc.oidc_signer_pem_url | quote }}
           {{- end }}
+          {{- else if ( eq .Values.global.authType "DB" ) }}
+          # AIDEV-NOTE: Keep CMD auth authority identical to API during the DB cutover.
+          - name: API_AUTH
+            value: DB
           {{- else }}
           - name: API_AUTH
             value: AUTH0
@@ -287,10 +304,6 @@ spec:
                 key: rabbitmq_password
           - name: VERIFY_CERTIFICATE_SIGNERS
             value: {{ .Values.controlplane.egress.verifyTLSCertificates | quote }}
-        {{- if and (.Values.controlplane.auth.migrateIdpByEmail) (ne .Values.controlplane.auth.migrateIdpByEmail "") }}
-          - name: MIGRATE_IDP_BY_EMAIL
-            value: {{ .Values.controlplane.auth.migrateIdpByEmail | quote }}
-        {{- end }}
         {{- if and (.Values.controlplane.auth.scimUsernamePrefix) (ne .Values.controlplane.auth.scimUsernamePrefix "") }}
           - name: SCIM_USERNAME_PREFIX
             value: {{ .Values.controlplane.auth.scimUsernamePrefix | quote }}

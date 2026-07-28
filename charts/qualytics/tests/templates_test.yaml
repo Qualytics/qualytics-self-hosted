@@ -42,6 +42,18 @@ tests:
       - exists:
           path: data.oidc_client_id
 
+  - it: should render DB auth without legacy provider secrets
+    template: secrets.yaml
+    set:
+      global.authType: "DB"
+    asserts:
+      - notExists:
+          path: data.auth0_audience
+      - notExists:
+          path: data.oidc_client_id
+      - exists:
+          path: data.jwt_signing_secret
+
   # Ingress template tests
   - it: should render ingress when enabled
     template: ingress.yaml

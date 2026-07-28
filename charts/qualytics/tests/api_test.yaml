@@ -167,6 +167,64 @@ tests:
             value: "OIDC"
         documentIndex: 0
 
+  - it: should configure DB auth without legacy provider settings
+    set:
+      global.authType: "DB"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_AUTH
+            value: "DB"
+        documentIndex: 0
+
+  # An unrecognized authType falls through to the AUTH0 branch here while secrets.yaml
+  # emits no Auth0 keys, so the pod would fail with CreateContainerConfigError.
+  - it: should reject an invalid authType
+    set:
+      global.authType: "db"
+    asserts:
+      - failedTemplate:
+          errorPattern: global.authType must be exactly one of AUTH0, OIDC, or DB
+
+  - it: should reject a staged passphrase without an incremented migration id
+    set:
+      secrets.postgres.new_secrets_passphrase: "next-passphrase"
+    asserts:
+      - failedTemplate:
+          errorPattern: secrets.postgres.secrets_migration_id must be incremented
+
+  - it: should expose the staged secrets rotation to API
+    set:
+      secrets.postgres.new_secrets_passphrase: "next-passphrase"
+      secrets.postgres.secrets_migration_id: 2
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: NEW_SECRETS_PASSPHRASE
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: new_secrets_passphrase
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SECRETS_MIGRATION_ID
+            value: "2"
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH0_CLIENT_ID
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_CLIENT_ID
+        documentIndex: 0
+
   # Platform configuration
   - it: should configure platform environment variable
     set:
@@ -434,7 +492,7 @@ tests:
             name: APP_DEPLOYMENT_MODE
             value: "databricks"
         documentIndex: 0
-
+  # QUA-2163: identifier env is required (no optional: true — CP fails to start without it)
   - it: should require QUALYTICS_DEPLOYMENT_IDENTIFIER from qualytics-creds
     asserts:
       - contains:

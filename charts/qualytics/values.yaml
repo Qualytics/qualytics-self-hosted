@@ -76,6 +76,8 @@ global:
   platform: "aws"
   deploymentMode: "kubernetes" # kubernetes | databricks
   dnsRecord: "changeme.qualytics.io"
+  # Authentication authority: AUTH0 or OIDC preserve the legacy configuration;
+  # DB enables the database-backed provider configurations.
   authType: "AUTH0"
   imageUrls:
     controlplaneImageUrl: "qualyticsai/controlplane"
@@ -175,6 +177,10 @@ secrets:
     # oidc_jwt_ttl_minutes: 60
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:
+    # Must be replaced for a fresh install — the chart rejects the ChangeMe! default.
+    # This key signs the browser session JWTs and is the sole session authority under
+    # global.authType "DB", so a published default lets anyone mint valid sessions.
+    # Generate with: openssl rand -base64 32
     jwt_signing_secret: ChangeMe!
   postgres:
     host: postgres
@@ -182,7 +188,19 @@ secrets:
     database: surveillance_hub
     username: postgres
     password: postgres
+    # Must be replaced for a fresh install. Existing installations rotate this
+    # explicitly with new_secrets_passphrase and secrets_migration_id below.
+    # See docs/authentication.md for the two-upgrade rotation runbook.
     secrets_passphrase: ChangeMe!
+    new_secrets_passphrase: ""
+    # Monotonic counter shared with the qualytics_metadata.secrets_migration_id column in
+    # this deployment's database. NEVER reset or lower it — it must be preserved for the
+    # lifetime of the deployment. After the first rotation the database counter is
+    # permanently >= 2; re-rendering 1 from a regenerated values file makes Hub API refuse
+    # to start while Hub CMD (which performs no parity check) keeps running — an asymmetric
+    # split-brain. Increment by exactly one per rotation, and only alongside
+    # new_secrets_passphrase; the chart rejects a staged passphrase left at id 1.
+    secrets_migration_id: 1
   smtp:
     # SMTP AUTH credentials. Leave both empty when your SMTP server does not require
     # authentication (e.g. an internal relay on port 25) — Qualytics then sends without
@@ -206,7 +224,7 @@ dataplane:
   # Ceiling on concurrent synchronous operations (catalog, metadata, preview, connection tests).
   # These are overwhelmingly datastore-I/O-bound, so the ceiling sits well above driver core count;
   # the dataplane's CPU governor scales live capacity between syncAdmission.floor and this ceiling
-  # based on measured driver CPU (QUA-2100).
+  # based on measured driver CPU
   maxParallelSyncRequests: 24
   # Sync-admission CPU governor. The governor halves live sync capacity when process CPU is at/above
   # cpuHighWatermark, grows it when at/below cpuLowWatermark, and never drops below floor. Requires
@@ -272,8 +290,6 @@ controlplane:
     sender: "no-reply@qualytics.ai"
     port: "465"
   auth:
-    # Enable email-based IDP migration
-    migrateIdpByEmail: ""
     # SCIM username prefix
     scimUsernamePrefix: ""
     # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
