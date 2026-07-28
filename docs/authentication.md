@@ -63,6 +63,9 @@ secrets:
 | `oidc_user_lname_key` | `family_name` | " |
 | `oidc_user_picture_key` | `picture` | " |
 | `oidc_user_provider_key` | `iss` | " |
+| `oidc_user_groups_key` | `groups` | Your IdP emits group membership under a different claim (e.g. `roles`) |
+| `oidc_group_team_sync_enabled` | `false` | You want IdP groups to grant Team membership — see [Group → Team sync](#group--team-sync-optional) |
+| `oidc_token_auth_method` | *(unset — auto-detected from the discovery document)* | Your IdP only accepts one method; set `client_secret_post` or `client_secret_basic` explicitly |
 | `oidc_allow_insecure_transport` | `false` | Development only (allows HTTP) |
 | `oidc_jwt_ttl_minutes` | *(unset — controlplane default)* | Override JWT session TTL in minutes |
 
@@ -117,7 +120,7 @@ The Helm chart creates a Kubernetes Secret (`qualytics-creds`) and injects value
 | `oidc_authorization_endpoint` | `OIDC_AUTHORIZATION_ENDPOINT` | Secret | Optional when using discovery URL. IdP authorization endpoint. |
 | `oidc_token_endpoint` | `OIDC_TOKEN_ENDPOINT` | Secret | Optional when using discovery URL. IdP token endpoint. |
 | `oidc_userinfo_endpoint` | `OIDC_USERINFO_ENDPOINT` | Secret | Optional when using discovery URL. IdP userinfo endpoint. |
-| `oidc_token_auth_method` | `OIDC_TOKEN_AUTH_METHOD` | Secret | Optional. `client_secret_post` (default) or `client_secret_basic`. Auto-detected from discovery. Set for IdPs that only accept Basic auth. |
+| `oidc_token_auth_method` | `OIDC_TOKEN_AUTH_METHOD` | Secret (if set) | Optional. `client_secret_post` or `client_secret_basic`. Leave empty to auto-detect from the discovery document; set it for IdPs that accept only one method (e.g. `client_secret_post` for Okta). |
 | `oidc_user_id_key` | `OIDC_USER_ID_KEY` | Secret | Optional. Claim name for the user ID. Default: `sub`. |
 | `oidc_user_email_key` | `OIDC_USER_EMAIL_KEY` | Secret | Optional. Claim name for the user email. Default: `email`. |
 | `oidc_user_name_key` | `OIDC_USER_NAME_KEY` | Secret | Optional. Claim name for the user display name. Default: `name`. |
@@ -125,6 +128,8 @@ The Helm chart creates a Kubernetes Secret (`qualytics-creds`) and injects value
 | `oidc_user_lname_key` | `OIDC_USER_LNAME_KEY` | Secret | Optional. Claim name for the user last name. Default: `family_name`. |
 | `oidc_user_picture_key` | `OIDC_USER_PICTURE_KEY` | Secret | Optional. Claim name for the user avatar URL. Default: `picture`. |
 | `oidc_user_provider_key` | `OIDC_USER_PROVIDER_KEY` | Secret | Optional. Claim name for the identity provider. Default: `iss`. |
+| `oidc_user_groups_key` | `OIDC_USER_GROUPS_KEY` | Secret (if set) | Optional. Claim holding the user's group listing. Default: `groups`. |
+| `oidc_group_team_sync_enabled` | `OIDC_GROUP_TEAM_SYNC_ENABLED` | Direct value | Optional. Add users to Teams matching their IdP groups. Default: `false`. |
 | `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | Direct value | Optional. Allow HTTP (non-TLS) for OIDC endpoints. Default: `false`. |
 | `oidc_jwt_ttl_minutes` | `OIDC_JWT_TTL_MINUTES` | Secret (if set) | Optional. JWT session lifetime in minutes. Omit to use the controlplane default. |
 | `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | Direct value (if set) | Optional. URL to a custom PEM certificate for token signature validation. |
@@ -137,6 +142,26 @@ Additionally, these are set automatically by the Helm chart:
 | `OIDC_REDIRECT_URL` | `https://<dnsRecord>/api/callback` | Computed from `global.dnsRecord` and `API_ROOT_PATH` |
 | `CFA_ROOT_URL` | `https://<dnsRecord>` | Frontend URL |
 | `CORS_ORIGINS` | `<dnsRecord>` | Allowed CORS origins |
+
+### Group → Team sync (optional)
+
+Qualytics records the group listing presented by your IdP for every user, so you can inspect it while mapping groups to Teams. Recording happens whenever the claim named by `oidc_user_groups_key` (default `groups`) is present in the token — no extra configuration required.
+
+Turning on `oidc_group_team_sync_enabled` additionally uses those groups to grant Team membership:
+
+```yaml
+secrets:
+  oidc:
+    oidc_scopes: "openid,email,profile,groups"   # your IdP must actually emit the claim
+    oidc_user_groups_key: "groups"
+    oidc_group_team_sync_enabled: true
+```
+
+- Matching is **case-insensitive** against existing Team names.
+- Sync is **add-only** — a user is added to any Team whose name matches a presented group, and is never removed from a Team when the group disappears.
+- It is **opt-in (default `false`)** because Team membership carries data access. Enable it only once your Team names line up with your IdP group names.
+
+> If group listings come back empty, the IdP is not emitting the claim. Most IdPs require both an extra scope (add `groups` to `oidc_scopes`) and a claim/token configuration change on the application registration.
 
 ---
 

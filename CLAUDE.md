@@ -477,7 +477,8 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 - **Volumes**: Platform-specific NVMe/SSD mounts for scratch space at `/tmp/spark-local-dir-<n>`. Live in the executor pod template (the ConfigMap), not at CR level — there's no operator translating CR volumes anymore.
 - **Kerberos**: Optional (`dataplane.kerberos.enabled`). When true, the chart adds `krb5-conf` + `keytab` Secret-mounted volumes + `KERBEROS_*` / `MOTHERSHIP_SPARK_KRB_*` env to both the driver Deployment and the executor pod template.
 - **Main Class**: `io.qualytics.dataplane.SparkMothership`
-- **Extra Packages**: Teradata + IBM DB2 JDBC drivers, passed to spark-submit via `--packages`.
+- **Extra Packages**: Teradata + IBM DB2 JDBC drivers, passed to spark-submit via `--packages` and resolved by Ivy (`spark.jars.ivy=/tmp`) at driver startup — i.e. from Maven Central on every driver start, not from the image. Mirroring container images does not cover these; air-gapped installs need this path confirmed separately.
+- **Sync admission**: `dataplane.maxParallelSyncRequests` (default 24) caps concurrent synchronous ops; the `dataplane.syncAdmission` CPU governor (`floor` 3, `cpuHighWatermark` 0.80, `cpuLowWatermark` 0.50) scales live capacity between the floor and that ceiling from measured driver CPU (QUA-2100). Invalid watermarks fall back to dataplane defaults.
 - **Restart behavior**: Pod's `restartPolicy: Always` (Deployment requirement). On JVM exit, kubelet restarts the container in-place — same pod UID. On full pod loss (node failure, manual delete, helm upgrade with Recreate), Deployment's ReplicaSet creates a new pod with a new UID. The functional guarantee — "always a driver running" — is met in both cases.
 - **Node Scheduling**: `driverNodeSelector` on the driver Deployment, `executorNodeSelector` on the executor pod template. Tolerations follow the same split.
 
@@ -501,8 +502,9 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Image**: Configured by `global.imageUrls.controlplaneImageUrl` and `controlplaneImage.image.controlplaneImageTag`
 - **Port**: 8000
 - **Features**:
-  - SMTP email notifications (optional)
-  - Authentication (AUTH0 or OIDC)
+  - SMTP email notifications (optional; credentials omitted → no SMTP AUTH attempt)
+  - Authentication (AUTH0 or OIDC; OIDC supports `oidc_discovery_url`, `oidc_token_auth_method`, `oidc_user_groups_key`, and add-only `oidc_group_team_sync_enabled`)
+  - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force OIDC cookie auth)
   - Proxy support (HTTP/SOCKS5)
   - TLS certificate verification control
 - **Environment**: Connects to PostgreSQL and RabbitMQ
@@ -515,10 +517,11 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Similar configuration to API**: Same image and environment variables
 
 ### Frontend
-- **Replicas**: Configurable via `frontend.replicas`
+- **Replicas**: Configurable via `frontend.replicas` (default 2)
 - **Resources**: Configurable via `frontend.resources`
 - **Image**: Configured by `global.imageUrls.frontendImageUrl` and `frontendImage.image.frontendImageTag`
 - **Port**: 8080
+- **Downloads**: `frontend.disableDownloads: true` sets `VITE_QUALYTICS_DISABLE_DOWNLOADS` to hide data-export/download affordances
 - **Strategy**: Recreate deployment
 
 ### PostgreSQL
@@ -528,9 +531,12 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Storage**: 100Gi persistent volume (default)
 - **Backup Storage**: Configurable via `postgres.pvc.backupStorageSize`
 - **Resources**: Configurable via `postgres.resources`
+- **CronJobs**: snapshotter + maintenance, each with its own requests/limits under `postgres.cronjobs.*.resources`; both run the same `postgres` image
+- **Schema**: `postgres.schema` (default `public`) — flows into the controlplane connection settings
 - **TLS**: Optional — set `postgres.tls.enabled: true` and pre-create the `postgres-tls` Secret in the namespace.
 - **Service**: Headless service (clusterIP: None)
 - **Port**: 5432
+- **Utility pod**: `<release>-psql` Deployment at `replicas: 0` — scale to 1 for an in-cluster psql shell
 - **Upgrade Support**: Can use `pgautoupgrade/pgautoupgrade:17-bookworm` for auto-upgrade
 
 ### RabbitMQ
@@ -551,12 +557,17 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 ### Ingress
 - **Class**: nginx
-- **ModSecurity WAF**: OWASP core rules enabled
-- **Rate Limiting**: 10 RPS per IP with 2x burst multiplier
+- **Three Ingress resources** (all `helm.sh/hook: post-install,post-upgrade`):
+  1. `<release>-api-streaming-ingress` — `priority: 100`, buffering off, OWASP core rules off; matches only `/api/anomalies/[0-9]+/source-record/download(.*)`
+  2. `<release>-api-ingress` — buffered, full OWASP, `proxy-body-size: 20m`
+  3. `<release>-frontend-ingress` — separate, much higher rate limits for parallel asset loading
+- **ModSecurity WAF**: OWASP core rules enabled (except on the streaming ingress)
+- **Rate Limiting**: API `ingress.maxRequestsPerSecondPerIP` (default 50) × `burstMultiplier` (default 5) burst, `maxConnectionsPerIP` 250; frontend `frontendMaxRequestsPerSecondPerIP` 500 / `frontendMaxConnectionsPerIP` 1000. RPS overage returns 429, connection overage 503 (nginx limitation).
+- **Upstream resilience**: `upstream-max-fails: 0` + `upstream-fail-timeout: 0` so transient 503s never eject all backends; `proxy-next-upstream: error timeout http_503` with 3 tries.
 - **Compression**: GZIP and Brotli support
 - **SSL**: Automatic redirect to HTTPS (force-ssl-redirect)
 - **TLS**: BYO Secret. Default: single shared `ingress.tls.secretName`; falls back to legacy `api-tls-cert` + `frontend-tls-cert` split pair for backwards compatibility. See [docs/ingress-tls.md](docs/ingress-tls.md).
-- **Body Limits**: 20MB with files, 2.6MB without files
+- **Body Limits**: API ingress 20MB with files / 2.6MB without; streaming ingress 2.6MB for both (`SecRequestBodyLimitAction Reject`)
 - **Timeouts**: 3600s for proxy connect/read/send
 - **Security Headers**:
   - X-Frame-Options: SAMEORIGIN
@@ -567,6 +578,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   - Permissions-Policy
 - **CORS**: Optional (disabled by default)
 - **Routes**:
+  - `/api/anomalies/[0-9]+/source-record/download(.*)` → API service (streaming ingress, matched first)
   - `/api/?(.*)` → API service
   - `/?(.*)` → Frontend service
 
@@ -577,37 +589,27 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 ## Platform-Specific Configuration
 
+Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizing.md) (six tiers, per-cloud tables) — that file is the single source of truth; don't duplicate node sizes here.
+
 ### AWS
 - **Storage**: EBS gp3 volumes with IOPS/throughput settings
   - Annotations: `ebs.csi.aws.com/iops: 8000`, `ebs.csi.aws.com/throughput: 250`
 - **Storage Class**: `aws` (gp3, 8000 IOPS, 250 MB/s throughput)
-- **Spark Volumes**: `/mnt/disks/nvme[1-4]n1/spark-local-dir-[1-4]`
-- **Recommended Nodes**:
-  - App: t3.2xlarge (8 vCPUs, 32 GB)
-  - Driver: r5.2xlarge (8 vCPUs, 64 GB)
-  - Executor: r5d.2xlarge (8 vCPUs, 64 GB) with local NVMe
+- **Spark Volumes**: `hostPath` at `/mnt/disks/nvme[1-N]n1/spark-local-dir-[1-N]` (N = `dataplane.numVolumes`)
 
 ### GCP
 - **Storage**: Persistent Disks (SSD and standard)
 - **Storage Classes**:
   - `gcp-fast` (pd-ssd, immediate binding)
   - `gcp-slow` (pd-standard, WaitForFirstConsumer)
-- **Spark Volumes**: `/mnt/disks/ssd[0-3]/spark-local-dir-[1-4]`
-- **Recommended Nodes**:
-  - App: n2-standard-8 (8 vCPUs, 32 GB)
-  - Driver: n2-highmem-8 (8 vCPUs, 64 GB)
-  - Executor: n2-highmem-8 (8 vCPUs, 64 GB)
+- **Spark Volumes**: `hostPath` at `/mnt/disks/ssd[0..N-1]/spark-local-dir-[1-N]` (0-indexed disks, 1-indexed dirs)
 
 ### Azure
 - **Storage**: Managed Disks (Premium and Standard)
 - **Storage Classes**:
   - `azure-fast` (Premium_LRS, immediate binding)
   - `azure-slow` (StandardSSD_LRS, WaitForFirstConsumer)
-- **Spark Volumes**: `/mnt/resource/spark-local-dir-[1-4]`
-- **Recommended Nodes**:
-  - App: Standard_D8_v5 (8 vCPUs, 32 GB)
-  - Driver: Standard_E8s_v5 (8 vCPUs, 64 GB)
-  - Executor: Standard_E8s_v5 (8 vCPUs, 64 GB)
+- **Spark Volumes**: **`emptyDir`, not `hostPath`** — `templates/spark.yaml` only has `hostPath` branches for `aws` and `gcp`; every other `global.platform` (including `azure`) falls through to `emptyDir: {}`. `numVolumes` still controls how many scratch dirs are created and what lands in `spark.local.dir`, but they are backed by node ephemeral storage rather than the temp SSD.
 
 ## Configuration Files
 
@@ -621,10 +623,10 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   5. Storage class configuration
   6. Node scheduling (selectors and tolerations)
   7. Deployment identifier and secrets (auth0, oidc, auth, postgres, smtp, rabbitmq)
-  8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`)
-  9. Controlplane configuration (API and CMD)
-  10. Frontend configuration
-  11. PostgreSQL configuration
+  8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`, `maxParallelSyncRequests`, and the `syncAdmission` CPU governor)
+  9. Controlplane configuration (API and CMD, including `controlplane.auth.{migrateIdpByEmail,scimUsernamePrefix,allowQualyticsIssuer}`)
+  10. Frontend configuration (including `frontend.disableDownloads`)
+  11. PostgreSQL configuration (including `postgres.schema` and the snapshotter / maintenance CronJob resources)
   12. RabbitMQ configuration
   13. Busybox utility image
 
@@ -809,4 +811,12 @@ helm upgrade qualytics qualytics/qualytics \
 - [Qualytics User Guide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
 - [Spark on Kubernetes (Apache)](https://spark.apache.org/docs/latest/running-on-kubernetes.html) — for client-mode driver semantics + executor pod template
 - [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
-- [Ingress TLS (BYO Secret)](docs/ingress-tls.md)
+
+### Customer-facing docs in this repo
+Keep these in sync when chart behavior changes — image tags and version strings in particular go stale on every release.
+- [docs/docker-images.md](docs/docker-images.md) — image inventory (tags pinned per chart version), private-registry mirroring, runtime-resolved JDBC drivers
+- [docs/cluster-sizing.md](docs/cluster-sizing.md) — six sizing tiers, per-cloud instance types, per-tier Helm values
+- [docs/authentication.md](docs/authentication.md) — OIDC/Auth0 values → env mapping, group→Team sync, troubleshooting
+- [docs/external-postgres-setup.md](docs/external-postgres-setup.md) + [docs/external-postgres-faq.md](docs/external-postgres-faq.md) — `postgres.enabled: false` topology
+- [docs/ingress-tls.md](docs/ingress-tls.md) — BYO TLS Secret precedence
+- [docs/license-management.md](docs/license-management.md) — license activation and the 31-day grace period

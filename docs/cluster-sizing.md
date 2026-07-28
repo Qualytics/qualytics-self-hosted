@@ -137,6 +137,8 @@ Executor nodes can use **spot/preemptible instances** to reduce costs. Applicati
 
 The values that change between tiers are the executor and driver resource requests. The `numVolumes` value controls how many local SSD volumes are mounted into executor pods — set it to match the number of NVMe disks on your instance type.
 
+> **Platform support for local disks:** `numVolumes` mounts host disks directly only when `global.platform` is `aws` (`/mnt/disks/nvme<n>n1`) or `gcp` (`/mnt/disks/ssd<n>`). On `azure` — and any other value — the scratch directories are created as `emptyDir` volumes backed by the node's ephemeral storage instead of the temp SSD. Size the AKS node's OS/ephemeral disk accordingly, or contact [hello@qualytics.ai](mailto:hello@qualytics.ai) to arrange direct temp-disk mounts.
+
 > **Resource headroom**: The `cores` and `memory` values are set below node capacity to leave room for the kubelet, OS, and Spark's memory overhead (`memoryOverheadFactor: 0.1`).
 
 ### Small
@@ -251,8 +253,6 @@ dataplane:
     instances: 1
     cores: 63
     memory: "440000m"
-  config:
-    operation_timeout_hours: 6
 ```
 
 ---

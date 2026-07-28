@@ -133,29 +133,22 @@ Update these required settings:
 
    Set `global.authType` to `OIDC` and configure your Identity Provider credentials. Register Qualytics as a Web Application in your IdP with `https://<your-domain>/api/callback` as the redirect URI, Authorization Code grant type, and at minimum `openid` scope.
 
+   With a discovery URL, three values are all that most IdPs need — endpoints, JWKS, and issuer are discovered at startup, and the claims mapping uses OIDC-standard defaults:
+
    ```yaml
    global:
      authType: "OIDC"
 
    secrets:
      oidc:
-       oidc_scopes: "openid,email,profile"
-       oidc_authorization_endpoint: "https://your-idp.example.com/oauth2/authorize"
-       oidc_token_endpoint: "https://your-idp.example.com/oauth2/token"
-       oidc_userinfo_endpoint: "https://your-idp.example.com/oauth2/userinfo"
+       oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
        oidc_client_id: "your-client-id"
        oidc_client_secret: "your-client-secret"
-       oidc_user_id_key: "sub"
-       oidc_user_email_key: "email"
-       oidc_user_name_key: "name"
-       oidc_user_fname_key: "given_name"
-       oidc_user_lname_key: "family_name"
-       oidc_user_picture_key: "picture"
-       oidc_user_provider_key: "auth_provider"
-       oidc_allow_insecure_transport: false
    ```
 
-   > See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for detailed instructions including IdP-specific examples for Okta, Azure AD (Entra ID), Keycloak, and Google Workspace.
+   If your IdP does not support discovery, set `oidc_authorization_endpoint`, `oidc_token_endpoint`, and `oidc_userinfo_endpoint` individually instead.
+
+   > See [Authentication Configuration](./docs/authentication.md) for the full values-to-environment mapping, claim overrides, group-to-Team sync, and troubleshooting — or the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for IdP-specific examples covering Okta, Azure AD (Entra ID), Keycloak, and Google Workspace.
 
    **Option B: Auth0 — Managed by Qualytics**
 
@@ -257,12 +250,18 @@ The license request, signed license, registry token, and deployment identifier a
 
 ## Can I run a fully "air-gapped" deployment?
 
-Yes. The only egress requirement for a standard self-hosted Qualytics deployment is to https://auth.qualytics.io which provides Auth0-powered federated authentication. This is recommended for ease of installation and support, but not a strict requirement. If you require a fully private deployment with no access to the public internet, you can instead configure an OpenID Connect (OIDC) integration with your enterprise identity provider (IdP).
+Yes. The only *ongoing* runtime dependency on the public internet is https://auth.qualytics.io, which provides Auth0-powered federated authentication. Auth0 is recommended for ease of installation and support, but it is not a strict requirement — a fully private deployment can use an OpenID Connect (OIDC) integration with your enterprise identity provider (IdP) instead.
+
+Beyond authentication, plan for these paths regardless of auth mode:
+
+- **Container registries** — Docker Hub for the Qualytics images plus the public infrastructure images, or your internal mirror. See [Qualytics Docker Images](./docs/docker-images.md).
+- **Your datastores** — the Spark driver and executors need network access to every datastore you connect.
+- **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central. Confirm the resolution path with your account manager before installing into a cluster with no route to Maven Central.
 
 To set up OIDC for an air-gapped deployment:
 1. Set `global.authType: "OIDC"` in your `values.yaml`
-2. Configure your enterprise IdP credentials under `secrets.oidc`
-3. Import Qualytics container images into your private registry
+2. Configure your enterprise IdP credentials under `secrets.oidc` — see [Authentication Configuration](./docs/authentication.md)
+3. Import Qualytics container images into your private registry — see [Qualytics Docker Images](./docs/docker-images.md)
 
 See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for step-by-step instructions.
 
