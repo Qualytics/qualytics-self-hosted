@@ -17,9 +17,11 @@ The current chart and application versions are defined in `charts/qualytics/Char
 
 ```
 qualytics-self-hosted/
-├── README.md                           # User-facing deployment documentation (incl. Mermaid architecture diagram)
+├── README.md                           # User-facing deployment documentation (embeds docs/architecture-diagram.svg)
 ├── template.values.yaml                # Simplified customer configuration template
 ├── LICENSE                             # License file
+├── docs/                               # User-facing guides + assets (outside the chart, never packaged)
+│   └── architecture-diagram.svg        # Architecture diagram embedded in README (fonts subset to woff2 — re-subset if re-exported)
 └── charts/qualytics/
     ├── Chart.yaml                      # Chart metadata and dependencies
     ├── values.yaml                     # Complete default configuration

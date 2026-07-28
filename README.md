@@ -8,55 +8,13 @@ This chart will deploy a single-tenant instance of the qualytics platform to a [
 
 ### Architecture
 
-```mermaid
-flowchart LR
-  user([User Browser])
+[![Qualytics customer-managed deployment architecture](./docs/architecture-diagram.svg)](./docs/architecture-diagram.svg)
 
-  datastores[("Datastores (external)<br/>JDBC: Snowflake, BigQuery, Redshift, Databricks, …<br/>DFS: Amazon S3, Google Cloud Storage, Azure Data Lake Storage")]
-
-  subgraph k8s["Kubernetes Cluster"]
-    direction TB
-    subgraph ns["Qualytics Namespace"]
-      direction TB
-
-      nginx["nginx-ingress<br/>(optional)"]
-
-      subgraph appPool["Application Nodes — appNodes=true"]
-        direction LR
-        fe["Frontend"]
-        api["Controlplane API"]
-        cmd["Controlplane CMD"]
-        pg[("PostgreSQL<br/>StatefulSet")]
-        rmq[("RabbitMQ<br/>StatefulSet, emptyDir")]
-      end
-
-      subgraph driverPool["Spark Driver Node — driverNodes=true"]
-        driver["Dataplane (Spark Driver)<br/>spark-submit --deploy-mode client"]
-      end
-
-      subgraph execPool["Spark Executor Nodes — executorNodes=true"]
-        executors["Spark Executors<br/>(dynamic allocation, 1..12 pods)"]
-      end
-    end
-  end
-
-  user --> nginx
-  nginx -->|/| fe
-  nginx -->|/api/...| api
-  api <--> pg
-  api <--> rmq
-  cmd <--> pg
-  cmd <--> rmq
-  driver <-->|dataplane queue| rmq
-  driver -.->|launches and deletes<br/>executor pods| executors
-
-  driver -->|metadata| datastores
-  executors -->|reads data| datastores
-```
+<sub>Click the diagram to open it full size. It shows the customer-managed topology with an **external** PostgreSQL (`postgres.enabled: false`); the chart default is an in-cluster PostgreSQL StatefulSet — see [External PostgreSQL Setup](./docs/external-postgres-setup.md).</sub>
 
 A Qualytics deployment is split into a **Controlplane**, a **Dataplane**, and the **Datastores** it monitors:
 
-- **Controlplane** — the API and CMD services plus the Frontend UI, all running on Application Nodes (`appNodes=true`). The API serves user requests and orchestrates work; CMD is the background processor that schedules and tracks operations. PostgreSQL holds platform state and RabbitMQ is the message broker between the Controlplane and the Dataplane.
+- **Controlplane** — the API and CMD services plus the Frontend UI, all running on Application Nodes (`appNodes=true`). The API serves user requests and orchestrates work; CMD is the background processor that schedules and tracks operations. PostgreSQL holds platform state — either the in-cluster StatefulSet the chart deploys by default, or an externally managed instance — and RabbitMQ is the message broker between the Controlplane and the Dataplane.
 - **Dataplane** — a Spark application: a single driver pod (`driverNodes=true`) that runs `spark-submit` in client mode, plus executor pods (`executorNodes=true`) the driver creates and reaps dynamically based on workload (`dataplane.dynamicAllocation.minExecutors..maxExecutors`, default `1..12`).
 - **Datastores** — the external systems Qualytics is profiling and scanning. Two connector families are supported: **JDBC** (Snowflake, BigQuery, Redshift, Databricks, PostgreSQL, Oracle, Microsoft SQL Server, …) and **DFS** (Amazon S3, Google Cloud Storage, Azure Data Lake Storage). The driver opens metadata connections; the executors do the parallel data reads.
 
