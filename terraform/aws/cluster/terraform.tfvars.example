@@ -1,0 +1,97 @@
+################################################################################
+# Qualytics EKS — Example Configuration
+#
+# Copy this file to terraform.tfvars and fill in the required values.
+# Required values are marked with "REQUIRED".
+################################################################################
+
+#-------------------------------------------------------------------------------
+# General Configuration
+#-------------------------------------------------------------------------------
+
+aws_region   = "us-east-1"
+cluster_name = "qualytics"
+
+# Kubernetes version (1.29+ required for EKS Auto Mode)
+kubernetes_version = "1.35"
+
+default_tags = {
+  Terraform   = "true"
+  Application = "qualytics"
+  Environment = "production"
+}
+
+#-------------------------------------------------------------------------------
+# Networking
+#-------------------------------------------------------------------------------
+
+vpc_cidr = "10.0.0.0/16"
+
+# Set to false if multi-AZ NAT is required
+single_nat_gateway = true
+
+cluster_endpoint_public_access = true
+
+# Restrict kubectl access to specific CIDRs (recommended for production).
+# Defaults to open (0.0.0.0/0). Aurora and pod networking are unaffected —
+# they communicate over the VPC private network, not the public endpoint.
+# cluster_endpoint_public_access_cidrs = ["203.0.113.0/24"]
+
+#-------------------------------------------------------------------------------
+# Node Instance Types
+# See docs/cluster-sizing.md (repository root) for instance type recommendations.
+#-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+# Application Nodes
+# Hosts: API, Frontend, RabbitMQ, ingress controller
+# EKS Auto Mode provisions and scales these automatically.
+#-------------------------------------------------------------------------------
+
+# m8g.2xlarge — 8 vCPU, 32 GB, Graviton4 (recommended)
+app_node_instance_types = ["m8g.2xlarge"]
+
+#-------------------------------------------------------------------------------
+# Spark Driver Nodes
+# EKS Auto Mode provisions and scales these automatically.
+#-------------------------------------------------------------------------------
+
+# r8g.2xlarge — 8 vCPU, 64 GB, Graviton4 (recommended)
+driver_node_instance_types = ["r8g.2xlarge"]
+
+#-------------------------------------------------------------------------------
+# Spark Executor Nodes
+# Use instances with local NVMe SSDs ('d' suffix). EKS Auto Mode manages the
+# instance store as the node's ephemeral storage, which is where Spark's scratch
+# space lands — keep the chart's dataplane.numVolumes at its -1 default to match.
+# EKS Auto Mode provisions and scales these automatically.
+#-------------------------------------------------------------------------------
+
+# r8gd.2xlarge — 8 vCPU, 64 GB, 474 GB NVMe SSD, Graviton4 (recommended)
+executor_node_instance_types = ["r8gd.2xlarge"]
+
+# 'spot' for cost savings; 'on-demand' for guaranteed capacity. Spot is the default
+# here, so executors can be reclaimed by AWS mid-operation; the chart's Spark
+# decommission settings handle the drain, but long operations may need to retry.
+# Use 'on-demand' if predictable operation runtimes matter more than cost.
+executor_capacity_type = "spot"
+
+#-------------------------------------------------------------------------------
+# Cluster Authentication
+#-------------------------------------------------------------------------------
+
+# IAM roles or users to grant cluster admin access (in addition to the deploying identity)
+# cluster_admin_arns = [
+#   "arn:aws:iam::123456789012:role/my-admin-role",
+# ]
+
+#-------------------------------------------------------------------------------
+# Qualytics Deployment
+#-------------------------------------------------------------------------------
+
+create_qualytics_namespace = true
+
+# Optional — Docker registry token provided by Qualytics. Leave this commented out
+# to create the regcred Secret manually with the no-echo prompt in ../README.md,
+# which keeps the token out of Terraform state.
+# docker_registry_token = "dckr_oat_..."

@@ -1,0 +1,56 @@
+name: Validate Terraform
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths: [ 'terraform/**' ]
+  push:
+    branches: [ main ]
+    paths: [ 'terraform/**' ]
+  workflow_call:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - terraform/aws/cluster
+          - terraform/aws/postgres
+          - terraform/gcp
+          - terraform/azure
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.1
+          terraform_wrapper: false
+
+      # Providers and modules are downloaded, but no backend is configured and no
+      # credentials are needed — this never contacts a cloud API.
+      - name: Initialize
+        working-directory: ${{ matrix.module }}
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        working-directory: ${{ matrix.module }}
+        run: terraform validate -no-color
+
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.1
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff terraform/

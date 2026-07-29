@@ -305,7 +305,7 @@ module "gke" {
         effect = "NO_SCHEDULE"
       }
     ]
-  } : {
+    } : {
     all            = []
     app-nodes      = []
     driver-nodes   = []
