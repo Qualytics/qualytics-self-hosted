@@ -93,6 +93,15 @@ resource "random_password" "master" {
   # the same variable keeps the two in lockstep, so one apply both regenerates the
   # password and triggers the send. Without this keeper, bumping the version
   # re-sends the identical password and "rotation" is a no-op.
+  #
+  # The keeper is also what makes rotation opt-in: while master_password_wo_version
+  # stays at its default, this value is stable in state and routine `terraform apply`
+  # runs never change the password.
+  #
+  # Corollary: do not force-replace this resource on its own (`-replace`, `taint`).
+  # That regenerates the password in state and Secrets Manager while the unchanged
+  # wo_version means Aurora never receives it — a silent lockout. Bump
+  # master_password_wo_version instead.
   keepers = {
     version = tostring(var.master_password_wo_version)
   }
@@ -202,11 +211,21 @@ module "aurora" {
   master_username = var.administrator_login
   database_name   = var.database_name
 
-  # Self-managed password via random_password — disables AWS automatic rotation.
-  # To rotate the password, increment master_password_wo_version and re-apply.
-  manage_master_user_password = false
-  master_password_wo          = random_password.master.result
-  master_password_wo_version  = var.master_password_wo_version
+  # The master password is self-managed via random_password, and NOTHING rotates it
+  # automatically. Rotation only happens when an operator explicitly increments
+  # master_password_wo_version (default 1) and re-applies — see ./README.md.
+  #
+  # manage_master_user_password = false keeps the password out of RDS-managed Secrets
+  # Manager, which is what would otherwise put it on an AWS rotation schedule. The
+  # module gates its aws_secretsmanager_secret_rotation resource on
+  # (manage_master_user_password && manage_master_user_password_rotation), so that
+  # resource is already never created here. The second flag is pinned to false anyway
+  # so that neither an upstream default change nor a later switch to RDS-managed
+  # passwords can silently turn scheduled rotation on.
+  manage_master_user_password          = false
+  manage_master_user_password_rotation = false
+  master_password_wo                   = random_password.master.result
+  master_password_wo_version           = var.master_password_wo_version
 
   skip_final_snapshot       = var.skip_final_snapshot
   final_snapshot_identifier = coalesce(var.final_snapshot_identifier, "${local.name}-postgres-final-${random_id.final_snapshot.hex}")

@@ -124,11 +124,27 @@ creates and tags the CloudWatch log group itself rather than letting RDS create 
 
 ## Password Rotation (if required)
 
-Increment `master_password_wo_version` in `terraform.tfvars` and re-apply:
+**Rotation is off by default and never automatic.** This module configures no scheduled
+or automatic rotation: `manage_master_user_password` and
+`manage_master_user_password_rotation` are both pinned to `false`, so no
+`aws_secretsmanager_secret_rotation` resource is created and RDS is not managing the
+credential on a schedule. Routine `terraform apply` runs leave the password unchanged.
+
+Rotating is a deliberate act with an application-side follow-up: the new password must
+be copied into your Helm values and the release upgraded, or Qualytics can no longer
+authenticate. Do it only when you intend to.
+
+To rotate, increment `master_password_wo_version` in `terraform.tfvars` and re-apply:
 
 ```hcl
 master_password_wo_version = 2
 ```
+
+> Do not force-replace `random_password.master` on its own (`terraform apply -replace`,
+> `taint`) as a way to rotate. That regenerates the password in state and Secrets
+> Manager, but because `master_password_wo` is write-only and the version is unchanged,
+> Aurora never receives it — leaving Secrets Manager holding a password the database
+> rejects. Always rotate by incrementing the version.
 
 ```bash
 terraform apply

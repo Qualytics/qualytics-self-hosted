@@ -141,9 +141,16 @@ variable "skip_final_snapshot" {
 
 variable "master_password_wo_version" {
   description = <<-EOT
-    Increment to rotate the master password. Used as a keeper on
+    Rotation counter for the master password. Leave at the default and the password
+    is NEVER rotated: no scheduled or automatic rotation is configured anywhere in
+    this module, and routine `terraform apply` runs leave the password untouched.
+
+    Increment it only when you intend to rotate. It is a keeper on
     random_password.master, so incrementing regenerates the password, sends it to
-    Aurora, and updates the Secrets Manager entry in a single apply.
+    Aurora, and updates the Secrets Manager entry in a single apply — after which you
+    must copy the new value into your Helm values and upgrade the release, or the
+    application can no longer authenticate.
+
     RDS applies a master password change immediately regardless of apply_immediately,
     so no maintenance window is involved. See ./README.md (Password rotation).
   EOT
