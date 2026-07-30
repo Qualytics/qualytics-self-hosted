@@ -144,8 +144,8 @@ variable "master_password_wo_version" {
     Increment to rotate the master password. Used as a keeper on
     random_password.master, so incrementing regenerates the password, sends it to
     Aurora, and updates the Secrets Manager entry in a single apply.
-    Note apply_immediately defaults to false, so the change may be deferred to the
-    next maintenance window — see ./README.md (Password rotation).
+    RDS applies a master password change immediately regardless of apply_immediately,
+    so no maintenance window is involved. See ./README.md (Password rotation).
   EOT
   type        = number
   default     = 1

@@ -139,11 +139,13 @@ helm upgrade qualytics qualytics/qualytics --namespace qualytics -f values.yaml
 `master_password_wo_version` is a keeper on the generated password, so a single apply
 regenerates it, sends it to Aurora, and updates the Secrets Manager entry.
 
-**Mind the timing.** `apply_immediately` defaults to `false`, so the password change may
-be deferred to the next maintenance window — during which the old password still works
-and the new one does not. Either run the rotation with
-`-var="apply_immediately=true"`, or wait until the cluster leaves
-`PendingModifiedValues` before running `helm upgrade`:
+**`apply_immediately` does not delay this.** A master password change is one of the few
+modifications RDS applies immediately regardless of the `ApplyImmediately` setting, so
+there is no maintenance-window wait and no need to pass
+`-var="apply_immediately=true"` for a rotation. The change is still applied
+asynchronously, so allow a short interval before the new password authenticates. If a
+connection is rejected immediately after `terraform apply`, confirm the change has landed
+before assuming the rotation failed:
 
 ```bash
 aws rds describe-db-clusters --db-cluster-identifier <cluster-name>-postgres \
