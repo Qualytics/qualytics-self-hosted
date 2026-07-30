@@ -52,39 +52,11 @@ output "public_subnets" {
 }
 
 #-------------------------------------------------------------------------------
-# Node Groups
-#-------------------------------------------------------------------------------
-
-output "node_groups" {
-  description = "Map of node group names to their configurations"
-  value = {
-    app = {
-      name           = module.eks.eks_managed_node_groups["app"].node_group_id
-      instance_types = var.app_node_instance_types
-      min_size       = var.app_node_min_size
-      max_size       = var.app_node_max_size
-    }
-    driver = {
-      name           = module.eks.eks_managed_node_groups["driver"].node_group_id
-      instance_types = var.driver_node_instance_types
-      min_size       = var.driver_node_min_size
-      max_size       = var.driver_node_max_size
-    }
-    exec = {
-      name           = module.eks.eks_managed_node_groups["exec"].node_group_id
-      instance_types = var.executor_node_instance_types
-      min_size       = var.executor_node_min_size
-      max_size       = var.executor_node_max_size
-    }
-  }
-}
-
-#-------------------------------------------------------------------------------
 # Authentication
 #-------------------------------------------------------------------------------
 
 output "cluster_oidc_provider_arn" {
-  description = "The ARN of the OIDC provider for the cluster"
+  description = "The ARN of the cluster's OIDC identity provider"
   value       = module.eks.oidc_provider_arn
 }
 
@@ -112,10 +84,11 @@ output "next_steps" {
     Next steps to deploy Qualytics:
 
     1. Configure kubectl:
-       ${module.eks.cluster_name != "" ? "aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}" : ""}
+       aws eks update-kubeconfig --region ${var.aws_region} --name ${module.eks.cluster_name}
 
     2. Verify cluster access:
        kubectl get nodes
+       (Auto Mode provisions nodes on demand, so this is empty until pods are scheduled.)
 
     3. Prepare values.yaml using the repository template and set the unique
        secrets.deployment.identifier provided by Qualytics.
@@ -129,7 +102,14 @@ output "next_steps" {
          --docker-password="$QUALYTICS_REGISTRY_TOKEN"
        unset QUALYTICS_REGISTRY_TOKEN
 
-    5. Deploy Qualytics using Helm:
+    5. Create the TLS Secret for the ingress (see docs/ingress-tls.md):
+       kubectl create secret tls qualytics-tls-cert -n qualytics \
+         --cert=./fullchain.pem --key=./privkey.pem
+
+    6. Deploy Aurora PostgreSQL:
+       See terraform/aws/postgres
+
+    7. Deploy Qualytics using Helm:
        helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
        helm repo update
        CHART_VERSION="<version provided by Qualytics>"
@@ -138,7 +118,9 @@ output "next_steps" {
          --version "$CHART_VERSION" \
          -f values.yaml \
          --wait \
-         --timeout=5m
+         --timeout=10m
+
+    Full step-by-step guide: terraform/aws/README.md
 
     For more information, visit:
     https://github.com/qualytics/qualytics-self-hosted

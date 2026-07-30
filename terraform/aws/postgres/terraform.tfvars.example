@@ -1,0 +1,83 @@
+################################################################################
+# Qualytics Aurora PostgreSQL - Example Configuration
+#
+# Copy this file to terraform.tfvars and customize for your deployment.
+# Run terraform/aws/cluster first — this module reads the VPC and subnet IDs
+# from that state file automatically.
+################################################################################
+
+#-------------------------------------------------------------------------------
+# General
+# cluster_name and tfstate_bucket must match the values used in terraform/aws/cluster
+#-------------------------------------------------------------------------------
+
+aws_region     = "us-east-1"
+cluster_name   = "qualytics"
+tfstate_bucket = "<your-tfstate-bucket>"
+
+default_tags = {
+  Terraform   = "true"
+  Application = "qualytics"
+  Environment = "production"
+}
+
+#-------------------------------------------------------------------------------
+# Database
+#-------------------------------------------------------------------------------
+
+database_name       = "surveillance_hub"
+administrator_login = "postgres"
+postgresql_version  = "17.9"
+
+#-------------------------------------------------------------------------------
+# Instance
+# db.r8g.large  = 2 vCPU, 16 GB  (development / small production)
+# db.r8g.xlarge = 4 vCPU, 32 GB  (medium production)
+#
+# For a read replica, add a second instance:
+# instances = { 1 = {}, 2 = {} }
+#-------------------------------------------------------------------------------
+
+instance_class = "db.r8g.large"
+instances      = { 1 = {} }
+
+#-------------------------------------------------------------------------------
+# Backup and Maintenance
+#-------------------------------------------------------------------------------
+
+backup_retention_period = 7
+preferred_backup_window = "03:00-04:00"
+
+# CloudWatch Logs retention for the exported postgresql log (0 = never expire)
+log_retention_days = 30
+
+# false = apply changes during maintenance window (recommended for production)
+apply_immediately = false
+
+#-------------------------------------------------------------------------------
+# Safety Controls
+#
+# Production defaults are set below:
+#   deletion_protection = true  — `terraform destroy` fails until you first
+#     re-apply with -var="deletion_protection=false" (see ./README.md, Teardown).
+#   skip_final_snapshot = false — a final snapshot is taken on destroy. It is
+#     retained after the cluster is gone and billed as storage.
+#
+# For throwaway / non-production environments, set:
+#   deletion_protection = false
+#   skip_final_snapshot = true
+# so that `terraform destroy` completes in a single pass.
+#-------------------------------------------------------------------------------
+
+deletion_protection = true
+skip_final_snapshot = false
+
+# Password rotation is OFF. Nothing in this module rotates the database password on a
+# schedule or automatically, and routine `terraform apply` runs leave it unchanged.
+#
+# Rotation is a deliberate, manual act: uncomment the line below and increment it.
+# That regenerates the password, sends it to Aurora, and updates the Secrets Manager
+# entry — you must then copy the new value into your Helm values.yaml
+# (secrets.postgres.password) and upgrade the release, or the application can no
+# longer authenticate. Leave it commented out unless you are rotating right now.
+# master_password_wo_version = 2

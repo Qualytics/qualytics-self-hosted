@@ -71,12 +71,12 @@ output "node_pools" {
       labels       = { driverNodes = "true" }
     }
     executor_nodes = {
-      machine_type   = var.executor_node_machine_type
-      min_size       = var.executor_node_min_size
-      max_size       = var.executor_node_max_size
-      spot           = var.executor_use_spot
+      machine_type    = var.executor_node_machine_type
+      min_size        = var.executor_node_min_size
+      max_size        = var.executor_node_max_size
+      spot            = var.executor_use_spot
       local_ssd_count = var.executor_local_ssd_count
-      labels         = { executorNodes = "true" }
+      labels          = { executorNodes = "true" }
     }
   }
 }

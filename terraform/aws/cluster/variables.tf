@@ -21,7 +21,7 @@ variable "cluster_name" {
 variable "kubernetes_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
-  default     = "1.33"
+  default     = "1.35"
 }
 
 variable "default_tags" {
@@ -55,100 +55,51 @@ variable "cluster_endpoint_public_access" {
   default     = true
 }
 
-variable "node_group_az_suffix" {
-  description = "AZ suffix (e.g. 'a', 'b') to pin node groups to a single availability zone. Prevents EBS volume attachment failures when nodes are recycled into a different AZ."
-  type        = string
-  default     = "a"
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "List of CIDR blocks that can access the public EKS API server endpoint. Defaults to open (0.0.0.0/0). Restrict to your office or VPN CIDR for production."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
 }
 
 #-------------------------------------------------------------------------------
-# Application Node Group Configuration
+# Application Node Configuration
 #-------------------------------------------------------------------------------
 
 variable "app_node_instance_types" {
-  description = "Instance types for application nodes (API, Frontend, databases)"
+  description = "Instance types for application nodes (API, Frontend, RabbitMQ). Karpenter selects from this list."
   type        = list(string)
   default     = ["m8g.2xlarge"]
 }
 
-variable "app_node_min_size" {
-  description = "Minimum number of application nodes"
-  type        = number
-  default     = 1
-}
-
-variable "app_node_max_size" {
-  description = "Maximum number of application nodes"
-  type        = number
-  default     = 3
-}
-
-variable "app_node_desired_size" {
-  description = "Desired number of application nodes"
-  type        = number
-  default     = 1
-}
-
 #-------------------------------------------------------------------------------
-# Spark Driver Node Group Configuration
+# Spark Driver Node Configuration
 #-------------------------------------------------------------------------------
 
 variable "driver_node_instance_types" {
-  description = "Instance types for Spark driver nodes"
+  description = "Instance types for Spark driver nodes. Karpenter selects from this list."
   type        = list(string)
   default     = ["r8g.2xlarge"]
 }
 
-variable "driver_node_min_size" {
-  description = "Minimum number of driver nodes"
-  type        = number
-  default     = 0
-}
-
-variable "driver_node_max_size" {
-  description = "Maximum number of driver nodes"
-  type        = number
-  default     = 1
-}
-
-variable "driver_node_desired_size" {
-  description = "Desired number of driver nodes"
-  type        = number
-  default     = 1
-}
-
 #-------------------------------------------------------------------------------
-# Spark Executor Node Group Configuration
+# Spark Executor Node Configuration
 #-------------------------------------------------------------------------------
 
 variable "executor_node_instance_types" {
-  description = "Instance types for Spark executor nodes (should have local NVMe SSDs)"
+  description = "Instance types for Spark executor nodes. Use instances with local NVMe SSDs (e.g. r8gd, c7gd, m7gd families)."
   type        = list(string)
   default     = ["r8gd.2xlarge"]
 }
 
-variable "executor_node_min_size" {
-  description = "Minimum number of executor nodes"
-  type        = number
-  default     = 1
-}
-
-variable "executor_node_max_size" {
-  description = "Maximum number of executor nodes"
-  type        = number
-  default     = 12
-}
-
-variable "executor_node_desired_size" {
-  description = "Desired number of executor nodes"
-  type        = number
-  default     = 1
-}
-
 variable "executor_capacity_type" {
-  description = "Capacity type for executor nodes (ON_DEMAND or SPOT)"
+  description = "Capacity type for executor nodes: 'on-demand' or 'spot'"
   type        = string
-  default     = "SPOT"
+  default     = "spot"
+
+  validation {
+    condition     = contains(["on-demand", "spot"], var.executor_capacity_type)
+    error_message = "executor_capacity_type must be 'on-demand' or 'spot'."
+  }
 }
 
 #-------------------------------------------------------------------------------
@@ -162,27 +113,11 @@ variable "cluster_admin_arns" {
 }
 
 #-------------------------------------------------------------------------------
-# Node Configuration Options
-#-------------------------------------------------------------------------------
-
-variable "enable_nvme_setup" {
-  description = "Enable NVMe instance store setup for executor nodes"
-  type        = bool
-  default     = true
-}
-
-#-------------------------------------------------------------------------------
 # Optional Features
 #-------------------------------------------------------------------------------
 
-variable "enable_cluster_autoscaler" {
-  description = "Enable Cluster Autoscaler IAM role"
-  type        = bool
-  default     = true
-}
-
 variable "create_qualytics_namespace" {
-  description = "Create the qualytics namespace"
+  description = "Create the qualytics namespace and Docker registry secret. Set to false only if managing the namespace outside Terraform."
   type        = bool
   default     = true
 }
