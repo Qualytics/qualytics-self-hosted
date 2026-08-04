@@ -248,7 +248,7 @@ spec:
             items:
               - key: ivysettings.xml
                 path: ivysettings.xml
-            secretName: {{ .Values.dataplane.ivySettingsSecret }}
+            secretName: {{ .Values.dataplane.ivySettingsSecret | quote }}
         {{- end }}
         {{- if eq .Values.dataplane.kerberos.enabled true }}
         - name: krb5-conf
