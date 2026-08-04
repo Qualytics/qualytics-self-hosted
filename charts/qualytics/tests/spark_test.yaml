@@ -695,6 +695,24 @@ tests:
           count: 1
         documentIndex: 5
 
+  # Regression: secretName must be quoted. Kubernetes accepts DNS-1123 names
+  # like "123" that YAML implicitly types as numbers; without | quote the
+  # rendered secretName is a non-string and the API rejects the Deployment.
+  - it: should render an implicitly-typed ivy settings Secret name as a string
+    set:
+      dataplane.ivySettingsSecret: 123
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ivy-settings
+            secret:
+              items:
+                - key: ivysettings.xml
+                  path: ivysettings.xml
+              secretName: "123"
+        documentIndex: 5
+
   - it: should set spark.local.dir conf when numVolumes > 0
     set:
       dataplane.numVolumes: 2
