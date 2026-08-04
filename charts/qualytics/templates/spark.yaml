@@ -239,6 +239,17 @@ spec:
         - name: executor-pod-template
           configMap:
             name: {{ .Release.Name }}-spark-executor-template
+        {{- if .Values.dataplane.ivySettingsSecret }}
+        # BYO Ivy settings for resolving extraPackages from an internal Maven
+        # repository (docs/custom-maven-repository.md). Customer-created Secret;
+        # the chart only mounts it and points spark.jars.ivySettings at it.
+        - name: ivy-settings
+          secret:
+            items:
+              - key: ivysettings.xml
+                path: ivysettings.xml
+            secretName: {{ .Values.dataplane.ivySettingsSecret }}
+        {{- end }}
         {{- if eq .Values.dataplane.kerberos.enabled true }}
         - name: krb5-conf
           secret:
@@ -307,6 +318,9 @@ spec:
                 --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
                 --conf spark.jars.ivy=/tmp \
+                {{- if .Values.dataplane.ivySettingsSecret }}
+                --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \
+                {{- end }}
                 {{- if gt (int .Values.dataplane.numVolumes) 0 }}
                 --conf spark.local.dir={{ include "qualytics.spark.localDirs" . }} \
                 {{- end }}
@@ -406,6 +420,11 @@ spec:
             - name: executor-pod-template
               mountPath: /opt/spark/conf/executor-template.yaml
               subPath: executor-template.yaml
+            {{- if .Values.dataplane.ivySettingsSecret }}
+            - name: ivy-settings
+              mountPath: /opt/spark/conf/ivysettings.xml
+              subPath: ivysettings.xml
+            {{- end }}
             {{- if eq .Values.dataplane.kerberos.enabled true }}
             - name: krb5-conf
               mountPath: {{ .Values.dataplane.kerberos.krb5 }}

@@ -221,6 +221,17 @@ dataplane:
   extraPackages:
     - "com.teradata.jdbc:terajdbc:20.00.00.56"
     - "com.ibm.db2:jcc:12.1.4.0"
+  # Resolve extraPackages from an internal Maven repository (JFrog Artifactory,
+  # Sonatype Nexus, …) instead of Maven Central — for air-gapped or
+  # egress-restricted clusters. Name of a pre-existing Secret in the release
+  # namespace holding an `ivysettings.xml` key; the file is mounted into the
+  # driver and passed to spark-submit via spark.jars.ivySettings. When set, it
+  # fully replaces Spark's built-in resolvers (Maven Central is never contacted),
+  # so the repository must serve every coordinate in extraPackages. Credentials
+  # for authenticated repositories live inside the file. Only the driver pod
+  # needs network access to the repository; resolution happens on every driver
+  # start. See docs/custom-maven-repository.md.
+  ivySettingsSecret: ""
   # RBAC for the driver pod to manage executor pods directly. Replaces the
   # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.
   rbac:

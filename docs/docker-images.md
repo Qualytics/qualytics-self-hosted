@@ -158,7 +158,7 @@ Beyond container images, the Spark driver passes `dataplane.extraPackages` to `s
 | `com.teradata.jdbc:terajdbc:20.00.00.56` | Teradata datastore connectivity |
 | `com.ibm.db2:jcc:12.1.4.0` | IBM DB2 datastore connectivity |
 
-If your cluster has no route to Maven Central, confirm the resolution path for your dataplane image with your Qualytics account manager before installing — mirroring the container images alone does not cover these artifacts. Deployments that do not use Teradata or DB2 can drop the coordinates they do not need from `dataplane.extraPackages`.
+If your cluster has no route to Maven Central, resolve these coordinates from an internal Maven repository (JFrog Artifactory, Sonatype Nexus, …) instead by setting `dataplane.ivySettingsSecret` — see [Resolving JDBC Drivers from an Internal Maven Repository](./custom-maven-repository.md). Mirroring the container images alone does not cover these artifacts. Deployments that do not use Teradata or DB2 can drop the coordinates they do not need from `dataplane.extraPackages`.
 
 ## Installation
 

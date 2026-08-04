@@ -256,7 +256,7 @@ Beyond authentication, plan for these paths regardless of auth mode:
 
 - **Container registries** — Docker Hub for the Qualytics images plus the public infrastructure images, or your internal mirror. See [Qualytics Docker Images](./docs/docker-images.md).
 - **Your datastores** — the Spark driver and executors need network access to every datastore you connect.
-- **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central. Confirm the resolution path with your account manager before installing into a cluster with no route to Maven Central.
+- **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central by default. Clusters with no route to Maven Central can resolve these from an internal Maven repository (Artifactory, Nexus, …) via `dataplane.ivySettingsSecret` — see [Custom Maven Repository](./docs/custom-maven-repository.md).
 
 To set up OIDC for an air-gapped deployment:
 1. Set `global.authType: "OIDC"` in your `values.yaml`
@@ -309,6 +309,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 
 - [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
 - [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
+- [Custom Maven Repository](./docs/custom-maven-repository.md) — Resolve the runtime JDBC driver packages from an internal Artifactory/Nexus instead of Maven Central
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough

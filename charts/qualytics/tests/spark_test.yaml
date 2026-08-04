@@ -644,6 +644,57 @@ tests:
           pattern: "--packages com.teradata.jdbc:terajdbc:20.00.00.56,com.ibm.db2:jcc:12.1.4.0"
         documentIndex: 5
 
+  # BYO Ivy settings (docs/custom-maven-repository.md): a customer Secret holding
+  # ivysettings.xml redirects extraPackages resolution to an internal Maven
+  # repository. The chart mounts the Secret into the driver and points
+  # spark.jars.ivySettings at the mounted file; executors are untouched
+  # (resolved jars are served to them by the driver).
+  - it: should mount the ivy settings Secret and set spark.jars.ivySettings when configured
+    set:
+      dataplane.ivySettingsSecret: "qualytics-ivy-settings"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ivy-settings
+            secret:
+              items:
+                - key: ivysettings.xml
+                  path: ivysettings.xml
+              secretName: qualytics-ivy-settings
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ivy-settings
+            mountPath: /opt/spark/conf/ivysettings.xml
+            subPath: ivysettings.xml
+        documentIndex: 5
+      # Resolution happens in the driver only — the executor template must not change.
+      - notMatchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "ivy-settings"
+        documentIndex: 3
+
+  - it: should not emit the ivy settings volume, mount, or conf by default
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.jars.ivySettings"
+        documentIndex: 5
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+        documentIndex: 5
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+        documentIndex: 5
+
   - it: should set spark.local.dir conf when numVolumes > 0
     set:
       dataplane.numVolumes: 2
