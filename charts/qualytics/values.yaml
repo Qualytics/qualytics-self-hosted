@@ -239,6 +239,21 @@ dataplane:
   extraPackages:
     - "com.teradata.jdbc:terajdbc:20.00.00.56"
     - "com.ibm.db2:jcc:12.1.4.0"
+  # Resolve extraPackages from an internal Maven repository (Artifactory/Nexus)
+  # instead of Maven Central — for air-gapped clusters. The chart renders an
+  # ivysettings.xml into a Secret and points spark.jars.ivySettings at it;
+  # only the driver needs access to the repository, which must serve every
+  # coordinate in extraPackages. See docs/custom-maven-repository.md.
+  ivy:
+    enabled: false
+    # Maven-layout repository URL, e.g. an Artifactory repo proxying Maven Central.
+    repositoryUrl: ""
+    # HTTP Basic realm ("Artifactory Realm" is the Artifactory default).
+    realm: "Artifactory Realm"
+    # Set both for authenticated access or leave both empty for anonymous.
+    # Prefer an identity token / API key over a real password.
+    username: ""
+    password: ""
   # RBAC for the driver pod to manage executor pods directly. Replaces the
   # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.
   rbac:

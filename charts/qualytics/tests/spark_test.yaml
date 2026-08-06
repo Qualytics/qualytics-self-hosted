@@ -644,6 +644,122 @@ tests:
           pattern: "--packages com.teradata.jdbc:terajdbc:20.00.00.56,com.ibm.db2:jcc:12.1.4.0"
         documentIndex: 5
 
+  # Chart-generated Ivy settings (docs/custom-maven-repository.md): when
+  # dataplane.ivy.enabled, the chart renders an ivysettings.xml into a
+  # release-managed Secret from dataplane.ivy.*, mounts it into the driver,
+  # and points spark.jars.ivySettings at the mounted file. Resolution is
+  # driver-only — executors receive the resolved jars from the driver.
+  - it: should render the ivy-settings Secret with generated XML when enabled
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com:8443/artifactory/maven-remote/"
+      dataplane.ivy.username: "svc-user"
+      dataplane.ivy.password: "p&ss'wo<rd"
+    asserts:
+      - hasDocuments:
+          count: 7
+      - isKind:
+          of: Secret
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-ivy-settings
+        documentIndex: 3
+      # Credentials host is the bare hostname (port stripped — Ivy matches the
+      # JVM Authenticator's requesting host); attribute values are XML-escaped
+      # so arbitrary tokens can't break the file.
+      - matchRegex:
+          path: data["ivysettings.xml"]
+          decodeBase64: true
+          pattern: credentials host="repo\.example\.com" realm="Artifactory Realm" username="svc-user" passwd="p&amp;ss&apos;wo&lt;rd"
+        documentIndex: 3
+      # The resolver root keeps the full URL, port included.
+      - matchRegex:
+          path: data["ivysettings.xml"]
+          decodeBase64: true
+          pattern: ibiblio name="internal" m2compatible="true" root="https://repo\.example\.com:8443/artifactory/maven-remote/"
+        documentIndex: 3
+
+  - it: should omit credentials for anonymous repositories and wire the driver
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+    asserts:
+      - notMatchRegex:
+          path: data["ivysettings.xml"]
+          decodeBase64: true
+          pattern: credentials
+        documentIndex: 3
+      # With the Secret inserted at index 3, the Deployment shifts to index 6.
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ivy-settings
+            secret:
+              items:
+                - key: ivysettings.xml
+                  path: ivysettings.xml
+              secretName: RELEASE-NAME-spark-ivy-settings
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ivy-settings
+            mountPath: /opt/spark/conf/ivysettings.xml
+            subPath: ivysettings.xml
+        documentIndex: 6
+      # Credential/URL changes must roll the driver: subPath Secret mounts
+      # never update in-place, and Ivy reads the file only at spark-submit time.
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/ivy-settings"]
+          pattern: "^[a-f0-9]{64}$"
+        documentIndex: 6
+      # Driver-only: nothing lands in the executor pod template.
+      - notMatchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "ivy"
+        documentIndex: 4
+
+  - it: should not emit the ivy Secret, volume, mount, conf, or checksum by default
+    asserts:
+      - hasDocuments:
+          count: 6
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.jars.ivySettings"
+        documentIndex: 5
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 1
+        documentIndex: 5
+      - lengthEqual:
+          path: spec.template.spec.containers[0].volumeMounts
+          count: 1
+        documentIndex: 5
+      - isNull:
+          path: spec.template.metadata.annotations
+        documentIndex: 5
+
+  - it: should fail rendering when ivy is enabled without a repositoryUrl
+    set:
+      dataplane.ivy.enabled: true
+    asserts:
+      - failedTemplate:
+          errorPattern: "dataplane.ivy.repositoryUrl is required"
+
+  - it: should fail rendering when only one of username/password is set
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+      dataplane.ivy.username: "svc-user"
+    asserts:
+      - failedTemplate:
+          errorPattern: "must both be set"
+
   - it: should set spark.local.dir conf when numVolumes > 0
     set:
       dataplane.numVolumes: 2

@@ -53,6 +53,26 @@ roleRef:
   kind: Role
   name: {{ .Values.dataplane.rbac.serviceAccountName }}
 {{- end }}
+{{- if .Values.dataplane.ivy.enabled }}
+---
+# Ivy settings for resolving extraPackages from an internal Maven repository
+# instead of Maven Central (docs/custom-maven-repository.md). Rendered from
+# dataplane.ivy.* values via the qualytics.ivy.settingsXml helper, mounted
+# into the driver at /opt/spark/conf/ivysettings.xml, and passed to
+# spark-submit via --conf spark.jars.ivySettings. Loading a settings file
+# replaces Spark's built-in resolvers entirely, so the repository must serve
+# every coordinate in extraPackages. Driver-only: executors receive the
+# resolved jars from the driver.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Release.Name }}-spark-ivy-settings
+  labels:
+    app: {{ .Release.Name }}-spark
+type: Opaque
+data:
+  ivysettings.xml: {{ include "qualytics.ivy.settingsXml" . | b64enc }}
+{{- end }}
 ---
 # Executor pod template, mounted into the driver and referenced via
 # --conf spark.kubernetes.executor.podTemplateFile. Spark merges spark-submit
@@ -219,6 +239,13 @@ spec:
         app: {{ .Release.Name }}-spark
         spark-role: driver
         version: {{ .Values.dataplane.sparkVersion }}
+      {{- if .Values.dataplane.ivy.enabled }}
+      annotations:
+        # Roll the driver when the rendered ivysettings.xml changes — subPath
+        # Secret mounts never update in-place, and Ivy reads the file only at
+        # spark-submit time anyway.
+        checksum/ivy-settings: {{ include "qualytics.ivy.settingsXml" . | sha256sum }}
+      {{- end }}
     spec:
       serviceAccountName: {{ .Values.dataplane.rbac.serviceAccountName }}
       imagePullSecrets:
@@ -239,6 +266,14 @@ spec:
         - name: executor-pod-template
           configMap:
             name: {{ .Release.Name }}-spark-executor-template
+        {{- if .Values.dataplane.ivy.enabled }}
+        - name: ivy-settings
+          secret:
+            items:
+              - key: ivysettings.xml
+                path: ivysettings.xml
+            secretName: {{ .Release.Name }}-spark-ivy-settings
+        {{- end }}
         {{- if eq .Values.dataplane.kerberos.enabled true }}
         - name: krb5-conf
           secret:
@@ -307,6 +342,9 @@ spec:
                 --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
                 --conf spark.jars.ivy=/tmp \
+                {{- if .Values.dataplane.ivy.enabled }}
+                --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \
+                {{- end }}
                 {{- if gt (int .Values.dataplane.numVolumes) 0 }}
                 --conf spark.local.dir={{ include "qualytics.spark.localDirs" . }} \
                 {{- end }}
@@ -406,6 +444,11 @@ spec:
             - name: executor-pod-template
               mountPath: /opt/spark/conf/executor-template.yaml
               subPath: executor-template.yaml
+            {{- if .Values.dataplane.ivy.enabled }}
+            - name: ivy-settings
+              mountPath: /opt/spark/conf/ivysettings.xml
+              subPath: ivysettings.xml
+            {{- end }}
             {{- if eq .Values.dataplane.kerberos.enabled true }}
             - name: krb5-conf
               mountPath: {{ .Values.dataplane.kerberos.krb5 }}
