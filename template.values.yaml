@@ -151,9 +151,13 @@ dataplane:
   parallelismScaleFactor: -1
   # Air-gapped / egress-restricted clusters: resolve the runtime JDBC driver
   # packages (Teradata, IBM DB2) from an internal Maven repository instead of
-  # Maven Central. Create a Secret holding an ivysettings.xml and reference it
-  # here — see docs/custom-maven-repository.md.
-  # ivySettingsSecret: "qualytics-ivy-settings"
+  # Maven Central — see docs/custom-maven-repository.md.
+  # ivy:
+  #   enabled: true
+  #   repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+  #   realm: "Artifactory Realm"
+  #   username: "svc-user"      # optional — set both or neither
+  #   password: "<token>"
   # I/O-bound sync ceiling; the dataplane's CPU governor (values.yaml syncAdmission) scales
   # live capacity beneath it. See values.yaml for the floor/watermark knobs (QUA-2100).
   maxParallelSyncRequests: 24

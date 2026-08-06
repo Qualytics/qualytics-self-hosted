@@ -223,15 +223,31 @@ dataplane:
     - "com.ibm.db2:jcc:12.1.4.0"
   # Resolve extraPackages from an internal Maven repository (JFrog Artifactory,
   # Sonatype Nexus, …) instead of Maven Central — for air-gapped or
-  # egress-restricted clusters. Name of a pre-existing Secret in the release
-  # namespace holding an `ivysettings.xml` key; the file is mounted into the
-  # driver and passed to spark-submit via spark.jars.ivySettings. When set, it
-  # fully replaces Spark's built-in resolvers (Maven Central is never contacted),
-  # so the repository must serve every coordinate in extraPackages. Credentials
-  # for authenticated repositories live inside the file. Only the driver pod
-  # needs network access to the repository; resolution happens on every driver
-  # start. See docs/custom-maven-repository.md.
-  ivySettingsSecret: ""
+  # egress-restricted clusters. When enabled, the chart renders an
+  # ivysettings.xml into a release-managed Secret, mounts it into the driver
+  # at /opt/spark/conf/ivysettings.xml, and passes it to spark-submit via
+  # spark.jars.ivySettings. The settings file fully replaces Spark's built-in
+  # resolvers (Maven Central is never contacted), so the repository must serve
+  # every coordinate in extraPackages. Only the driver pod needs network
+  # access to the repository — executors receive the resolved jars from the
+  # driver. Resolution happens on every driver start, and changing any of
+  # these values rolls the driver automatically.
+  # See docs/custom-maven-repository.md.
+  ivy:
+    enabled: false
+    # Maven-layout repository URL — e.g. an Artifactory virtual/remote repo
+    # that proxies Maven Central, or one hosting the coordinates directly.
+    repositoryUrl: ""
+    # HTTP Basic realm from the repository's WWW-Authenticate challenge.
+    # Artifactory reports "Artifactory Realm" by default; verify with:
+    #   curl -sI <repositoryUrl> | grep -i www-authenticate
+    realm: "Artifactory Realm"
+    # Service account for authenticated repositories — set BOTH or NEITHER.
+    # Prefer an identity token / API key over a real password, and protect
+    # this file like the other credentials in it (chmod 600 values.yaml).
+    # Leave both empty for anonymous read access.
+    username: ""
+    password: ""
   # RBAC for the driver pod to manage executor pods directly. Replaces the
   # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.
   rbac:

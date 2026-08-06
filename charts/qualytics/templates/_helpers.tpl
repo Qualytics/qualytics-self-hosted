@@ -85,3 +85,40 @@ Renders empty when numVolumes <= 0.
 {{- end -}}
 {{- join "," $dirs -}}
 {{- end -}}
+
+{{/*
+Escape a string for use inside a double-quoted XML attribute value
+(ivysettings.xml). Ampersand must be replaced first or it would re-escape
+the other entities.
+*/}}
+{{- define "qualytics.xmlEscape" -}}
+{{- . | toString | replace "&" "&amp;" | replace "<" "&lt;" | replace ">" "&gt;" | replace "\"" "&quot;" | replace "'" "&apos;" -}}
+{{- end -}}
+
+{{/*
+ivysettings.xml for dataplane.ivy — redirects `spark-submit --packages` (Ivy)
+resolution of dataplane.extraPackages to an internal Maven repository.
+Loading a settings file replaces Spark's built-in resolver chain entirely,
+so Maven Central is never contacted. The <credentials> element is emitted
+only for authenticated repositories; its `host` must be the bare hostname
+(no scheme, port, or path) because Ivy matches it against the JVM
+Authenticator's requesting host. Rendered into the release-managed
+<release>-spark-ivy-settings Secret (spark.yaml) and consumed by the driver
+only — executors receive the resolved jars from the driver.
+*/}}
+{{- define "qualytics.ivy.settingsXml" -}}
+{{- $ivy := .Values.dataplane.ivy -}}
+{{- $url := required "dataplane.ivy.repositoryUrl is required when dataplane.ivy.enabled=true" $ivy.repositoryUrl -}}
+<ivysettings>
+  <settings defaultResolver="internal"/>
+{{- if or $ivy.username $ivy.password }}
+{{- $username := required "dataplane.ivy.username and dataplane.ivy.password must both be set (or both empty for anonymous access)" $ivy.username }}
+{{- $password := required "dataplane.ivy.username and dataplane.ivy.password must both be set (or both empty for anonymous access)" $ivy.password }}
+{{- $hostname := required "dataplane.ivy.repositoryUrl must be an absolute URL (https://host/...)" (first (splitList ":" (urlParse $url).host)) }}
+  <credentials host="{{ include "qualytics.xmlEscape" $hostname }}" realm="{{ include "qualytics.xmlEscape" $ivy.realm }}" username="{{ include "qualytics.xmlEscape" $username }}" passwd="{{ include "qualytics.xmlEscape" $password }}"/>
+{{- end }}
+  <resolvers>
+    <ibiblio name="internal" m2compatible="true" root="{{ include "qualytics.xmlEscape" $url }}"/>
+  </resolvers>
+</ivysettings>
+{{- end -}}

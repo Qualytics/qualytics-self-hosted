@@ -9,14 +9,14 @@ dataplane:
     - "com.ibm.db2:jcc:12.1.4.0"
 ```
 
-If your cluster has no route to Maven Central — air-gapped networks, egress-restricted VPCs, or environments where all artifacts must flow through an approved registry — you can point this resolution at an internal Maven repository (JFrog Artifactory, Sonatype Nexus, or any Maven-layout registry) with `dataplane.ivySettingsSecret`. You provide an [Ivy settings file](https://ant.apache.org/ivy/history/latest-milestone/settings.html) in a Kubernetes Secret; the chart mounts it into the Spark driver and passes it to `spark-submit` via `spark.jars.ivySettings`.
+If your cluster has no route to Maven Central — air-gapped networks, egress-restricted VPCs, or environments where all artifacts must flow through an approved registry — point this resolution at an internal Maven repository (JFrog Artifactory, Sonatype Nexus, or any Maven-layout registry) with `dataplane.ivy`. The chart generates the required [Ivy settings file](https://ant.apache.org/ivy/history/latest-milestone/settings.html) for you, renders it into a release-managed Secret, mounts it into the Spark driver, and passes it to `spark-submit` via `spark.jars.ivySettings`.
 
 Key properties of this mechanism:
 
-- The settings file **fully replaces** Spark's built-in resolvers — Maven Central is never contacted. The repository you configure must therefore serve *every* coordinate listed in `dataplane.extraPackages`.
-- Only the **driver pod** needs network access to the repository. Executors receive the resolved jars from the driver directly.
+- The generated settings file **fully replaces** Spark's built-in resolvers — Maven Central is never contacted. The repository you configure must therefore serve *every* coordinate listed in `dataplane.extraPackages`.
+- Only the **driver pod** needs network access to the repository. Executors receive the resolved jars from the driver.
 - Resolution happens on **every driver start** (the Ivy cache does not survive pod restarts), so treat the repository as an ongoing runtime dependency — like your datastores — not a one-time install dependency.
-- Credentials live only inside the Secret. They never appear in Helm values, pod specs, or `spark-submit` logs.
+- The Secret is created and owned by the Helm release — there is nothing to create by hand, and changing any `dataplane.ivy` value automatically restarts the driver so the new configuration takes effect.
 
 > Deployments that simply don't use Teradata or DB2 don't need any of this — remove the coordinates you don't need from `dataplane.extraPackages` instead.
 
@@ -43,63 +43,33 @@ curl -u 'svc-user:<token>' -fsIL \
   https://repo.example.com/artifactory/maven-remote/com/teradata/jdbc/terajdbc/20.00.00.56/terajdbc-20.00.00.56.jar
 ```
 
-## 2. Write `ivysettings.xml`
+## 2. Configure `values.yaml`
 
-For a repository that allows anonymous reads:
-
-```xml
-<ivysettings>
-  <settings defaultResolver="internal"/>
-  <resolvers>
-    <ibiblio name="internal" m2compatible="true"
-             root="https://repo.example.com/artifactory/maven-remote/"/>
-  </resolvers>
-</ivysettings>
-```
-
-For an authenticated repository, add a `<credentials>` element:
-
-```xml
-<ivysettings>
-  <settings defaultResolver="internal"/>
-  <credentials host="repo.example.com"
-               realm="Artifactory Realm"
-               username="svc-user"
-               passwd="<token-or-password>"/>
-  <resolvers>
-    <ibiblio name="internal" m2compatible="true"
-             root="https://repo.example.com/artifactory/maven-remote/"/>
-  </resolvers>
-</ivysettings>
+```yaml
+dataplane:
+  extraPackages:
+    - "com.teradata.jdbc:terajdbc:20.00.00.56"
+    - "com.ibm.db2:jcc:12.1.4.0"
+  ivy:
+    enabled: true
+    repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+    realm: "Artifactory Realm"
+    username: "svc-user"
+    password: "<token-or-password>"
 ```
 
 Details that matter:
 
-- **`host`** is the bare hostname — no scheme, no path.
+- **`repositoryUrl`** is the base URL of a Maven-layout repository. The chart derives the credentials hostname from it automatically.
 - **`realm`** must match the realm string your registry sends in its HTTP `WWW-Authenticate` challenge. Defaults: `Artifactory Realm` for JFrog Artifactory, `Sonatype Nexus Repository Manager` for Nexus. Confirm yours with:
 
   ```bash
   curl -sI https://repo.example.com/artifactory/maven-remote/ | grep -i www-authenticate
   ```
 
-- **`passwd`** — prefer a registry identity token or API key over a real password; both are accepted as basic-auth passwords by Artifactory and Nexus.
-- **`root`** is the repository base URL. Multiple repositories can be combined with an Ivy `<chain>` resolver if needed.
+- **`username` / `password`** — set both for an authenticated repository, or leave both empty for anonymous read access (the chart rejects setting only one). Prefer a registry identity token or API key over a real password; both are accepted as basic-auth passwords by Artifactory and Nexus. Handle `values.yaml` like the other credentials it already contains (`chmod 600`). Arbitrary characters are safe — the chart XML-escapes all values.
 
-## 3. Create the Secret
-
-The Secret must live in the release namespace and the key must be named `ivysettings.xml`:
-
-```bash
-kubectl -n qualytics create secret generic qualytics-ivy-settings \
-  --from-file=ivysettings.xml
-```
-
-## 4. Reference it in `values.yaml` and upgrade
-
-```yaml
-dataplane:
-  ivySettingsSecret: "qualytics-ivy-settings"
-```
+Then upgrade as usual:
 
 ```bash
 helm upgrade qualytics qualytics/qualytics \
@@ -112,7 +82,7 @@ helm upgrade qualytics qualytics/qualytics \
 
 ## Verify
 
-Ivy logs its resolution at driver startup. Confirm the settings file was loaded and each artifact was found in *your* resolver (not `central`):
+Ivy logs its resolution at driver startup. Confirm the settings file was loaded and each artifact was found in the `internal` resolver (not `central`):
 
 ```bash
 kubectl -n qualytics logs deployment/qualytics-spark | grep -E "loading settings|found com\."
@@ -126,28 +96,29 @@ found com.teradata.jdbc#terajdbc;20.00.00.56 in internal
 found com.ibm.db2#jcc;12.1.4.0 in internal
 ```
 
-## Rotating credentials
-
-Update the Secret, then restart the driver (the file is read once, at startup):
+The rendered file itself can be inspected at any time:
 
 ```bash
-kubectl -n qualytics create secret generic qualytics-ivy-settings \
-  --from-file=ivysettings.xml --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n qualytics rollout restart deployment/qualytics-spark
+kubectl -n qualytics get secret qualytics-spark-ivy-settings \
+  -o jsonpath='{.data.ivysettings\.xml}' | base64 -d
 ```
+
+## Rotating credentials
+
+Update `dataplane.ivy.username` / `password` in `values.yaml` and run `helm upgrade`. The driver pod carries a checksum of the rendered settings file, so the upgrade automatically restarts the driver with the new credentials — no manual `kubectl rollout restart` needed.
 
 ## Requirements and limitations
 
 - The driver pod must reach the repository host on 443 (adjust NetworkPolicies / egress allowlists accordingly). Executors don't need access.
 - The repository's TLS certificate must chain to a CA present in standard JVM truststores (i.e. a publicly trusted CA). Certificates issued by a private/internal CA are not currently supported for this path — contact Qualytics support if that is a blocker.
-- `spark.jars.ivySettings` accepts only local `file://` paths, which is why the chart mounts the Secret rather than accepting a URL.
+- The generated settings define a single repository. If you need multiple internal repositories, put a virtual repository (Artifactory) or repository group (Nexus) in front of them and point `repositoryUrl` at that.
 
 ## Troubleshooting
 
 | Symptom | Likely cause and fix |
 |---|---|
-| Driver in `CrashLoopBackOff`, logs show `unresolved dependency: com.teradata.jdbc#terajdbc;…: not found` | The repository doesn't serve the coordinate, or `root` is wrong. Re-run the `curl` pre-flight from step 1. |
-| Resolution log shows `HTTP response code: 401` | Wrong credentials, or the `realm` in `ivysettings.xml` doesn't match the registry's `WWW-Authenticate` realm. |
+| `helm upgrade` fails with `dataplane.ivy.repositoryUrl is required` or `must both be set` | The values block is incomplete — set `repositoryUrl`, and either both or neither of `username`/`password`. |
+| Driver in `CrashLoopBackOff`, logs show `unresolved dependency: com.teradata.jdbc#terajdbc;…: not found` | The repository doesn't serve the coordinate, or `repositoryUrl` is wrong. Re-run the `curl` pre-flight from step 1. |
+| Resolution log shows `HTTP response code: 401` | Wrong credentials, or `realm` doesn't match the registry's `WWW-Authenticate` realm. |
 | `PKIX path building failed` during resolution | The repository presents a certificate the JVM doesn't trust (typically an internal CA — see limitations above). |
-| Driver pod stuck in `ContainerCreating`, events show `FailedMount … secret "…" not found` | The Secret doesn't exist in the release namespace, the name in `dataplane.ivySettingsSecret` is wrong, or the key isn't `ivysettings.xml`. |
 | Connection test fails with `Failed to get driver instance for jdbcUrl=jdbc:teradata://…` | The JDBC driver never made it onto the dataplane classpath. Check the resolution log above, and confirm the coordinate is still present in `dataplane.extraPackages`. |

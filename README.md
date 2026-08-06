@@ -256,7 +256,7 @@ Beyond authentication, plan for these paths regardless of auth mode:
 
 - **Container registries** — Docker Hub for the Qualytics images plus the public infrastructure images, or your internal mirror. See [Qualytics Docker Images](./docs/docker-images.md).
 - **Your datastores** — the Spark driver and executors need network access to every datastore you connect.
-- **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central by default. Clusters with no route to Maven Central can resolve these from an internal Maven repository (Artifactory, Nexus, …) via `dataplane.ivySettingsSecret` — see [Custom Maven Repository](./docs/custom-maven-repository.md).
+- **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central by default. Clusters with no route to Maven Central can resolve these from an internal Maven repository (Artifactory, Nexus, …) via `dataplane.ivy` — see [Custom Maven Repository](./docs/custom-maven-repository.md).
 
 To set up OIDC for an air-gapped deployment:
 1. Set `global.authType: "OIDC"` in your `values.yaml`
