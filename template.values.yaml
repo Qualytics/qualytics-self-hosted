@@ -149,9 +149,8 @@ dataplane:
   enabled: true
   numVolumes: -1
   parallelismScaleFactor: -1
-  # Air-gapped / egress-restricted clusters: resolve the runtime JDBC driver
-  # packages (Teradata, IBM DB2) from an internal Maven repository instead of
-  # Maven Central — see docs/custom-maven-repository.md.
+  # Air-gapped clusters: resolve the Teradata/DB2 JDBC drivers from an internal
+  # Maven repository instead of Maven Central — see docs/custom-maven-repository.md.
   # ivy:
   #   enabled: true
   #   repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"

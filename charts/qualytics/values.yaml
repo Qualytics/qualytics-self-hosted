@@ -221,31 +221,19 @@ dataplane:
   extraPackages:
     - "com.teradata.jdbc:terajdbc:20.00.00.56"
     - "com.ibm.db2:jcc:12.1.4.0"
-  # Resolve extraPackages from an internal Maven repository (JFrog Artifactory,
-  # Sonatype Nexus, …) instead of Maven Central — for air-gapped or
-  # egress-restricted clusters. When enabled, the chart renders an
-  # ivysettings.xml into a release-managed Secret, mounts it into the driver
-  # at /opt/spark/conf/ivysettings.xml, and passes it to spark-submit via
-  # spark.jars.ivySettings. The settings file fully replaces Spark's built-in
-  # resolvers (Maven Central is never contacted), so the repository must serve
-  # every coordinate in extraPackages. Only the driver pod needs network
-  # access to the repository — executors receive the resolved jars from the
-  # driver. Resolution happens on every driver start, and changing any of
-  # these values rolls the driver automatically.
-  # See docs/custom-maven-repository.md.
+  # Resolve extraPackages from an internal Maven repository (Artifactory/Nexus)
+  # instead of Maven Central — for air-gapped clusters. The chart renders an
+  # ivysettings.xml into a Secret and points spark.jars.ivySettings at it;
+  # only the driver needs access to the repository, which must serve every
+  # coordinate in extraPackages. See docs/custom-maven-repository.md.
   ivy:
     enabled: false
-    # Maven-layout repository URL — e.g. an Artifactory virtual/remote repo
-    # that proxies Maven Central, or one hosting the coordinates directly.
+    # Maven-layout repository URL, e.g. an Artifactory repo proxying Maven Central.
     repositoryUrl: ""
-    # HTTP Basic realm from the repository's WWW-Authenticate challenge.
-    # Artifactory reports "Artifactory Realm" by default; verify with:
-    #   curl -sI <repositoryUrl> | grep -i www-authenticate
+    # HTTP Basic realm ("Artifactory Realm" is the Artifactory default).
     realm: "Artifactory Realm"
-    # Service account for authenticated repositories — set BOTH or NEITHER.
-    # Prefer an identity token / API key over a real password, and protect
-    # this file like the other credentials in it (chmod 600 values.yaml).
-    # Leave both empty for anonymous read access.
+    # Set both for authenticated access or leave both empty for anonymous.
+    # Prefer an identity token / API key over a real password.
     username: ""
     password: ""
   # RBAC for the driver pod to manage executor pods directly. Replaces the
