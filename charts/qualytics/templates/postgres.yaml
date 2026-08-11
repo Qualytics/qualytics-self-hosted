@@ -64,8 +64,12 @@ spec:
       securityContext:
         fsGroup: 999
       terminationGracePeriodSeconds: 10
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
@@ -231,8 +235,12 @@ spec:
     spec:
       template:
         spec:
+          {{- with .Values.global.imagePullSecrets }}
           imagePullSecrets:
-            - name: regcred
+            {{- range . }}
+            - name: {{ . }}
+            {{- end }}
+          {{- end }}
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}
@@ -297,8 +305,12 @@ spec:
     spec:
       template:
         spec:
+          {{- with .Values.global.imagePullSecrets }}
           imagePullSecrets:
-            - name: regcred
+            {{- range . }}
+            - name: {{ . }}
+            {{- end }}
+          {{- end }}
           {{- if .Values.appNodeSelector }}
           nodeSelector:
             {{- toYaml .Values.appNodeSelector | nindent 12 }}

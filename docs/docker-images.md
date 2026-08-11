@@ -154,7 +154,15 @@ nginx:
 
 Image *tags* stay in `controlplaneImage.image.controlplaneImageTag`, `dataplaneImage.image.dataplaneImageTag`, and `frontendImage.image.frontendImageTag`; mirroring does not change them.
 
-The `regcred` Secret is still referenced by every pod, so keep it in the namespace and point it at your private registry's credentials instead of Docker Hub.
+Pull secrets are controlled by `global.imagePullSecrets` (default `["regcred"]`, applied to every pod):
+
+- **Registry requires credentials**: keep the default and point the `regcred` Secret at your private registry's credentials instead of Docker Hub — or create a Secret with a different name and list it here.
+- **Registry allows unauthenticated pulls** (e.g. an anonymous internal Artifactory): set `global.imagePullSecrets: []`. No `imagePullSecrets` are rendered on any pod and the `regcred` Secret is not required.
+
+```yaml
+global:
+  imagePullSecrets: []
+```
 
 ### JDBC drivers resolved at runtime
 
