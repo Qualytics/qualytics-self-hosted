@@ -94,7 +94,7 @@ unset QUALYTICS_REGISTRY_TOKEN
 ```
 
 > [!IMPORTANT]
-> This connects the cluster to the private Qualytics repositories on Docker Hub. If policy requires an internal registry, follow the secure mirroring instructions in [Qualytics Docker Images](./docs/docker-images.md), then update the image URLs in `values.yaml`.
+> This connects the cluster to the private Qualytics repositories on Docker Hub. If policy requires an internal registry, follow the secure mirroring instructions in [Qualytics Docker Images](./docs/docker-images.md), then update the image URLs in `values.yaml`. If your internal registry allows unauthenticated pulls, skip this step and set `global.imagePullSecrets: []` in `values.yaml` instead.
 
 
 ### 2. Create your configuration file

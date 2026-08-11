@@ -246,3 +246,20 @@ tests:
           count: 1
         documentIndex: 5
 
+  # Image pull secrets
+  - it: should have image pull secrets by default
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: regcred
+        documentIndex: 2
+
+  - it: should omit image pull secrets when global.imagePullSecrets is empty
+    set:
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 2
+

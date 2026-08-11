@@ -484,6 +484,14 @@ tests:
             name: regcred
         documentIndex: 0
 
+  - it: should omit image pull secrets when global.imagePullSecrets is empty
+    set:
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 0
+
   - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default
     asserts:
       - contains:

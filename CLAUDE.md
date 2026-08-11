@@ -416,7 +416,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 - **TLS**: BYO (Bring Your Own) — customer creates `kubernetes.io/tls` Secrets in the release namespace. See [docs/ingress-tls.md](docs/ingress-tls.md).
   - Ingress: `ingress.tls.secretName` (shared, recommended) with fallback to legacy `api-tls-cert` / `frontend-tls-cert` split pair.
   - Postgres/RabbitMQ internal TLS: optional, consumes pre-existing `postgres-tls` / `rabbitmq-tls` Secrets.
-- **Image Pull Secrets**: Reference `regcred` for private Docker registry access
+- **Image Pull Secrets**: `global.imagePullSecrets` (list of Secret names, default `["regcred"]`) is applied to every pod and joined into the spark-submit `spark.kubernetes.container.image.pullSecrets` conf; set `[]` for registries that allow unauthenticated pulls (no Secret required)
 - **Secrets**: Use `secretKeyRef` for sensitive environment variables
 - **Secret Management**: All credentials stored in `qualytics-creds` secret
 
@@ -618,7 +618,7 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **Sections**:
   1. nginx subchart (ingress controller)
   2. Ingress configuration
-  3. Global values (platform, DNS, auth type, image URLs)
+  3. Global values (platform, DNS, auth type, image pull secrets, image URLs)
   4. Image tags (controlplane, dataplane, frontend)
   5. Storage class configuration
   6. Node scheduling (selectors and tolerations)

@@ -90,8 +90,12 @@ data:
     apiVersion: v1
     kind: Pod
     spec:
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       restartPolicy: Never
       terminationGracePeriodSeconds: 120
       {{- if .Values.executorNodeSelector }}
@@ -248,8 +252,12 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ .Values.dataplane.rbac.serviceAccountName }}
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       # QUA-1990: 60s gives the mothership's SIGTERM hook time to stop consumers and drain
       # briefly (the previous 10s SIGKILLed it almost immediately, making the graceful-shutdown
       # machinery dead code in k8s mode).
@@ -306,7 +314,9 @@ spec:
                 --conf spark.kubernetes.driver.pod.name=$POD_NAME \
                 --conf spark.kubernetes.container.image="{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}" \
                 --conf spark.kubernetes.container.image.pullPolicy=IfNotPresent \
-                --conf spark.kubernetes.container.image.pullSecrets=regcred \
+                {{- if .Values.global.imagePullSecrets }}
+                --conf spark.kubernetes.container.image.pullSecrets={{ join "," .Values.global.imagePullSecrets }} \
+                {{- end }}
                 --conf spark.kubernetes.authenticate.driver.serviceAccountName={{ .Values.dataplane.rbac.serviceAccountName }} \
                 --conf spark.driver.host={{ .Release.Name }}-spark-driver.{{ .Release.Namespace }}.svc.cluster.local \
                 --conf spark.driver.port=7078 \

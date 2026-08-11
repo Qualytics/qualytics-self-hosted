@@ -18,6 +18,10 @@ global:
   #   "AUTH0" — managed by Qualytics; requires egress to auth.qualytics.io (not air-gapped)
   # See docs/authentication.md.
   authType: "OIDC"
+  # Pull secrets applied to every pod. Defaults to the regcred Secret created
+  # during installation; uncomment and set to [] if your registry allows
+  # unauthenticated pulls (no regcred Secret needed). See docs/docker-images.md.
+  # imagePullSecrets: []
 
 #--------------------------------------------------------------------------------
 # Deployment and Authentication Configuration (REQUIRED)

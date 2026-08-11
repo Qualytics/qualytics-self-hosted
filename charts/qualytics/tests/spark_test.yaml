@@ -1044,3 +1044,48 @@ tests:
           path: data["executor-template.yaml"]
           pattern: "name: regcred"
         documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.kubernetes.container.image.pullSecrets=regcred"
+        documentIndex: 5
+
+  - it: should render custom pull secrets on the driver, executor template, and spark-submit conf
+    set:
+      global.imagePullSecrets:
+        - mirror-cred
+        - extra-cred
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: mirror-cred
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: extra-cred
+        documentIndex: 5
+      - matchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "name: mirror-cred"
+        documentIndex: 3
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.kubernetes.container.image.pullSecrets=mirror-cred,extra-cred"
+        documentIndex: 5
+
+  - it: should omit pull secrets everywhere when global.imagePullSecrets is empty (unauthenticated registry)
+    set:
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 5
+      - notMatchRegex:
+          path: data["executor-template.yaml"]
+          pattern: "imagePullSecrets"
+        documentIndex: 3
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "pullSecrets"
+        documentIndex: 5

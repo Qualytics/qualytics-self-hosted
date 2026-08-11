@@ -79,6 +79,14 @@ global:
   # Authentication authority: AUTH0 or OIDC preserve the legacy configuration;
   # DB enables the database-backed provider configurations.
   authType: "AUTH0"
+  # Names of the Secrets used to pull container images, applied to every pod
+  # (control plane, frontend, Spark driver and executors, postgres, rabbitmq,
+  # utility pods). Defaults to the `regcred` Secret created during
+  # installation. Set to [] when your registry allows unauthenticated pulls
+  # (e.g. an internal Artifactory mirror) — no imagePullSecrets are rendered
+  # and the regcred Secret is not required.
+  imagePullSecrets:
+    - regcred
   imageUrls:
     controlplaneImageUrl: "qualyticsai/controlplane"
     dataplaneImageUrl: "qualyticsai/dataplane"

@@ -289,6 +289,42 @@ tests:
           content: "effective_cache_size=12225MB"
         documentIndex: 2
 
+  # Image pull secrets (statefulset + snapshotter and maintenance cronjobs)
+  - it: should have image pull secrets on statefulset and cronjobs by default
+    set:
+      postgres.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: regcred
+        documentIndex: 2
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          content:
+            name: regcred
+        documentIndex: 4
+      - contains:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+          content:
+            name: regcred
+        documentIndex: 5
+
+  - it: should omit image pull secrets when global.imagePullSecrets is empty
+    set:
+      postgres.enabled: true
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 2
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+        documentIndex: 4
+      - isNull:
+          path: spec.jobTemplate.spec.template.spec.imagePullSecrets
+        documentIndex: 5
+
   # PostgreSQL disabled
   - it: should not create postgres resources when disabled
     set:

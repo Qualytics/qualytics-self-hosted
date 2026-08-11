@@ -15,8 +15,12 @@ spec:
       labels:
         app: {{ .Release.Name }}-frontend
     spec:
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}

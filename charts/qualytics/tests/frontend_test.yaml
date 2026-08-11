@@ -217,3 +217,20 @@ tests:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: 1Gi
         documentIndex: 0
+
+  # Image pull secrets
+  - it: should have image pull secrets by default
+    asserts:
+      - contains:
+          path: spec.template.spec.imagePullSecrets
+          content:
+            name: regcred
+        documentIndex: 0
+
+  - it: should omit image pull secrets when global.imagePullSecrets is empty
+    set:
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
+        documentIndex: 0

@@ -77,8 +77,12 @@ spec:
       securityContext:
         fsGroup: 999
         fsGroupChangePolicy: "OnRootMismatch"
+      {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: regcred
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       {{- if .Values.appNodeSelector }}
       nodeSelector:
         {{- toYaml .Values.appNodeSelector | nindent 8 }}
