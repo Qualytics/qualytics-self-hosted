@@ -315,6 +315,16 @@ controlplane:
   auth:
     # SCIM username prefix
     scimUsernamePrefix: ""
+    # Set to true when your identity provider is hosted inside your own network and resolves to a
+    # private address (10.x, 172.16-31.x, 192.168.x). Requests to auth provider endpoints —
+    # discovery, token exchange, userinfo, JWKS, SAML2 metadata, and the provider diagnostics in
+    # Settings > Access — otherwise accept publicly routable addresses only, so an internal IdP
+    # fails login with "Unable to complete the token exchange with the identity provider" and the
+    # API log records "SSRF blocked: <idp-host> resolved to unsafe IP <address>".
+    # Cloud metadata (169.254.0.0/16) and multicast stay blocked either way, and this affects auth
+    # provider endpoints only — datastore connectivity, notifications, and integrations are
+    # unchanged. Leave false when your IdP is reachable at a public address.
+    allowPrivateNetworkFetches: false
     # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
     # Set to false to force all access through OIDC cookie-based auth only.
     allowQualyticsIssuer: true
