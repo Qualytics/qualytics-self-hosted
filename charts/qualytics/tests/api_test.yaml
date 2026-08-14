@@ -225,6 +225,26 @@ tests:
             name: OIDC_CLIENT_ID
         documentIndex: 0
 
+  # On-premises identity provider on a private address
+  - it: should allow private network fetches when enabled
+    set:
+      controlplane.auth.allowPrivateNetworkFetches: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SSRF_ALLOW_LOOPBACK
+            value: "true"
+        documentIndex: 0
+
+  - it: should not restrict auth provider fetches to public addresses by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SSRF_ALLOW_LOOPBACK
+        documentIndex: 0
+
   # Platform configuration
   - it: should configure platform environment variable
     set:

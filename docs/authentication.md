@@ -321,6 +321,38 @@ secrets:
 > Generate secure values with `openssl rand -base64 32`. Changing the passphrase directly
 > on an existing installation makes existing ciphertext unreadable; use the rotation process below.
 
+### On-premises identity providers
+
+Requests the controlplane makes to an identity provider — discovery, token exchange, userinfo,
+JWKS, SAML2 metadata, and the provider diagnostics in **Settings > Access** — accept publicly
+routable addresses only, so a misconfigured or tampered endpoint cannot be used to reach
+cluster-internal services or the cloud metadata API.
+
+An IdP hosted inside your own network resolves to a private address and is refused by that rule.
+Login reaches the IdP and then fails on the callback with `Unable to complete the token exchange
+with the identity provider`, and the API log records:
+
+```
+WARNING | app.auth.ssrf:_resolve_and_validate - SSRF blocked: sso.internal.example.com resolved to unsafe IP 10.0.139.110
+```
+
+Set the following to permit those requests into private address space:
+
+```yaml
+controlplane:
+  auth:
+    allowPrivateNetworkFetches: true
+```
+
+| Helm Value | Environment Variable | Description |
+|-----------|---------------------|-------------|
+| `controlplane.auth.allowPrivateNetworkFetches` | `SSRF_ALLOW_LOOPBACK` | Default `false`. When `true`, auth provider requests may resolve to private (RFC 1918) and loopback addresses. |
+
+Cloud metadata (`169.254.0.0/16`), multicast, and address-embedding IPv6 prefixes remain blocked
+regardless of this setting, and the change is scoped to identity provider endpoints — datastore
+connectivity, notifications, and integrations are unaffected. Leave it `false` when your IdP is
+reachable at a public address.
+
 ### Rotating the stored-secrets passphrase
 
 Rotation is a two-upgrade maintenance operation. It covers connection credentials, integration
@@ -430,6 +462,7 @@ For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's
 | Auth0 connection timeout | No egress to auth.qualytics.io | Ensure firewall allows outbound HTTPS to `auth.qualytics.io` |
 | User attributes missing | Claims mapping mismatch | Adjust `oidc_user_*_key` values to match your IdP's claim names |
 | Discovery URL not working | IdP unreachable at startup | Ensure the pod can reach `oidc_discovery_url` over HTTPS. Check `kubectl logs` for discovery fetch errors. Individual endpoint fields are used as fallbacks. |
+| `Unable to complete the token exchange with the identity provider`, with `SSRF blocked: <idp-host> resolved to unsafe IP` in the API log | The IdP resolves to a private address, which auth provider requests refuse by default | Set `controlplane.auth.allowPrivateNetworkFetches: true` — see [On-premises identity providers](#on-premises-identity-providers) |
 | Sessions expire too quickly | Default JWT TTL too short | Set `secrets.oidc.oidc_jwt_ttl_minutes` in `values.yaml` to the desired session duration in minutes (e.g., `480` for 8 hours). |
 
 ---
