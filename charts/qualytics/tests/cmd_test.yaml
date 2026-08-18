@@ -625,3 +625,106 @@ tests:
             name: POSTGRES_SCHEMA
             value: "qualytics"
         documentIndex: 0
+
+  # Observability (QUA-2402): telemetry export is opt-in
+  - it: should not render observability env by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_ENVIRONMENT
+          any: true
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_TOKEN
+          any: true
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+        documentIndex: 0
+
+  - it: should render Logfire env from qualytics-creds when enabled with a token
+    set:
+      global.dnsRecord: "qualytics.test.local"
+      controlplane.observability.enabled: true
+      secrets.observability.logfire_token: "pylf_test_token"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_ENVIRONMENT
+            value: "qualytics.test.local"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_SAMPLING
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: logfire_token
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+          any: true
+        documentIndex: 0
+
+  - it: should render OTLP env for a custom backend without a Logfire token
+    set:
+      controlplane.observability.enabled: true
+      controlplane.observability.otlp.endpoint: "http://otel-collector.observability:4318"
+      secrets.observability.otlp_headers: "X-SF-Token=test123"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: "http://otel-collector.observability:4318"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_HEADERS
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: otlp_headers
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_TOKEN
+          any: true
+        documentIndex: 0
+
+  - it: should honor observability environment and sampling overrides
+    set:
+      controlplane.observability.enabled: true
+      controlplane.observability.environment: "self-hosted-prod"
+      controlplane.observability.sampling: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_ENVIRONMENT
+            value: "self-hosted-prod"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: LOGFIRE_SAMPLING
+            value: "false"
+        documentIndex: 0

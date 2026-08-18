@@ -306,6 +306,30 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: rabbitmq_password
+        {{- if .Values.controlplane.observability.enabled }}
+          - name: LOGFIRE_ENVIRONMENT
+            value: {{ .Values.controlplane.observability.environment | default (tpl .Values.global.dnsRecord .) | quote }}
+          - name: LOGFIRE_SAMPLING
+            value: {{ .Values.controlplane.observability.sampling | quote }}
+          {{- if .Values.secrets.observability.logfire_token }}
+          - name: LOGFIRE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: logfire_token
+          {{- end }}
+          {{- with .Values.controlplane.observability.otlp.endpoint }}
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ . | quote }}
+          {{- end }}
+          {{- if .Values.secrets.observability.otlp_headers }}
+          - name: OTEL_EXPORTER_OTLP_HEADERS
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: otlp_headers
+          {{- end }}
+        {{- end }}
           - name: VERIFY_CERTIFICATE_SIGNERS
             value: {{ .Values.controlplane.egress.verifyTLSCertificates | quote }}
         {{- if and (.Values.controlplane.auth.scimUsernamePrefix) (ne .Values.controlplane.auth.scimUsernamePrefix "") }}
