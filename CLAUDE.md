@@ -507,6 +507,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force OIDC cookie auth)
   - Proxy support (HTTP/SOCKS5)
   - TLS certificate verification control
+  - Telemetry export (opt-in `controlplane.observability`: Pydantic Logfire via `secrets.observability.logfire_token` and/or any OTLP/HTTP backend via `otlp.endpoint` + `secrets.observability.otlp_headers`; applies to API and CMD)
 - **Environment**: Connects to PostgreSQL and RabbitMQ
 - **Strategy**: Recreate deployment
 
@@ -821,3 +822,4 @@ Keep these in sync when chart behavior changes — image tags and version string
 - [docs/external-postgres-setup.md](docs/external-postgres-setup.md) + [docs/external-postgres-faq.md](docs/external-postgres-faq.md) — `postgres.enabled: false` topology
 - [docs/ingress-tls.md](docs/ingress-tls.md) — BYO TLS Secret precedence
 - [docs/license-management.md](docs/license-management.md) — license activation and the 31-day grace period
+- [docs/observability.md](docs/observability.md) — `controlplane.observability.*` telemetry export to Pydantic Logfire and/or any OTLP/HTTP backend (Splunk via OTel Collector), values → env mapping

@@ -218,6 +218,13 @@ secrets:
     smtp_sender_password: ""
   rabbitmq:
     rabbitmq_password: ChangeMe!
+  observability:
+    # Pydantic Logfire write token. Set to send controlplane telemetry to Logfire.
+    logfire_token: ""
+    # Comma-separated key=value headers sent with every OTLP export request —
+    # typically the backend's auth header, e.g. "X-SF-Token=<access token>" (Splunk)
+    # or "Authorization=Bearer <token>". See docs/observability.md.
+    otlp_headers: ""
 
 
 #--------------------------------------------------------------------------------
@@ -331,6 +338,23 @@ controlplane:
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true
+  # Export controlplane telemetry — API request traces, database and message-queue
+  # metrics, background-job health — from the API and CMD pods to Pydantic Logfire
+  # and/or any OTLP-compatible backend (Splunk, Datadog, Grafana, an in-cluster
+  # OpenTelemetry Collector, ...). Credentials live under secrets.observability.
+  # See docs/observability.md.
+  observability:
+    enabled: false
+    # Environment / service name reported with the telemetry. Defaults to global.dnsRecord.
+    environment: ""
+    # Head sampling: keep every trace at level >= notice or duration >= 5s, plus 10% of
+    # the rest. Set false to export every trace.
+    sampling: true
+    otlp:
+      # OTLP over HTTP (protobuf) base endpoint, e.g. "http://otel-collector.observability:4318".
+      # Traces are sent to <endpoint>/v1/traces and metrics to <endpoint>/v1/metrics.
+      # Leave empty when sending to Logfire only.
+      endpoint: ""
 
 controlplaneCmd:
   resources:
