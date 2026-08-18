@@ -12,7 +12,7 @@ What is exported:
 
 The Spark dataplane is not covered by this mechanism — it exports nothing regardless of these settings.
 
-> Exporting to a custom OTLP backend **without** a Logfire token requires the control-plane image released with chart version `2026.8.17` or later. Sending to Logfire with a token works with any supported image.
+> Exporting to a custom OTLP backend **without** a Logfire token requires a control-plane image that initializes telemetry without one — included in releases newer than this chart change. Sending to Logfire with a token works with any supported image.
 
 ## Sending to Pydantic Logfire
 
