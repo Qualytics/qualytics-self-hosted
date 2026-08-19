@@ -435,6 +435,29 @@ tests:
             value: "false"
         documentIndex: 0
 
+  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: the
+  # controlplane reads them from the environment in every authType and there is no
+  # per-provider equivalent on AuthProviderConfiguration, so DB-backed providers depend on
+  # them rendering outside the authType branch.
+  - it: should render the deployment-wide auth env vars under authType DB
+    set:
+      global.authType: "DB"
+      secrets.oidc.oidc_group_team_sync_enabled: true
+      secrets.oidc.oidc_allow_insecure_transport: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_ALLOW_INSECURE_HTTP
+            value: "true"
+        documentIndex: 0
+
   # OIDC JWT TTL
   - it: should include OIDC_JWT_TTL_MINUTES when set
     set:

@@ -251,20 +251,12 @@ spec:
                 name: qualytics-creds
                 key: oidc_user_groups_key
           {{- end }}
-          - name: OIDC_ALLOW_INSECURE_HTTP
-            value: {{ .Values.secrets.oidc.oidc_allow_insecure_transport | quote }}
-          - name: OIDC_GROUP_TEAM_SYNC_ENABLED
-            value: {{ .Values.secrets.oidc.oidc_group_team_sync_enabled | quote }}
           {{- if .Values.secrets.oidc.oidc_jwt_ttl_minutes }}
           - name: OIDC_JWT_TTL_MINUTES
             valueFrom:
               secretKeyRef:
                 name: qualytics-creds
                 key: oidc_jwt_ttl_minutes
-          {{- end }}
-          {{- if .Values.secrets.oidc.oidc_signer_pem_url }}
-          - name: OIDC_SIGNER_PEM_URL
-            value: {{ .Values.secrets.oidc.oidc_signer_pem_url | quote }}
           {{- end }}
           {{- else if ( eq .Values.global.authType "DB" ) }}
           # AIDEV-NOTE: Keep CMD auth authority identical to API during the DB cutover.
@@ -332,6 +324,20 @@ spec:
         {{- end }}
           - name: VERIFY_CERTIFICATE_SIGNERS
             value: {{ .Values.controlplane.egress.verifyTLSCertificates | quote }}
+          {{- /* AIDEV-NOTE: Deployment-wide auth settings. The controlplane reads these from the
+                 environment in every authType and there is no per-provider equivalent on
+                 AuthProviderConfiguration, so they must render outside the authType branch above —
+                 see the "remaining legacy OIDC settings intentionally stay deployment-wide" note in
+                 controlplane app/cmd/migrations.py. Rendering them only under authType=OIDC left
+                 DB-mode deployments on the code defaults (group→Team sync silently off). */}}
+          - name: OIDC_ALLOW_INSECURE_HTTP
+            value: {{ (.Values.secrets.oidc).oidc_allow_insecure_transport | default false | quote }}
+          - name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: {{ (.Values.secrets.oidc).oidc_group_team_sync_enabled | default false | quote }}
+          {{- with (.Values.secrets.oidc).oidc_signer_pem_url }}
+          - name: OIDC_SIGNER_PEM_URL
+            value: {{ . | quote }}
+          {{- end }}
         {{- if and (.Values.controlplane.auth.scimUsernamePrefix) (ne .Values.controlplane.auth.scimUsernamePrefix "") }}
           - name: SCIM_USERNAME_PREFIX
             value: {{ .Values.controlplane.auth.scimUsernamePrefix | quote }}
