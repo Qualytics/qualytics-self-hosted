@@ -315,6 +315,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 - [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
 - [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
 - [Custom Maven Repository](./docs/custom-maven-repository.md) — Resolve the runtime JDBC driver packages from an internal Artifactory/Nexus instead of Maven Central
+- [Controlplane AWS Identity](./docs/controlplane-aws-identity.md) — Give the hub pods their own IAM identity, and configure AgentQ's Amazon Bedrock integration with IAM Role authentication
 - [Observability](./docs/observability.md) — Export control-plane telemetry to Pydantic Logfire or any OTLP-compatible backend (Splunk, Datadog, an OpenTelemetry Collector)
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume

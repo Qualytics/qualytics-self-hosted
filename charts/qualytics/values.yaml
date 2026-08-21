@@ -305,6 +305,23 @@ dataplane:
 #--------------------------------------------------------------------------------
 controlplane:
   replicas: 4
+  # Cloud workload identity for the hub api and cmd pods. Both need it: each resolves LLM
+  # providers, and AgentQ's Bedrock IAM-role authentication reads AWS credentials from the pod's
+  # own identity. Left off, the pods use the namespace default ServiceAccount and fall through to
+  # the node instance role, which is shared with every other pod on that node.
+  #
+  # create: true is enough for EKS Pod Identity — the association is made on the AWS side against
+  # (cluster, namespace, ServiceAccount name), so nothing about the role appears here. For IRSA,
+  # GKE Workload Identity or Azure workload identity, add the one annotation that mechanism wants:
+  #   annotations:
+  #     eks.amazonaws.com/role-arn: "arn:aws:iam::<account>:role/<role name>"
+  # See docs/controlplane-aws-identity.md.
+  serviceAccount:
+    create: false
+    # Defaults to {{ .Release.Name }}-controlplane. Setting a name with create: false adopts an
+    # existing ServiceAccount instead of creating one.
+    name: ""
+    annotations: {}
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"
