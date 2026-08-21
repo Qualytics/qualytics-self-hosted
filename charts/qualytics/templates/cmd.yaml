@@ -1,3 +1,4 @@
+{{- $saName := include "qualytics.controlplane.serviceAccountName" . -}}
 {{- include "qualytics.validate.authType" . -}}
 {{- include "qualytics.validate.secretsRotation" . -}}
 apiVersion: apps/v1
@@ -16,6 +17,9 @@ spec:
       labels:
         app: {{ .Release.Name }}-cmd
     spec:
+      {{- with $saName }}
+      serviceAccountName: {{ . }}
+      {{- end }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- range . }}
