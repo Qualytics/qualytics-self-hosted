@@ -305,6 +305,20 @@ dataplane:
 #--------------------------------------------------------------------------------
 controlplane:
   replicas: 4
+  # Optional workload identity for the hub api and cmd pods. Both resolve LLM providers.
+  #
+  # create: true is enough for EKS Pod Identity — the association is made on the AWS side against
+  # (cluster, namespace, ServiceAccount name), so nothing about the role appears here. For IRSA,
+  # other workload-identity systems, add the annotation that mechanism requires:
+  #   annotations:
+  #     eks.amazonaws.com/role-arn: "arn:aws:iam::<account>:role/<role name>"
+  # See docs/controlplane-aws-identity.md.
+  serviceAccount:
+    create: false
+    # Defaults to {{ .Release.Name }}-controlplane. Setting a name with create: false adopts an
+    # existing ServiceAccount instead of creating one.
+    name: ""
+    annotations: {}
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"

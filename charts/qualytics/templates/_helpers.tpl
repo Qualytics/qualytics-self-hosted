@@ -157,3 +157,16 @@ only — executors receive the resolved jars from the driver.
   </resolvers>
 </ivysettings>
 {{- end -}}
+
+{{/*
+ServiceAccount for the hub api and cmd pods. Empty keeps the namespace default.
+The derived name must match any cloud-side workload-identity binding.
+*/}}
+{{- define "qualytics.controlplane.serviceAccountName" -}}
+{{- $sa := .Values.controlplane.serviceAccount | default dict -}}
+{{- if $sa.name -}}
+{{- $sa.name -}}
+{{- else if $sa.create -}}
+{{- printf "%s-controlplane" .Release.Name -}}
+{{- end -}}
+{{- end -}}
