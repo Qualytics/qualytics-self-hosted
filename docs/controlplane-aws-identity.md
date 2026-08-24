@@ -130,15 +130,15 @@ Enter that role's ARN, and the same External ID if you used one. Two things trip
 
 ## Troubleshooting
 
-Qualytics tests the provider before saving the configuration, and a failure names the AWS principal the call was actually made as:
+Qualytics tests the provider before saving the configuration, and a failure names the AWS identity resolved by the pod:
 
 ```
 Failed to validate API key for bedrock:… : AccessDeniedException …
-  — the controlplane called AWS as arn:aws:sts::123456789012:assumed-role/prod-nodes/i-0abc.
-    Grant bedrock:InvokeModel to that principal.
+  — AWS caller identity: arn:aws:sts::123456789012:assumed-role/prod-nodes/i-0abc.
+    Grant bedrock:InvokeModel to that identity.
 ```
 
-Read that ARN first — it tells you which of the three mechanisms above actually took effect. `assumed-role/<node group>/i-…` means the pod is still on the node instance role, so the ServiceAccount is not wired up: check that `controlplane.serviceAccount.create` is set, that the association or annotation names the same ServiceAccount the chart created, and that the pods have been restarted since.
+Read that ARN first — it tells you which of the three mechanisms above actually took effect. `assumed-role/<node group>/i-…` means the pod is still on the node instance role, so the ServiceAccount is not wired up: check that `controlplane.serviceAccount.create` is set, that the association or annotation names the same ServiceAccount the chart created, and that the pods have been restarted since. With a Role ARN configured, the error names this ambient identity as the principal the target role must trust.
 
 To ask the same question directly:
 

@@ -159,14 +159,8 @@ only — executors receive the resolved jars from the driver.
 {{- end -}}
 
 {{/*
-Controlplane ServiceAccount name for the hub api and cmd pods, or "" when they should keep
-running under the namespace default ServiceAccount (the historical behaviour, still the default).
-Callers must test for empty before rendering serviceAccountName.
-
-Defaults to {{ .Release.Name }}-controlplane. That name is load-bearing across repos: the cloud
-side binds a role to (cluster, namespace, ServiceAccount name), so qualytics-infra-aws builds the
-same string from its own tenant. Renaming here without renaming there silently drops the pods back
-to the node instance role — everything still works, just as the wrong identity.
+ServiceAccount for the hub api and cmd pods. Empty keeps the namespace default.
+The derived name must match any cloud-side workload-identity binding.
 */}}
 {{- define "qualytics.controlplane.serviceAccountName" -}}
 {{- $sa := .Values.controlplane.serviceAccount | default dict -}}
