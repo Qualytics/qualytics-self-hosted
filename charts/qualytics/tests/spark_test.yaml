@@ -169,52 +169,12 @@ tests:
         documentIndex: 3
 
   # Regression: Spark 4.1.1 NPEs loading an executor pod template that has no
-  # containers field. Verify the magic container name is present even when
-  # kerberos is off (the simplest "no env, no mounts" case).
-  - it: should always emit executor containers[0].name regardless of kerberos
-    set:
-      dataplane.kerberos.enabled: false
+  # containers field. Verify the magic container name is always present.
+  - it: should always emit executor containers[0].name
     asserts:
       - matchRegex:
           path: data["executor-template.yaml"]
           pattern: "name: spark-kubernetes-executor"
-        documentIndex: 3
-
-  - it: should emit kerberos volumes and env in executor template when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "secretName: krb5-conf"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "secretName: hive-client-keytab"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "name: KRB5_CONFIG"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "value: \"hive/hadoop@EXAMPLE.COM\""
-        documentIndex: 3
-
-  - it: should not emit kerberos artifacts in executor template when disabled
-    set:
-      dataplane.kerberos.enabled: false
-    asserts:
-      - notMatchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "krb5-conf"
-        documentIndex: 3
-      - notMatchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "KRB5_CONFIG"
         documentIndex: 3
 
   - it: should mount AWS NVMe spark-local-dir volumes in executor template
@@ -272,7 +232,6 @@ tests:
   - it: should not emit initContainer or volumes when numVolumes is unset
     set:
       dataplane.numVolumes: -1
-      dataplane.kerberos.enabled: false
     asserts:
       - notMatchRegex:
           path: data["executor-template.yaml"]
@@ -954,54 +913,6 @@ tests:
           content:
             name: MOTHERSHIP_SYNC_ADMISSION_FLOOR
             value: "3"
-        documentIndex: 5
-
-  # Driver kerberos
-  - it: should set driver kerberos env + volumes when enabled
-    set:
-      dataplane.kerberos.enabled: true
-      dataplane.kerberos.krb5: "/etc/kerberos/conf/krb5.conf"
-      dataplane.kerberos.keytab: "/etc/kerberos/keytab/hive.keytab"
-      dataplane.kerberos.principal: "hive/hadoop@EXAMPLE.COM"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MOTHERSHIP_SPARK_KRB_KRB5
-            value: "/etc/kerberos/conf/krb5.conf"
-        documentIndex: 5
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
-            value: "hive/hadoop@EXAMPLE.COM"
-        documentIndex: 5
-      - contains:
-          path: spec.template.spec.containers[0].volumeMounts
-          content:
-            name: krb5-conf
-            mountPath: "/etc/kerberos/conf/krb5.conf"
-            subPath: krb5.conf
-        documentIndex: 5
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: krb5-conf
-            secret:
-              items:
-                - key: krb5.conf
-                  path: krb5.conf
-              secretName: krb5-conf
-        documentIndex: 5
-
-  - it: should not leak driver kerberos env when disabled
-    set:
-      dataplane.kerberos.enabled: false
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MOTHERSHIP_SPARK_KRB_KRB5
         documentIndex: 5
 
   # Driver scheduling

@@ -294,11 +294,6 @@ dataplane:
     instances: 1
     cores: 7
     memory: "55000m"
-  kerberos:
-    enabled: false
-    krb5: ""
-    keytab: ""
-    principal: ""
 
 #--------------------------------------------------------------------------------
 # Controlplane configuration
