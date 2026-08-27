@@ -182,6 +182,8 @@ controlplane:
     port: "465"
   egress:
     verifyTLSCertificates: true
+    # Created automatically when using one of the bundled Terraform templates.
+    configMapName: qualytics-egress-info
   # Give the hub pods a cloud identity of their own. Required for AgentQ's Amazon Bedrock
   # IAM Role authentication; without it the pods inherit the node's identity, which is shared
   # with every other pod on that node. See docs/controlplane-aws-identity.md.

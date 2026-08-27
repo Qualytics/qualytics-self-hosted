@@ -128,6 +128,11 @@ resource "azurerm_kubernetes_cluster" "qualytics" {
   tags = local.tags
 }
 
+data "azurerm_public_ip" "outbound" {
+  name                = basename(one(azurerm_kubernetes_cluster.qualytics.network_profile[0].load_balancer_profile[0].effective_outbound_ips))
+  resource_group_name = azurerm_kubernetes_cluster.qualytics.node_resource_group
+}
+
 ################################################################################
 # Application Node Pool
 # For: API, Frontend, PostgreSQL, RabbitMQ
@@ -226,6 +231,28 @@ resource "kubernetes_namespace" "qualytics" {
   }
 
   depends_on = [azurerm_kubernetes_cluster.qualytics]
+}
+
+resource "kubernetes_config_map" "qualytics_egress_info" {
+  metadata {
+    name      = "qualytics-egress-info"
+    namespace = "qualytics"
+  }
+
+  data = {
+    "egress.json" = jsonencode({
+      public_egress = {
+        addresses = [data.azurerm_public_ip.outbound.ip_address]
+        estimated = false
+      }
+      private_egress = {
+        addresses = [var.aks_subnet_cidr]
+        estimated = false
+      }
+    })
+  }
+
+  depends_on = [azurerm_kubernetes_cluster.qualytics, kubernetes_namespace.qualytics]
 }
 
 resource "kubernetes_secret" "docker_registry" {

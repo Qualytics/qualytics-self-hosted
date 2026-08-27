@@ -352,6 +352,9 @@ controlplane:
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true
+    # Terraform templates populate this ConfigMap with the deployment's public and private
+    # datastore connection source addresses. The volume is optional for custom installations.
+    configMapName: qualytics-egress-info
   # Export controlplane telemetry — API request traces, database and message-queue
   # metrics, background-job health — from the API and CMD pods to Pydantic Logfire
   # and/or any OTLP-compatible backend (Splunk, Datadog, Grafana, an in-cluster
