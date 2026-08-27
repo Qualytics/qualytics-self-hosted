@@ -2,8 +2,8 @@ apiVersion: v2
 name: qualytics
 description: A Helm chart for deploying Qualytics on Kubernetes
 type: application
-version: 2026.8.27
-appVersion: 2026.8.27
+version: 2026.8.18
+appVersion: 2026.8.18
 dependencies:
 - name: ingress-nginx
   version: 4.15.1

@@ -152,17 +152,6 @@ module "vpc" {
 # Cloud NAT for Outbound Internet Access
 ################################################################################
 
-resource "google_compute_address" "nat" {
-  count = var.nat_ip_count
-
-  name         = "${local.name}-nat-${count.index + 1}"
-  project      = local.project_id
-  region       = var.region
-  address_type = "EXTERNAL"
-
-  depends_on = [google_project_service.required_apis]
-}
-
 module "cloud_nat" {
   source  = "terraform-google-modules/cloud-nat/google"
   version = "~> 5.3.0"
@@ -174,7 +163,6 @@ module "cloud_nat" {
 
   create_router = true
   network       = module.vpc.network_name
-  nat_ips       = google_compute_address.nat[*].self_link
 
   depends_on = [module.vpc]
 }
@@ -360,10 +348,8 @@ resource "kubernetes_config_map" "qualytics_egress_info" {
 
   data = {
     "egress.json" = jsonencode({
-      public_egress = {
-        addresses = sort(google_compute_address.nat[*].address)
-        estimated = false
-      }
+      # Keep the existing AUTO_ONLY Cloud NAT allocation unchanged. The API estimates
+      # the public address at runtime when this group is absent.
       private_egress = {
         addresses = sort(distinct([var.pods_cidr, var.subnet_cidr]))
         estimated = false
