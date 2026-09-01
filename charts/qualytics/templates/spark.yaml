@@ -76,11 +76,11 @@ data:
 ---
 # Executor pod template, mounted into the driver and referenced via
 # --conf spark.kubernetes.executor.podTemplateFile. Spark merges spark-submit
-# settings (image, cores, memory) on top — node scheduling, kerberos volumes
-# and env, scratch volumes, and the init container have to land here. Container
-# name `spark-kubernetes-executor` is a magic string matched by the
-# spark.kubernetes.executor.podTemplateContainerName conf; renaming it
-# silently breaks the merge.
+# settings (image, cores, memory) on top — node scheduling, scratch volumes,
+# and the init container have to land here. Container name
+# `spark-kubernetes-executor` is a magic string matched by the
+# spark.kubernetes.executor.podTemplateContainerName conf; renaming it silently
+# breaks the merge.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -106,9 +106,8 @@ data:
       tolerations:
         {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 8 }}
       {{- end }}
-      {{- if or (gt (int .Values.dataplane.numVolumes) 0) (eq .Values.dataplane.kerberos.enabled true) }}
+      {{- if gt (int .Values.dataplane.numVolumes) 0 }}
       volumes:
-        {{- if gt (int .Values.dataplane.numVolumes) 0 }}
         {{- range $i := until (int .Values.dataplane.numVolumes) }}
         - name: "spark-local-dir-{{ add1 $i }}"
           {{- if eq $.Values.global.platform "aws" }}
@@ -120,21 +119,6 @@ data:
           {{- else }}
           emptyDir: {}
           {{- end }}
-        {{- end }}
-        {{- end }}
-        {{- if eq .Values.dataplane.kerberos.enabled true }}
-        - name: krb5-conf
-          secret:
-            items:
-              - key: krb5.conf
-                path: krb5.conf
-            secretName: krb5-conf
-        - name: keytab
-          secret:
-            items:
-              - key: app.keytab
-                path: {{ base .Values.dataplane.kerberos.keytab }}
-            secretName: hive-client-keytab
         {{- end }}
       {{- end }}
       {{- if gt (int .Values.dataplane.numVolumes) 0 }}
@@ -154,35 +138,12 @@ data:
       # Always emit containers stanza; Spark NPEs loading a template without it.
       containers:
         - name: spark-kubernetes-executor
-          {{- if or (gt (int .Values.dataplane.numVolumes) 0) (eq .Values.dataplane.kerberos.enabled true) }}
+          {{- if gt (int .Values.dataplane.numVolumes) 0 }}
           volumeMounts:
-            {{- if gt (int .Values.dataplane.numVolumes) 0 }}
             {{- range $i := until (int .Values.dataplane.numVolumes) }}
             - name: "spark-local-dir-{{ add1 $i }}"
               mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
             {{- end }}
-            {{- end }}
-            {{- if eq .Values.dataplane.kerberos.enabled true }}
-            - name: krb5-conf
-              mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-              subPath: krb5.conf
-            - name: keytab
-              mountPath: {{ .Values.dataplane.kerberos.keytab }}
-              subPath: {{ base .Values.dataplane.kerberos.keytab }}
-            {{- end }}
-          {{- end }}
-          {{- if eq .Values.dataplane.kerberos.enabled true }}
-          env:
-            - name: KRB5_CONFIG
-              value: {{ .Values.dataplane.kerberos.krb5 | quote }}
-            - name: KRB_KEYTAB
-              value: {{ .Values.dataplane.kerberos.keytab | quote }}
-            - name: KRB_PRINCIPAL
-              value: {{ .Values.dataplane.kerberos.principal | quote }}
-            - name: SPARK_JAVA_OPT_998
-              value: "-Djava.security.krb5.conf={{ .Values.dataplane.kerberos.krb5 }}"
-            - name: SPARK_JAVA_OPT_999
-              value: "-Djavax.security.auth.useSubjectCredsOnly=false"
           {{- end }}
 ---
 # Headless Service for driver↔executor RPC. Executors connect back to the
@@ -218,9 +179,9 @@ spec:
       protocol: TCP
 ---
 # Driver Deployment. Invokes the dataplane image's `/opt/entrypoint.sh driver`
-# so its setup (SPARK_CLASSPATH, LD_LIBRARY_PATH, kerberos kinit + renewal
-# daemon, libnss_wrapper passwd entry, gosu spark) runs before spark-submit
-# starts. The entrypoint adds `--deploy-mode client` and
+# so its setup (SPARK_CLASSPATH, LD_LIBRARY_PATH, libnss_wrapper passwd entry,
+# gosu spark) runs before spark-submit starts. The entrypoint adds
+# `--deploy-mode client` and
 # `--conf spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS` itself, so we
 # don't pass either; we just set SPARK_DRIVER_BIND_ADDRESS via the downward API.
 # Replicas stays at 1 because dynamic allocation lives inside this single
@@ -281,20 +242,6 @@ spec:
               - key: ivysettings.xml
                 path: ivysettings.xml
             secretName: {{ .Release.Name }}-spark-ivy-settings
-        {{- end }}
-        {{- if eq .Values.dataplane.kerberos.enabled true }}
-        - name: krb5-conf
-          secret:
-            items:
-              - key: krb5.conf
-                path: krb5.conf
-            secretName: krb5-conf
-        - name: keytab
-          secret:
-            items:
-              - key: app.keytab
-                path: {{ base .Values.dataplane.kerberos.keytab }}
-            secretName: hive-client-keytab
         {{- end }}
       containers:
         - name: spark-kubernetes-driver
@@ -440,16 +387,6 @@ spec:
               value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
             - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
               value: {{ .Values.dataplane.libpostalDataPath | quote }}
-            {{- if eq .Values.dataplane.kerberos.enabled true }}
-            - name: MOTHERSHIP_SPARK_KRB_KRB5
-              value: {{ .Values.dataplane.kerberos.krb5 | quote }}
-            - name: MOTHERSHIP_SPARK_KRB_KEYTAB
-              value: {{ .Values.dataplane.kerberos.keytab | quote }}
-            - name: MOTHERSHIP_SPARK_KRB_PRINCIPAL
-              value: {{ .Values.dataplane.kerberos.principal | quote }}
-            - name: KERBEROS_DAEMON_ENABLED
-              value: "false"
-            {{- end }}
           volumeMounts:
             - name: executor-pod-template
               mountPath: /opt/spark/conf/executor-template.yaml
@@ -458,14 +395,6 @@ spec:
             - name: ivy-settings
               mountPath: /opt/spark/conf/ivysettings.xml
               subPath: ivysettings.xml
-            {{- end }}
-            {{- if eq .Values.dataplane.kerberos.enabled true }}
-            - name: krb5-conf
-              mountPath: {{ .Values.dataplane.kerberos.krb5 }}
-              subPath: krb5.conf
-            - name: keytab
-              mountPath: {{ .Values.dataplane.kerberos.keytab }}
-              subPath: {{ base .Values.dataplane.kerberos.keytab }}
             {{- end }}
           resources:
             requests:
