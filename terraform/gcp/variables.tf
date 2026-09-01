@@ -76,6 +76,17 @@ variable "services_cidr" {
   default     = "10.12.0.0/16"
 }
 
+variable "nat_ip_count" {
+  description = "Number of static public IPv4 addresses assigned to Cloud NAT"
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.nat_ip_count >= 1 && floor(var.nat_ip_count) == var.nat_ip_count
+    error_message = "nat_ip_count must be a positive integer."
+  }
+}
+
 variable "master_authorized_networks" {
   description = "List of CIDR blocks authorized to access the GKE master endpoint"
   type = list(object({

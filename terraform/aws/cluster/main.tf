@@ -124,6 +124,12 @@ module "vpc" {
   tags = local.tags
 }
 
+data "aws_nat_gateway" "egress" {
+  count = var.single_nat_gateway ? 1 : 3
+
+  id = module.vpc.natgw_ids[count.index]
+}
+
 ################################################################################
 # EKS Module — Auto Mode
 ################################################################################
@@ -396,6 +402,31 @@ resource "kubernetes_namespace_v1" "qualytics" {
   }
 
   depends_on = [module.eks]
+}
+
+resource "kubernetes_config_map_v1" "qualytics_egress_info" {
+  metadata {
+    name      = "qualytics-egress-info"
+    namespace = "qualytics"
+  }
+
+  data = {
+    "egress.json" = jsonencode({
+      public_egress = {
+        addresses = sort(module.vpc.nat_public_ips)
+        estimated = false
+      }
+      private_egress = {
+        addresses = sort(distinct(concat(
+          [for nat_gateway in data.aws_nat_gateway.egress : nat_gateway.private_ip],
+          module.vpc.private_subnets_cidr_blocks
+        )))
+        estimated = false
+      }
+    })
+  }
+
+  depends_on = [module.eks, kubernetes_namespace_v1.qualytics]
 }
 
 resource "kubernetes_secret_v1" "docker_registry" {

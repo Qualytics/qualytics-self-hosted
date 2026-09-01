@@ -47,6 +47,10 @@ spec:
             memory: {{ .Values.controlplane.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.controlplane.ingress.servicePort }}
+        volumeMounts:
+          - name: egress-info
+            mountPath: /etc/qualytics/egress
+            readOnly: true
         startupProbe:
           httpGet:
             path: /api/health
@@ -74,6 +78,10 @@ spec:
             value: "False"
           - name: APP_CLOUD_PLATFORM
             value: {{ .Values.global.platform | quote }}
+          - name: QUALYTICS_NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
           - name: APP_DEPLOYMENT_SIZE
             value: {{ include "qualytics.global.size" . | quote }}
           - name: CORS_ORIGINS
@@ -363,6 +371,12 @@ spec:
 #
           # - name: HTTPS_PROXY
           #   value: "<PROXY_PROTOCOL>://<USERNAME>:<PASSWORD>@<PROXY_IP_ADDRESS>:<PROXY_PORT>"
+
+      volumes:
+        - name: egress-info
+          configMap:
+            name: {{ .Values.controlplane.egress.configMapName | quote }}
+            optional: true
 
 
 ---

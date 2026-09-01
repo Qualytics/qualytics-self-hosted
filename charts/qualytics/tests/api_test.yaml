@@ -156,6 +156,41 @@ tests:
             value: "test.qualytics.io"
         documentIndex: 0
 
+  - it: should expose estimated node egress and mount optional infrastructure metadata
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUALYTICS_NODE_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.hostIP
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /etc/qualytics/egress
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.containers[0].volumeMounts[0].subPath
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: qualytics-egress-info
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.optional
+          value: true
+        documentIndex: 0
+
+  - it: should allow a custom egress ConfigMap name
+    set:
+      controlplane.egress.configMapName: custom-egress-info
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].configMap.name
+          value: custom-egress-info
+        documentIndex: 0
+
   - it: should configure global auth type in API
     set:
       global.authType: "OIDC"
