@@ -752,3 +752,12 @@ tests:
             name: LOGFIRE_SAMPLING
             value: "false"
         documentIndex: 0
+
+  - it: should bound synchronous dataplane waits from the CMD process too
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
+            value: "280"
+        documentIndex: 0

@@ -41,6 +41,9 @@ nginx:
 ingress:
   enabled: false
   cors: false
+  # Upstream read/send timeout for the API and frontend ingresses. Looser than every timeout inside the API
+  # so a genuine hang yields a real 504; the streaming ingress keeps its own 3600 s.
+  proxyTimeoutSeconds: 600
   maxRequestsPerSecondPerIP: 50
   # Burst multiplier for rate limiting: burst bucket = rps * multiplier.
   # Allows short bursts (e.g. SPA page loads firing many parallel API calls)
@@ -95,13 +98,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260901-4945175"
+    controlplaneImageTag: "20260902-179773e"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260901-75e739f"
+    dataplaneImageTag: "20260902-d458245"
 frontendImage:
   image:
-    frontendImageTag: "20260901-883c185"
+    frontendImageTag: "20260902-3916c34"
 
 # Storage classes
 storageClass:
@@ -300,6 +303,10 @@ dataplane:
 #--------------------------------------------------------------------------------
 controlplane:
   replicas: 4
+  # Upper bound, in seconds, for a request that waits on a synchronous dataplane round-trip (source records,
+  # slim profile, check validation, dry-run). Must beat the tightest timer in front of the API: the AWS NLB
+  # resets idle flows at a fixed 350 s, Firefox stops waiting at 300 s, Azure's LB idle timeout once raised.
+  synchronousRequestTimeoutSeconds: 280
   # Optional workload identity for the hub api and cmd pods. Both resolve LLM providers.
   #
   # create: true is enough for EKS Pod Identity — the association is made on the AWS side against

@@ -729,3 +729,27 @@ tests:
             name: LOGFIRE_SAMPLING
             value: "false"
         documentIndex: 0
+
+  - it: should bound synchronous dataplane waits and give in-flight requests a graceful shutdown window
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
+            value: "280"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 60
+        documentIndex: 0
+
+  - it: should let a tenant override the synchronous dataplane bound
+    set:
+      controlplane.synchronousRequestTimeoutSeconds: 120
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
+            value: "120"
+        documentIndex: 0

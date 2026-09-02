@@ -361,3 +361,40 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/modsecurity-snippet"]
           pattern: "'"
         documentIndex: 2
+
+  - it: should apply proxy timeouts per ingress
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "3600"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-connect-timeout"]
+          value: "10"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "600"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]
+          value: "600"
+        documentIndex: 2
+
+  - it: should let a tenant override the API and frontend proxy timeout
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: 900
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "900"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "3600"
+        documentIndex: 0

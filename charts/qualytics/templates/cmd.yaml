@@ -115,6 +115,8 @@ spec:
             value: /api
           - name: API_ROOT_URL
             value: {{ printf "http://%s-api-service:8000$(API_ROOT_PATH)" .Release.Name }}
+          - name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
+            value: {{ .Values.controlplane.synchronousRequestTimeoutSeconds | quote }}
           - name: SECRETS_PASSPHRASE
             valueFrom:
               secretKeyRef:

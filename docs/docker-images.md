@@ -1,6 +1,6 @@
-# Qualytics Docker Images - v2026.9.1
+# Qualytics Docker Images - v2026.9.2
 
-This guide lists the images used by Qualytics chart `2026.9.1`. The chart pulls them directly by default; use the mirroring steps when your organization requires an internal registry.
+This guide lists the images used by Qualytics chart `2026.9.2`. The chart pulls them directly by default; use the mirroring steps when your organization requires an internal registry.
 
 Qualytics provides the image registry token through a secure channel. This token only grants access to private container images; it is separate from the deployment identifier and platform license described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
 
@@ -19,9 +19,9 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 
 | Component | Image | Tag | Used by |
 |---|---|---|---|
-| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260901-4945175` | `qualytics-api` and `qualytics-cmd` Deployments |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20260901-75e739f` | `qualytics-spark` driver Deployment and every executor pod the driver creates |
-| Frontend | `qualyticsai/frontend` | `20260901-883c185` | `qualytics-frontend` Deployment |
+| Control Plane (API & CMD) | `qualyticsai/controlplane` | `20260902-179773e` | `qualytics-api` and `qualytics-cmd` Deployments |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20260902-d458245` | `qualytics-spark` driver Deployment and every executor pod the driver creates |
+| Frontend | `qualyticsai/frontend` | `20260902-3916c34` | `qualytics-frontend` Deployment |
 
 ### Pull commands
 
@@ -43,9 +43,9 @@ printf '%s' "$QUALYTICS_REGISTRY_TOKEN" | docker login \
   --password-stdin
 unset QUALYTICS_REGISTRY_TOKEN
 
-docker pull qualyticsai/controlplane:20260901-4945175
-docker pull qualyticsai/dataplane:20260901-75e739f
-docker pull qualyticsai/frontend:20260901-883c185
+docker pull qualyticsai/controlplane:20260902-179773e
+docker pull qualyticsai/dataplane:20260902-d458245
+docker pull qualyticsai/frontend:20260902-3916c34
 ```
 
 ## Infrastructure Images
@@ -94,9 +94,9 @@ After pulling, re-tag and push each image to your private registry. Example:
 REGISTRY="your-registry.example.com"
 
 # Qualytics images
-docker tag qualyticsai/controlplane:20260901-4945175 "$REGISTRY/qualyticsai/controlplane:20260901-4945175"
-docker tag qualyticsai/dataplane:20260901-75e739f "$REGISTRY/qualyticsai/dataplane:20260901-75e739f"
-docker tag qualyticsai/frontend:20260901-883c185 "$REGISTRY/qualyticsai/frontend:20260901-883c185"
+docker tag qualyticsai/controlplane:20260902-179773e "$REGISTRY/qualyticsai/controlplane:20260902-179773e"
+docker tag qualyticsai/dataplane:20260902-d458245 "$REGISTRY/qualyticsai/dataplane:20260902-d458245"
+docker tag qualyticsai/frontend:20260902-3916c34 "$REGISTRY/qualyticsai/frontend:20260902-3916c34"
 
 # Infrastructure images
 docker tag rabbitmq:4.3-management "$REGISTRY/rabbitmq:4.3-management"
@@ -106,9 +106,9 @@ docker tag busybox:latest "$REGISTRY/busybox:latest"
 docker tag postgres:17 "$REGISTRY/postgres:17"
 
 # Push all
-docker push "$REGISTRY/qualyticsai/controlplane:20260901-4945175"
-docker push "$REGISTRY/qualyticsai/dataplane:20260901-75e739f"
-docker push "$REGISTRY/qualyticsai/frontend:20260901-883c185"
+docker push "$REGISTRY/qualyticsai/controlplane:20260902-179773e"
+docker push "$REGISTRY/qualyticsai/dataplane:20260902-d458245"
+docker push "$REGISTRY/qualyticsai/frontend:20260902-3916c34"
 docker push "$REGISTRY/rabbitmq:4.3-management"
 docker push "$REGISTRY/busybox:latest"
 

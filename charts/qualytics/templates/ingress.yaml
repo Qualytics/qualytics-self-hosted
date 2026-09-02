@@ -1,9 +1,6 @@
 {{/* Define common annotations as a named template */}}
 {{- define "common.ingress.annotations" -}}
 kubernetes.io/ingress.allow-http: 'false'
-nginx.ingress.kubernetes.io/proxy-connect-timeout: '3600'
-nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
-nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
 nginx.ingress.kubernetes.io/use-regex: 'true'
 nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
 nginx.ingress.kubernetes.io/enable-gzip: "true"
@@ -78,6 +75,10 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Higher priority to match before regular API ingress
     nginx.ingress.kubernetes.io/priority: "100"
+    # Streams and file downloads legitimately run long; connecting to an in-cluster pod does not.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     # Rate limiting: rps returns 429 (client can back off), connections returns 503 (nginx limitation).
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
@@ -132,6 +133,11 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
+    # Looser than every timeout inside the API (synchronous dataplane waits stop at 280 s), so a genuine
+    # hang yields a real 504 instead of a connection that just dies.
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
     # Rate limiting: rps returns 429 (client can back off), connections returns 503 (nginx limitation).
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
@@ -188,6 +194,9 @@ metadata:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "50"
     {{- include "common.ingress.annotations" . | nindent 4 }}
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
     # High rate limits for frontend: allows parallel asset loading while capping DDoS floods
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.frontendMaxRequestsPerSecondPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
