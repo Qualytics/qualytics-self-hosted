@@ -410,3 +410,15 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: must be greater than controlplane.synchronousRequestTimeoutSeconds
+
+  # Source-record downloads wait on the dataplane behind the streaming ingress, whose proxy timeout is fixed, so the
+  # API's bound cannot be raised past it.
+  - it: should reject a synchronous bound the streaming ingress would cut off
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: 3700
+      controlplane.synchronousRequestTimeoutSeconds: 3600
+    asserts:
+      - failedTemplate:
+          errorPattern: must be below the streaming ingress proxy timeout
