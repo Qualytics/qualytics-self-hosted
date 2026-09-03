@@ -377,11 +377,11 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
-          value: "600"
+          value: "660"
         documentIndex: 1
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]
-          value: "600"
+          value: "660"
         documentIndex: 2
 
   - it: should let a tenant override the API and frontend proxy timeout

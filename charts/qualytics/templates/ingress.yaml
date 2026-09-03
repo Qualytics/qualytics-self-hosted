@@ -133,7 +133,7 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
-    # Looser than every timeout inside the API (synchronous dataplane waits stop at 280 s), so a genuine
+    # Looser than every timeout inside the API (synchronous dataplane waits stop at 600 s), so a genuine
     # hang yields a real 504 instead of a connection that just dies.
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
     nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
