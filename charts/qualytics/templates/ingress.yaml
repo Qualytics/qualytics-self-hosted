@@ -122,6 +122,11 @@ spec:
                 port:
                   number: {{ .Values.controlplane.ingress.servicePort }}
 ---
+# The API answers its own timeout at controlplane.synchronousRequestTimeoutSeconds; nginx has to wait longer or the
+# client sees a 504 instead of that answer, so an inverted override is refused at render time.
+{{- if le (int .Values.ingress.proxyTimeoutSeconds) (int .Values.controlplane.synchronousRequestTimeoutSeconds) }}
+{{- fail (printf "ingress.proxyTimeoutSeconds (%v) must be greater than controlplane.synchronousRequestTimeoutSeconds (%v) so the API's timeout response reaches the client before nginx gives up" .Values.ingress.proxyTimeoutSeconds .Values.controlplane.synchronousRequestTimeoutSeconds) }}
+{{- end }}
 # API Ingress - Regular endpoints (with buffering and full OWASP protection)
 apiVersion: networking.k8s.io/v1
 kind: Ingress

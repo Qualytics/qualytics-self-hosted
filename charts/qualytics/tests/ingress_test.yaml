@@ -398,3 +398,15 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
           value: "3600"
         documentIndex: 0
+
+  # A proxy timeout at or below the API's synchronous bound means nginx answers 504 before the API's own
+  # timeout response reaches the client, so the inverted override is refused at render time.
+  - it: should reject a proxy timeout that does not outlast the synchronous dataplane bound
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: 600
+      controlplane.synchronousRequestTimeoutSeconds: 600
+    asserts:
+      - failedTemplate:
+          errorPattern: must be greater than controlplane.synchronousRequestTimeoutSeconds
