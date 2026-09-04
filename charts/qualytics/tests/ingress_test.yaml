@@ -422,3 +422,45 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: must be below the streaming ingress proxy timeout
+
+  # `helm upgrade --reuse-values` from a release that predates the timeout keys renders with both nil, so the
+  # chart defaults must apply instead of `int nil` (0) tripping the ordering check and blocking the upgrade.
+  - it: should apply the chart timeout defaults when a reuse-values upgrade has neither key
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: null
+      controlplane.synchronousRequestTimeoutSeconds: null
+    asserts:
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "3600"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
+          value: "660"
+        documentIndex: 1
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]
+          value: "660"
+        documentIndex: 2
+
+  # Zero or a negative bound is not a duration the API can enforce, so it is refused at render time instead of
+  # being handed to the API and CMD processes.
+  - it: should reject a zero synchronous bound
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      controlplane.synchronousRequestTimeoutSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: must be a positive number of seconds
+
+  - it: should reject a negative synchronous bound
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      controlplane.synchronousRequestTimeoutSeconds: -30
+    asserts:
+      - failedTemplate:
+          errorPattern: must be a positive number of seconds
