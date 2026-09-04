@@ -421,7 +421,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 - **Secret Management**: All credentials stored in `qualytics-creds` secret
 
 ### Resource Patterns
-- **Deployment Strategy**: `Recreate` (no rolling updates for stateful dependencies)
+- **Deployment Strategy**: API and frontend use `RollingUpdate` with `maxSurge: 0` and `maxUnavailable: replicas-1` (no spare node capacity needed, one pod always serving), each mirrored by a `PodDisruptionBudget` with the same `maxUnavailable`. CMD stays `Recreate` (singleton scheduler and migrator). RabbitMQ carries no PDB (a budget on a single replica only blocks node drains); it is annotated `karpenter.sh/do-not-disrupt` instead, bounded by the app NodePool `terminationGracePeriod` in `terraform/aws/cluster`.
 - **Image Pull Policy**: `IfNotPresent`
 - **Termination Grace Period**: Default 10 seconds
 - **Resource Requests/Limits**: Always specify for production workloads
@@ -509,7 +509,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   - TLS certificate verification control
   - Telemetry export (opt-in `controlplane.observability`: Pydantic Logfire via `secrets.observability.logfire_token` and/or any OTLP/HTTP backend via `otlp.endpoint` + `secrets.observability.otlp_headers`; applies to API and CMD)
 - **Environment**: Connects to PostgreSQL and RabbitMQ
-- **Strategy**: Recreate deployment
+- **Strategy**: `RollingUpdate`, `maxSurge: 0`, `maxUnavailable: replicas-1`, plus a matching `PodDisruptionBudget`
 
 ### Control Plane CMD
 - **Replicas**: 1
@@ -523,7 +523,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Image**: Configured by `global.imageUrls.frontendImageUrl` and `frontendImage.image.frontendImageTag`
 - **Port**: 8080
 - **Downloads**: `frontend.disableDownloads: true` sets `VITE_QUALYTICS_DISABLE_DOWNLOADS` to hide data-export/download affordances
-- **Strategy**: Recreate deployment
+- **Strategy**: `RollingUpdate`, `maxSurge: 0`, `maxUnavailable: replicas-1`, plus a matching `PodDisruptionBudget`
 
 ### PostgreSQL
 - **Type**: StatefulSet

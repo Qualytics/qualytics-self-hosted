@@ -33,9 +33,8 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
           value: "exit(0)"
         documentIndex: 0
-      - equal:
+      - notExists:
           path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
-          value: 10
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
