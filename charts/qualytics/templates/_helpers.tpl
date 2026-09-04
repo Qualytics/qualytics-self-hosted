@@ -69,6 +69,44 @@ message re-encrypts nothing and leaves every encrypted column undecryptable.
 {{- end -}}
 
 {{/*
+Effective synchronous dataplane bound and ingress proxy timeout, in seconds. Each coalesces an
+ABSENT value to the chart default (600 / 660) so `helm upgrade --reuse-values` from a release
+created before these keys existed renders instead of failing: --reuse-values replaces the new
+chart's values.yaml with the old release's coalesced values, leaving both keys nil, and `int nil`
+is 0. Only nil is coalesced; an explicitly set value — including 0 — is returned verbatim so
+qualytics.validate.synchronousRequestTimeout can reject it. Every template that reads either
+timeout must use these helpers, not .Values directly, or a nil value would render as an empty
+annotation or env var.
+*/}}
+{{- define "qualytics.synchronousRequestTimeoutSeconds" -}}
+{{- if kindIs "invalid" .Values.controlplane.synchronousRequestTimeoutSeconds -}}
+600
+{{- else -}}
+{{- .Values.controlplane.synchronousRequestTimeoutSeconds | int -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "qualytics.ingress.proxyTimeoutSeconds" -}}
+{{- if kindIs "invalid" .Values.ingress.proxyTimeoutSeconds -}}
+660
+{{- else -}}
+{{- .Values.ingress.proxyTimeoutSeconds | int -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate the synchronous dataplane bound. Renders nothing; fails the render when the value is not
+a positive number of seconds — a duration neither the API nor CMD could enforce, so it would
+otherwise surface as application behaviour instead of a configuration error. Included by every
+template that passes the bound on.
+*/}}
+{{- define "qualytics.validate.synchronousRequestTimeout" -}}
+{{- if le (include "qualytics.synchronousRequestTimeoutSeconds" . | int) 0 -}}
+{{- fail (printf "controlplane.synchronousRequestTimeoutSeconds must be a positive number of seconds; got %v" .Values.controlplane.synchronousRequestTimeoutSeconds) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Determine deployment size based on dataplane.driver.cores
 */}}
 {{- define "qualytics.global.size" -}}

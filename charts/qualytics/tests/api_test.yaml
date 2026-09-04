@@ -821,3 +821,23 @@ tests:
             name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
             value: "120"
         documentIndex: 0
+
+  # A reuse-values upgrade from a release created before the key existed leaves it nil; the workload must still
+  # receive the chart default rather than an empty value.
+  - it: should keep an absent synchronous bound on the chart default for reuse-values upgrades
+    set:
+      controlplane.synchronousRequestTimeoutSeconds: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
+            value: "600"
+        documentIndex: 0
+
+  - it: should reject a non-positive synchronous bound
+    set:
+      controlplane.synchronousRequestTimeoutSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: must be a positive number of seconds

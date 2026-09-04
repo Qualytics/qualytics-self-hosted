@@ -1,6 +1,7 @@
 {{- $saName := include "qualytics.controlplane.serviceAccountName" . -}}
 {{- include "qualytics.validate.authType" . -}}
 {{- include "qualytics.validate.secretsRotation" . -}}
+{{- include "qualytics.validate.synchronousRequestTimeout" . -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -115,7 +116,7 @@ spec:
           - name: API_ROOT_URL
             value: {{ printf "http://%s-api-service:8000$(API_ROOT_PATH)" .Release.Name }}
           - name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
-            value: {{ .Values.controlplane.synchronousRequestTimeoutSeconds | quote }}
+            value: {{ include "qualytics.synchronousRequestTimeoutSeconds" . | quote }}
           - name: SECRETS_PASSPHRASE
             valueFrom:
               secretKeyRef:
