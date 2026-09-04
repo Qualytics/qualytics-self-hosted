@@ -377,11 +377,11 @@ tests:
         documentIndex: 1
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
-          value: "600"
+          value: "660"
         documentIndex: 1
       - equal:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-send-timeout"]
-          value: "600"
+          value: "660"
         documentIndex: 2
 
   - it: should let a tenant override the API and frontend proxy timeout
@@ -398,3 +398,27 @@ tests:
           path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-read-timeout"]
           value: "3600"
         documentIndex: 0
+
+  # A proxy timeout at or below the API's synchronous bound means nginx answers 504 before the API's own
+  # timeout response reaches the client, so the inverted override is refused at render time.
+  - it: should reject a proxy timeout that does not outlast the synchronous dataplane bound
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: 600
+      controlplane.synchronousRequestTimeoutSeconds: 600
+    asserts:
+      - failedTemplate:
+          errorPattern: must be greater than controlplane.synchronousRequestTimeoutSeconds
+
+  # Source-record downloads wait on the dataplane behind the streaming ingress, whose proxy timeout is fixed, so the
+  # API's bound cannot be raised past it.
+  - it: should reject a synchronous bound the streaming ingress would cut off
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+      ingress.proxyTimeoutSeconds: 3700
+      controlplane.synchronousRequestTimeoutSeconds: 3600
+    asserts:
+      - failedTemplate:
+          errorPattern: must be below the streaming ingress proxy timeout

@@ -736,7 +736,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
-            value: "280"
+            value: "600"
         documentIndex: 0
       - equal:
           path: spec.template.spec.terminationGracePeriodSeconds

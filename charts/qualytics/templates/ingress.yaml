@@ -52,6 +52,8 @@ SecRuleRemoveById 949110
 {{- end -}}
 
 {{- if ( eq .Values.ingress.enabled true ) }}
+{{- /* Source-record downloads wait on the dataplane behind the streaming ingress, whose proxy timeout is fixed here. */}}
+{{- $streamingProxyTimeoutSeconds := 3600 }}
 {{/*
   Resolve TLS Secret names with three-tier precedence:
     1. Shared Secret (ingress.tls.secretName) — when set, used by BOTH ingresses.
@@ -77,8 +79,8 @@ metadata:
     nginx.ingress.kubernetes.io/priority: "100"
     # Streams and file downloads legitimately run long; connecting to an in-cluster pod does not.
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: {{ $streamingProxyTimeoutSeconds | quote }}
+    nginx.ingress.kubernetes.io/proxy-send-timeout: {{ $streamingProxyTimeoutSeconds | quote }}
     # Rate limiting: rps returns 429 (client can back off), connections returns 503 (nginx limitation).
     nginx.ingress.kubernetes.io/limit-rps: {{ .Values.ingress.maxRequestsPerSecondPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-burst-multiplier: {{ .Values.ingress.burstMultiplier | int | quote }}
@@ -122,6 +124,15 @@ spec:
                 port:
                   number: {{ .Values.controlplane.ingress.servicePort }}
 ---
+# The API answers its own timeout at controlplane.synchronousRequestTimeoutSeconds; every nginx route in front of it
+# has to wait longer or the client sees a 504 instead of that answer, so inverted overrides are refused at render time.
+{{- $synchronousBound := int .Values.controlplane.synchronousRequestTimeoutSeconds }}
+{{- if le (int .Values.ingress.proxyTimeoutSeconds) $synchronousBound }}
+{{- fail (printf "ingress.proxyTimeoutSeconds (%v) must be greater than controlplane.synchronousRequestTimeoutSeconds (%v) so the API's timeout response reaches the client before nginx gives up" .Values.ingress.proxyTimeoutSeconds $synchronousBound) }}
+{{- end }}
+{{- if ge $synchronousBound $streamingProxyTimeoutSeconds }}
+{{- fail (printf "controlplane.synchronousRequestTimeoutSeconds (%v) must be below the streaming ingress proxy timeout (%v s) that source-record downloads wait behind" $synchronousBound $streamingProxyTimeoutSeconds) }}
+{{- end }}
 # API Ingress - Regular endpoints (with buffering and full OWASP protection)
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -133,7 +144,7 @@ metadata:
     {{- include "common.ingress.annotations" . | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
-    # Looser than every timeout inside the API (synchronous dataplane waits stop at 280 s), so a genuine
+    # Looser than every timeout inside the API (synchronous dataplane waits stop at 600 s), so a genuine
     # hang yields a real 504 instead of a connection that just dies.
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
     nginx.ingress.kubernetes.io/proxy-read-timeout: {{ .Values.ingress.proxyTimeoutSeconds | quote }}
