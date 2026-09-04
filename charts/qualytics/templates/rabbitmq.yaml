@@ -73,6 +73,10 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}-rabbitmq
+      annotations:
+        # Karpenter only: keeps consolidation from bouncing the single broker. kubectl drain and
+        # node-group upgrades ignore it; drift and expiry are bounded by the NodePool terminationGracePeriod.
+        karpenter.sh/do-not-disrupt: "true"
     spec:
       securityContext:
         fsGroup: 999
@@ -272,19 +276,6 @@ spec:
   {{- end }}
   selector:
     app: {{ .Release.Name }}-rabbitmq
-
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: {{ .Release.Name }}-rabbitmq
-spec:
-  # With 1 replica this deliberately blocks ALL voluntary evictions/drains.
-  # Spot reclaim and node failure bypass the eviction API.
-  minAvailable: 1
-  selector:
-    matchLabels:
-      app: {{ .Release.Name }}-rabbitmq
 
 {{- if and .Values.rabbitmq.enableInbound .Values.rabbitmq.tls.enabled }}
 ---

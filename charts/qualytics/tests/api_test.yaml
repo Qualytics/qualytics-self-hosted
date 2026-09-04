@@ -24,11 +24,72 @@ tests:
         documentIndex: 1
 
   # Strategy configuration
-  - it: should use Recreate strategy
+  - it: should roll without surge, keeping one pod serving
     asserts:
       - equal:
           path: spec.strategy.type
-          value: Recreate
+          value: RollingUpdate
+        documentIndex: 0
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 0
+        documentIndex: 0
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 3
+        documentIndex: 0
+
+  - it: should degrade to replace-in-place for a single replica
+    set:
+      controlplane.replicas: 1
+    asserts:
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 1
+        documentIndex: 0
+      - equal:
+          path: spec.maxUnavailable
+          value: 1
+        documentIndex: 2
+
+  - it: should spread pods across nodes and mirror the rollout policy in a PodDisruptionBudget
+    asserts:
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].topologyKey
+          value: kubernetes.io/hostname
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].whenUnsatisfiable
+          value: ScheduleAnyway
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.topologySpreadConstraints[0].labelSelector.matchLabels.app
+          value: RELEASE-NAME-api
+        documentIndex: 0
+      - isKind:
+          of: PodDisruptionBudget
+        documentIndex: 2
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-api
+        documentIndex: 2
+      - equal:
+          path: spec.maxUnavailable
+          value: 3
+        documentIndex: 2
+      - equal:
+          path: spec.selector.matchLabels.app
+          value: RELEASE-NAME-api
+        documentIndex: 2
+      - notExists:
+          path: spec.minAvailable
+        documentIndex: 2
+
+  - it: should hold SIGTERM until the endpoint is withdrawn
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
+          value: ["sleep", "5"]
         documentIndex: 0
 
   # Health probes
@@ -38,13 +99,16 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.httpGet.path
           value: /api/health
         documentIndex: 0
-      - equal:
+      - notExists:
           path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
-          value: 10
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 2
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
-          value: 30
+          value: 150
         documentIndex: 0
 
   - it: should configure readiness probe on API
@@ -52,6 +116,10 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
           value: /api/health
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 5
         documentIndex: 0
 
   - it: should configure liveness probe on API

@@ -281,6 +281,9 @@ resource "kubectl_manifest" "nodepool_app" {
             kind  = "NodeClass"
             name  = "qualytics-app"
           }
+          # Bounds drains held by do-not-disrupt pods (the RabbitMQ broker) so drift and expiry
+          # still recycle the node instead of waiting forever.
+          terminationGracePeriod = "1h"
           requirements = [
             { key = "node.kubernetes.io/instance-type", operator = "In", values = var.app_node_instance_types },
             { key = "karpenter.sh/capacity-type", operator = "In", values = ["on-demand"] },

@@ -6,7 +6,7 @@ tests:
   - it: should create rabbitmq resources
     asserts:
       - hasDocuments:
-          count: 5
+          count: 4
 
   # Basic document checks (default = pvc disabled, so StatefulSet is doc 2)
   - it: should create rabbitmq StatefulSet
@@ -18,9 +18,9 @@ tests:
   # PVC vs emptyDir tests
   - it: should use emptyDir by default (no PVC, ephemeral state)
     asserts:
-      # Should have 5 documents (ConfigMap, Secret, StatefulSet, Service, PDB - no PVC)
+      # Should have 4 documents (ConfigMap, Secret, StatefulSet, Service - no PVC)
       - hasDocuments:
-          count: 5
+          count: 4
       - isKind:
           of: ConfigMap
         documentIndex: 0
@@ -33,9 +33,6 @@ tests:
       - isKind:
           of: Service
         documentIndex: 3
-      - isKind:
-          of: PodDisruptionBudget
-        documentIndex: 4
       # StatefulSet volume should use emptyDir
       - contains:
           path: spec.template.spec.volumes
@@ -49,7 +46,7 @@ tests:
       rabbitmq.pvc.enabled: true
     asserts:
       - hasDocuments:
-          count: 6
+          count: 5
       # PVC resource should exist
       - isKind:
           of: PersistentVolumeClaim
@@ -196,21 +193,16 @@ tests:
           value: true
         documentIndex: 3
 
-  - it: should render PDB with minAvailable 1 matching the StatefulSet pod label
+  - it: should keep Karpenter consolidation off the broker without a disruption budget
     asserts:
+      - equal:
+          path: spec.template.metadata.annotations["karpenter.sh/do-not-disrupt"]
+          value: "true"
+        documentIndex: 2
       - containsDocument:
           kind: PodDisruptionBudget
           apiVersion: policy/v1
-          name: RELEASE-NAME-rabbitmq
-          any: true
-      - equal:
-          path: spec.minAvailable
-          value: 1
-        documentIndex: 4
-      - equal:
-          path: spec.selector.matchLabels.app
-          value: RELEASE-NAME-rabbitmq
-        documentIndex: 4
+        not: true
 
   - it: should keep the governing service headless and expose inbound on a dedicated NodePort service
     set:
@@ -218,7 +210,7 @@ tests:
       rabbitmq.tls.enabled: true
     asserts:
       - hasDocuments:
-          count: 6
+          count: 5
       # Governing service (doc 3) stays headless with publishNotReadyAddresses even with inbound on.
       - equal:
           path: spec.clusterIP
@@ -228,23 +220,23 @@ tests:
           path: spec.publishNotReadyAddresses
           value: true
         documentIndex: 3
-      # Dedicated inbound NodePort service (doc 5) carries the external AMQP-TLS contract.
+      # Dedicated inbound NodePort service (doc 4) carries the external AMQP-TLS contract.
       - equal:
           path: metadata.name
           value: "RELEASE-NAME-rabbitmq-inbound"
-        documentIndex: 5
+        documentIndex: 4
       - equal:
           path: spec.type
           value: "NodePort"
-        documentIndex: 5
+        documentIndex: 4
       - equal:
           path: spec.ports[0].nodePort
           value: 30671
-        documentIndex: 5
+        documentIndex: 4
       - lengthEqual:
           path: spec.ports
           count: 1
-        documentIndex: 5
+        documentIndex: 4
 
   # Image pull secrets
   - it: should have image pull secrets by default

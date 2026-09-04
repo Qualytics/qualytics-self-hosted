@@ -6,7 +6,12 @@ metadata:
 spec:
   replicas: {{ .Values.frontend.replicas }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      # No surge: app nodes are packed to their requests, so replacements reuse the freed slots.
+      # Everything but one pod may cycle at once; a single replica degrades to replace-in-place.
+      maxSurge: 0
+      maxUnavailable: {{ max 1 (sub .Values.frontend.replicas 1) }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}-frontend
@@ -29,6 +34,14 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
       {{- end }}
+      # Soft spread so a drained node leaves pods serving elsewhere; single-node installs still schedule.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: {{ .Release.Name }}-frontend
       containers:
       - name: cfa
         image: "{{ tpl .Values.global.imageUrls.frontendImageUrl . }}:{{ .Values.frontendImage.image.frontendImageTag }}"
@@ -41,6 +54,11 @@ spec:
             memory: {{ .Values.frontend.resources.limits.memory }}
         ports:
           - containerPort: {{ .Values.frontend.ingress.servicePort }}
+        lifecycle:
+          preStop:
+            # Let ingress-nginx withdraw this endpoint before nginx stops accepting connections.
+            exec:
+              command: ["sleep", "5"]
         startupProbe:
           httpGet:
             path: /health
@@ -117,3 +135,15 @@ spec:
       name: http
   selector:
     app: {{ .Release.Name }}-frontend
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-frontend
+spec:
+  # Same policy as the rollout: a drain may take every pod but one. maxUnavailable never reaches
+  # zero, so a single-replica install cannot pin a node the way a minAvailable budget would.
+  maxUnavailable: {{ max 1 (sub .Values.frontend.replicas 1) }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-frontend

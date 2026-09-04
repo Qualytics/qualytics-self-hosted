@@ -8,7 +8,12 @@ metadata:
 spec:
   replicas: {{ .Values.controlplane.replicas }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      # No surge: app nodes are packed to their requests, so replacements reuse the freed slots.
+      # Everything but one pod may cycle at once; a single replica degrades to replace-in-place.
+      maxSurge: 0
+      maxUnavailable: {{ max 1 (sub .Values.controlplane.replicas 1) }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}-api
@@ -36,6 +41,14 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
       {{- end }}
+      # Soft spread so a drained node leaves pods serving elsewhere; single-node installs still schedule.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: {{ .Release.Name }}-api
       containers:
       - name: api
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
@@ -53,19 +66,25 @@ spec:
           - name: egress-info
             mountPath: /etc/qualytics/egress
             readOnly: true
+        lifecycle:
+          preStop:
+            # Let ingress-nginx withdraw this endpoint before uvicorn stops accepting connections.
+            exec:
+              command: ["sleep", "5"]
+        # Uvicorn listens ~17 s after container start (Python imports); poll tightly so Ready follows
+        # within one period. Same 5-minute budget as before.
         startupProbe:
           httpGet:
             path: /api/health
             port: {{ .Values.controlplane.ingress.servicePort }}
-          initialDelaySeconds: 10
-          periodSeconds: 10
+          periodSeconds: 2
           timeoutSeconds: 5
-          failureThreshold: 30
+          failureThreshold: 150
         readinessProbe:
           httpGet:
             path: /api/health
             port: {{ .Values.controlplane.ingress.servicePort }}
-          periodSeconds: 30
+          periodSeconds: 5
           timeoutSeconds: 5
           failureThreshold: 3
         livenessProbe:
@@ -399,3 +418,15 @@ spec:
       name: http
   selector:
     app: {{ .Release.Name }}-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-api
+spec:
+  # Same policy as the rollout: a drain may take every pod but one. maxUnavailable never reaches
+  # zero, so a single-replica install cannot pin a node the way a minAvailable budget would.
+  maxUnavailable: {{ max 1 (sub .Values.controlplane.replicas 1) }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-api
