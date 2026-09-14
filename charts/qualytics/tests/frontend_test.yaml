@@ -188,7 +188,7 @@ tests:
       global.authType: "db"
     asserts:
       - failedTemplate:
-          errorPattern: global.authType must be exactly one of AUTH0, OIDC, or DB
+          errorPattern: global.authType must be exactly one of AUTH0 or DB
 
   - it: should configure DB auth without Auth0 client settings
     set:
@@ -226,10 +226,10 @@ tests:
             value: "true"
         documentIndex: 0
 
-  # Independent of auth type — set for OIDC deployments too
-  - it: should set disable downloads regardless of OIDC auth type
+  # Independent of auth type — set for DB deployments too
+  - it: should set disable downloads regardless of DB auth type
     set:
-      global.authType: "OIDC"
+      global.authType: "DB"
       frontend.disableDownloads: true
     asserts:
       - contains:

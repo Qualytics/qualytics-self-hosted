@@ -80,8 +80,8 @@ global:
   platform: "aws"
   deploymentMode: "kubernetes" # kubernetes | databricks
   dnsRecord: "changeme.qualytics.io"
-  # Authentication authority: AUTH0 or OIDC preserve the legacy configuration;
-  # DB enables the database-backed provider configurations.
+  # Authentication authority: AUTH0 (managed by Qualytics) or DB (providers configured in
+  # the Qualytics database). The legacy OIDC value is rejected; see docs/authentication.md.
   authType: "AUTH0"
   # Names of the Secrets used to pull container images, applied to every pod
   # (control plane, frontend, Spark driver and executors, postgres, rabbitmq,
@@ -150,43 +150,19 @@ secrets:
     auth0_audience: changeme-api
     auth0_organization: org_changeme
     auth0_spa_client_id: spa_client_id
-  oidc: # required for authType OIDC
-    # Discovery URL (recommended) — auto-discovers authorization_endpoint, token_endpoint,
-    # userinfo_endpoint, jwks_uri, and issuer from the IdP's .well-known/openid-configuration.
-    # When set, the 3 endpoint fields below become optional (used as fallbacks only).
-    oidc_discovery_url: ""
-    oidc_scopes: "openid,email,profile"
-    # Endpoint overrides — leave empty when using oidc_discovery_url
-    oidc_authorization_endpoint: ""
-    oidc_token_endpoint: ""
-    oidc_userinfo_endpoint: ""
-    # Token endpoint auth method — auto-detected from discovery doc if empty.
-    # Set to "client_secret_basic" for IdPs that only accept Basic auth.
-    # Set to "client_secret_post" for IdPs that reject duplicate credentials (e.g., Okta).
-    oidc_token_auth_method: ""
-    # OAuth2 client credentials (required)
-    oidc_client_id: ""
-    oidc_client_secret: ""
-    # Claims mapping — OIDC-standard defaults work for most IdPs
-    oidc_user_id_key: "sub"
-    oidc_user_email_key: "email"
-    oidc_user_name_key: "name"
-    oidc_user_fname_key: "given_name"
-    oidc_user_lname_key: "family_name"
-    oidc_user_picture_key: "picture"
-    oidc_user_provider_key: "iss"
-    # Claim holding the user's group listing (maps to OIDC_USER_GROUPS_KEY). The listing is always
-    # recorded per user (shown in the user's IdP-groups view for diagnosing mapping). Set to whatever
-    # claim your IdP emits (e.g. "groups", "roles"). Note: the IdP must actually emit this claim —
-    # that often requires requesting an extra scope via oidc_scopes above (e.g. "groups").
-    oidc_user_groups_key: "groups"
+  oidc:
+    # Deployment-wide settings for database-backed OpenID Connect providers. Provider
+    # endpoints, credentials, scopes, and claim mappings are configured per provider in the
+    # Qualytics database (Settings → Access → Providers), not here.
+    #
     # Enable add-only, case-insensitive group→Team membership sync (maps to OIDC_GROUP_TEAM_SYNC_ENABLED).
-    # When true, a user is added to any Team whose name matches a presented group; users are never
-    # removed. Default false (opt-in) because it grants Team membership — and thus data access — from
-    # IdP claims. The group listing above is recorded regardless of this setting.
+    # When true, a user is added to any Team whose name matches a group presented by the
+    # provider's groups claim; users are never removed. Default false (opt-in) because it
+    # grants Team membership — and thus data access — from IdP claims.
     oidc_group_team_sync_enabled: false
+    # Allow HTTP (non-TLS) identity provider endpoints. Development only.
     oidc_allow_insecure_transport: false
-    # oidc_jwt_ttl_minutes: 60
+    # Custom PEM certificate for validating identity provider TLS signers.
     # oidc_signer_pem_url: "https://www.digicert.com/CACerts/DigiCertGlobalRootG2.crt.pem"
   auth:
     # Must be replaced for a fresh install — the chart rejects the ChangeMe! default.
@@ -352,7 +328,7 @@ controlplane:
     # unchanged. Leave false when your IdP is reachable at a public address.
     allowPrivateNetworkFetches: false
     # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
-    # Set to false to force all access through OIDC cookie-based auth only.
+    # Set to false to force all access through browser cookie-session authentication only.
     allowQualyticsIssuer: true
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:

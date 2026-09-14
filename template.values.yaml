@@ -12,12 +12,11 @@ global:
   # Your DNS record (REQUIRED) - the domain where Qualytics will be accessible
   dnsRecord: "your-domain.example.com"
   # Authentication authority. Exactly one of (case-sensitive — the chart rejects anything else):
-  #   "OIDC"  — direct integration with your IdP via secrets.oidc below (recommended)
-  #   "DB"    — providers (OIDC / SAML2 / password) configured in the Qualytics database,
-  #             under Settings -> Access -> Providers. Cutover is a maintenance window.
+  #   "DB"    — providers (OpenID Connect, SAML 2.0, or password) configured in the Qualytics
+  #             database under Settings -> Access -> Providers (recommended for self-hosted)
   #   "AUTH0" — managed by Qualytics; requires egress to auth.qualytics.io (not air-gapped)
   # See docs/authentication.md.
-  authType: "OIDC"
+  authType: "DB"
   # Pull secrets applied to every pod. Defaults to the regcred Secret created
   # during installation; uncomment and set to [] if your registry allows
   # unauthenticated pulls (no regcred Secret needed). See docs/docker-images.md.
@@ -25,8 +24,8 @@ global:
 
 #--------------------------------------------------------------------------------
 # Deployment and Authentication Configuration (REQUIRED)
-# Choose ONE of the following: OIDC OR Auth0
-# See: https://userguide.qualytics.io/deployments/oidc-configuration/
+# Choose ONE of the following: database-backed providers OR Auth0
+# See: docs/authentication.md
 # See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
@@ -35,38 +34,16 @@ secrets:
   deployment:
     identifier: ""
 
-  # --- Option A: OIDC (direct IdP integration, recommended for self-hosted) ---
-  # Configure with your identity provider's details
-  oidc:
-    # Discovery URL (recommended) — auto-discovers endpoints from your IdP.
-    # When set, authorization_endpoint, token_endpoint, userinfo_endpoint,
-    # jwks_uri, and issuer are discovered automatically.
-    # Examples:
-    #   Okta:     https://<your-org>.okta.com/.well-known/openid-configuration
-    #   Entra ID: https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
-    #   Google:   https://accounts.google.com/.well-known/openid-configuration
-    #   Keycloak: https://<host>/realms/<realm>/.well-known/openid-configuration
-    oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
-    oidc_scopes: "openid,email,profile"
-    oidc_client_id: "your-client-id"
-    oidc_client_secret: "your-client-secret"
-    # Claims mapping defaults (sub, email, name, given_name, family_name, picture, iss)
-    # work for most IdPs — only override if your IdP uses non-standard claim names.
-    # Group→Team sync: the claim named by oidc_user_groups_key (default "groups") is recorded per
-    # user. Your IdP must emit this claim — that often requires adding a scope (e.g. append "groups"
-    # to oidc_scopes above). Override the claim name only if your IdP differs:
-    # oidc_user_groups_key: "groups"
-    # To also auto-add users to Teams whose name matches a presented group (add-only, case-insensitive),
-    # enable the sync — it is off by default because it grants Team membership from IdP claims:
-    # oidc_group_team_sync_enabled: true
-    # Token auth method — auto-detected from discovery doc if empty.
-    # Set to "client_secret_basic" for IdPs that only accept Basic auth.
-    # Set to "client_secret_post" for IdPs that reject duplicate credentials (e.g., Okta).
-    # oidc_token_auth_method: ""
-    # Endpoint overrides (optional when using discovery URL):
-    # oidc_authorization_endpoint: ""
-    # oidc_token_endpoint: ""
-    # oidc_userinfo_endpoint: ""
+  # --- Option A: Database-backed providers (recommended for self-hosted) ---
+  # No identity-provider values are needed in Helm. After installation, open the
+  # login page, create the first administrator account, then configure your
+  # identity provider (OpenID Connect or SAML 2.0) or password sign-in under
+  # Settings -> Access -> Providers. Optional deployment-wide settings:
+  # oidc:
+  #   # Add users to Teams whose names match their IdP groups (add-only, case-insensitive).
+  #   oidc_group_team_sync_enabled: false
+  #   # Development only: allow HTTP (non-TLS) identity provider endpoints.
+  #   oidc_allow_insecure_transport: false
 
   # --- Option B: Auth0 (managed by Qualytics) ---
   # Uncomment and configure if using authType: "AUTH0"
