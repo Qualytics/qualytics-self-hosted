@@ -44,8 +44,11 @@ boots in Auth0 mode. Rejecting the value up front turns that into one clear mess
 */}}
 {{- define "qualytics.validate.authType" -}}
 {{- $authType := .Values.global.authType | toString -}}
-{{- if not (has $authType (list "AUTH0" "OIDC" "DB")) -}}
-{{- fail (printf "global.authType must be exactly one of AUTH0, OIDC, or DB (case-sensitive); got %q" $authType) -}}
+{{- if eq $authType "OIDC" -}}
+{{- fail "global.authType \"OIDC\" is no longer supported: configure your identity provider as a database-backed provider under global.authType \"DB\" (see docs/authentication.md)" -}}
+{{- end -}}
+{{- if not (has $authType (list "AUTH0" "DB")) -}}
+{{- fail (printf "global.authType must be exactly one of AUTH0 or DB (case-sensitive); got %q" $authType) -}}
 {{- end -}}
 {{- end -}}
 

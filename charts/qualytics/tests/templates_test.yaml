@@ -28,20 +28,6 @@ tests:
       - exists:
           path: data.auth0_spa_client_id
 
-  - it: should render secrets with OIDC configuration
-    template: secrets.yaml
-    set:
-      global.authType: "OIDC"
-      secrets.oidc.oidc_scopes: "openid profile email"
-      secrets.oidc.oidc_client_id: "test-client"
-    asserts:
-      - isKind:
-          of: Secret
-      - exists:
-          path: data.oidc_scopes
-      - exists:
-          path: data.oidc_client_id
-
   - it: should render DB auth without legacy provider secrets
     template: secrets.yaml
     set:

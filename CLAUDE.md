@@ -503,8 +503,8 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Port**: 8000
 - **Features**:
   - SMTP email notifications (optional; credentials omitted → no SMTP AUTH attempt)
-  - Authentication (AUTH0 or OIDC; OIDC supports `oidc_discovery_url`, `oidc_token_auth_method`, `oidc_user_groups_key`, and add-only `oidc_group_team_sync_enabled`)
-  - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force OIDC cookie auth)
+  - Authentication (AUTH0 or DB; database-backed providers are configured in the application, with deployment-wide `secrets.oidc.oidc_group_team_sync_enabled` and `oidc_allow_insecure_transport`)
+  - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force browser cookie-session auth)
   - Proxy support (HTTP/SOCKS5)
   - TLS certificate verification control
   - Telemetry export (opt-in `controlplane.observability`: Pydantic Logfire via `secrets.observability.logfire_token` and/or any OTLP/HTTP backend via `otlp.endpoint` + `secrets.observability.otlp_headers`; applies to API and CMD)
@@ -663,19 +663,11 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
   - `auth0_spa_client_id` (SPA client ID)
 - **Egress Requirement**: Access to `https://auth.qualytics.io`
 
-### OIDC (Custom IdP)
-- **Type**: Set `global.authType: "OIDC"`
-- **Required Secrets**:
-  - `oidc_scopes`
-  - `oidc_authorization_endpoint`
-  - `oidc_token_endpoint`
-  - `oidc_userinfo_endpoint`
-  - `oidc_client_id`
-  - `oidc_client_secret`
-  - User mapping keys (id, email, name, fname, lname, picture, provider)
-- **Optional**:
-  - `oidc_allow_insecure_transport` (default: false)
-  - `oidc_signer_pem_url` (for custom certificate validation)
+### Database-backed providers (DB)
+- **Type**: Set `global.authType: "DB"`
+- **Configuration**: identity providers (OpenID Connect, SAML 2.0) and password sign-in are configured in the application under Settings → Access → Providers; the chart renders no IdP secrets
+- **Deployment-wide values** (`secrets.oidc`, optional): `oidc_group_team_sync_enabled` (default: false), `oidc_allow_insecure_transport` (default: false), `oidc_signer_pem_url`
+- **Removed mode**: `global.authType: "OIDC"` fails the render; docs/authentication.md has the migration steps
 - **Use Case**: Air-gapped deployments or custom enterprise IdP
 
 ## Node Scheduling
@@ -712,7 +704,7 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 3. `helm` CLI (v3.12+)
 4. Qualytics-issued container-registry token
 5. Unique deployment identifier provided by Qualytics
-6. Auth0 or OIDC configuration details
+6. Auth0 configuration details, unless using database-backed providers
 
 ### Initial Setup
 1. **Create namespace and registry secret**:
@@ -818,7 +810,7 @@ Keep these in sync when chart behavior changes — image tags and version string
 - [docs/docker-images.md](docs/docker-images.md) — image inventory (tags pinned per chart version), private-registry mirroring, runtime-resolved JDBC drivers
 - [docs/custom-maven-repository.md](docs/custom-maven-repository.md) — `dataplane.ivy.*` chart-generated `ivysettings.xml` Secret to resolve `extraPackages` from an internal Artifactory/Nexus instead of Maven Central
 - [docs/cluster-sizing.md](docs/cluster-sizing.md) — six sizing tiers, per-cloud instance types, per-tier Helm values
-- [docs/authentication.md](docs/authentication.md) — OIDC/Auth0 values → env mapping, group→Team sync, troubleshooting
+- [docs/authentication.md](docs/authentication.md) — DB/Auth0 modes, deployment-wide values → env mapping, group→Team sync, migration from the removed OIDC mode, troubleshooting
 - [docs/external-postgres-setup.md](docs/external-postgres-setup.md) + [docs/external-postgres-faq.md](docs/external-postgres-faq.md) — `postgres.enabled: false` topology
 - [docs/ingress-tls.md](docs/ingress-tls.md) — BYO TLS Secret precedence
 - [docs/license-management.md](docs/license-management.md) — license activation and the 31-day grace period

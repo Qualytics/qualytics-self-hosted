@@ -1,160 +1,70 @@
 # Authentication Configuration
 
-This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics supports three authentication modes:
+This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics supports two authentication modes:
 
 | Mode | Helm Value | Description | Air-Gapped Compatible |
 |------|-----------|-------------|:---------------------:|
-| **OIDC** | `global.authType: "OIDC"` | Direct integration with your enterprise Identity Provider (recommended) | Yes |
-| **Database-backed** | `global.authType: "DB"` | Providers configured in the Qualytics database (OIDC, SAML2, or password) | Yes |
+| **Database-backed** | `global.authType: "DB"` | Identity providers (OpenID Connect or SAML 2.0) and password sign-in configured in the Qualytics database (recommended) | Yes |
 | **Auth0** | `global.authType: "AUTH0"` | Managed by Qualytics — requires egress to `auth.qualytics.io` | No |
 
-For detailed guides including IdP-specific examples, see the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) and [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) in the Qualytics UserGuide.
+The former `global.authType: "OIDC"` mode, which read a single identity provider from `secrets.oidc.*`, is no longer supported: the chart rejects the value and the controlplane refuses to start with it. See [Migrating from the removed OIDC mode](#migrating-from-the-removed-oidc-mode).
+
+For Auth0 setup, see the [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) in the Qualytics UserGuide.
 
 Authentication settings supplement the required installation configuration. Every deployment must also set the Qualytics-provided `secrets.deployment.identifier` described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
 
 ---
 
-## OIDC Configuration (Recommended)
+## Database-Backed Providers (Recommended)
 
-Set `global.authType` to `"OIDC"` and configure your Identity Provider credentials under `secrets.oidc`.
-
-### Prerequisites
-
-1. Register Qualytics as a **Web Application** in your IdP
-2. Set the **redirect URI** to `https://<your-dns-record>/api/callback`
-3. Use **Authorization Code** grant type
-4. Enable scopes: `openid`, `email`, `profile` (at minimum `openid`)
-
-### Discovery URL (Recommended)
-
-The simplest way to configure OIDC is with a **discovery URL**. Set `oidc_discovery_url` to your IdP's `.well-known/openid-configuration` endpoint and the controlplane will automatically discover 5 endpoint fields at startup:
-
-| Auto-Discovered Field | Env Var Made Optional |
-|-----------------------|----------------------|
-| `authorization_endpoint` | `OIDC_AUTHORIZATION_ENDPOINT` |
-| `token_endpoint` | `OIDC_TOKEN_ENDPOINT` |
-| `userinfo_endpoint` | `OIDC_USERINFO_ENDPOINT` |
-| `jwks_uri` | `OIDC_JWKS_URI` |
-| `issuer` | `OIDC_ISSUER` |
-
-**For OIDC itself, discovery reduces the required IdP-specific configuration to four values** (scopes, claims mapping, and security settings have sensible defaults):
+Set `global.authType` to `"DB"`. Identity providers are configured in the application rather than in Helm values, so the chart renders no IdP credentials.
 
 ```yaml
 global:
-  authType: "OIDC"
+  authType: "DB"
 
 secrets:
-  oidc:
-    oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
-    oidc_client_id: "your-client-id"
-    oidc_client_secret: "your-client-secret"
   auth:
     jwt_signing_secret: "<random-32+-char-string>"  # generate with: openssl rand -base64 32
 ```
 
-**Defaults applied automatically:**
+### First sign-in
 
-| Key | Default | Override if... |
-|-----|---------|----------------|
-| `oidc_scopes` | `openid,email,profile` | Your IdP requires different scopes |
-| `oidc_user_id_key` | `sub` | Your IdP uses a non-standard claim |
-| `oidc_user_email_key` | `email` | " |
-| `oidc_user_name_key` | `name` | " |
-| `oidc_user_fname_key` | `given_name` | " |
-| `oidc_user_lname_key` | `family_name` | " |
-| `oidc_user_picture_key` | `picture` | " |
-| `oidc_user_provider_key` | `iss` | " |
-| `oidc_user_groups_key` | `groups` | Your IdP emits group membership under a different claim (e.g. `roles`) |
-| `oidc_group_team_sync_enabled` | `false` | You want IdP groups to grant Team membership — see [Group → Team sync](#group--team-sync-optional) |
-| `oidc_token_auth_method` | *(unset — auto-detected from the discovery document)* | Your IdP only accepts one method; set `client_secret_post` or `client_secret_basic` explicitly |
-| `oidc_allow_insecure_transport` | `false` | Development only (allows HTTP) |
-| `oidc_jwt_ttl_minutes` | *(unset — controlplane default)* | Override JWT session TTL in minutes |
+A fresh installation seeds a password provider. Open `https://<dnsRecord>/`, create the first administrator account from the login page, then configure providers under **Settings → Access → Providers**:
 
-**Common discovery URLs:**
+- **OpenID Connect** — supply the discovery URL (or explicit endpoints), client ID, client secret, scopes, and optional claim mappings and groups claim. Register Qualytics in your IdP as a Web Application using the Authorization Code grant and the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>`, where `<provider-id>` is the numeric id assigned when the provider is created.
+- **SAML 2.0** — supply the IdP metadata; the assertion consumer service is `https://<dnsRecord>/api/auth/saml2/acs` (see [SAML2 and the API ingress WAF](#saml2-and-the-api-ingress-waf)).
+- **Password** — the built-in provider; administrators invite users by email.
 
-| Identity Provider | Discovery URL |
-|-------------------|--------------|
-| **Okta** | `https://<your-org>.okta.com/.well-known/openid-configuration` |
-| **Azure AD (Entra ID)** | `https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration` |
-| **Google Workspace** | `https://accounts.google.com/.well-known/openid-configuration` |
-| **Keycloak** | `https://<keycloak-host>/realms/<realm>/.well-known/openid-configuration` |
-| **OneLogin** | `https://<your-org>.onelogin.com/oidc/2/.well-known/openid-configuration` |
+Providers can be staged and verified before they are enabled, and several providers can be enabled at once. The login page lists every enabled provider.
 
-> **Fallback behavior:** If the discovery fetch fails or a field is missing from the response, the controlplane falls back to any individually configured endpoint env vars. You can set both `oidc_discovery_url` and individual endpoints for resilience.
+### Deployment-wide provider settings
 
-### Manual Endpoint Configuration (Fallback)
+A few settings apply to every database-backed OpenID Connect provider and are still supplied through Helm because they have no per-provider equivalent:
 
-If your IdP doesn't support discovery, or you need to override specific endpoints, configure them individually:
-
-```yaml
-global:
-  authType: "OIDC"
-
-secrets:
-  oidc:
-    # Individual endpoints (required when NOT using oidc_discovery_url)
-    oidc_authorization_endpoint: "https://your-idp.example.com/oauth2/authorize"
-    oidc_token_endpoint: "https://your-idp.example.com/oauth2/token"
-    oidc_userinfo_endpoint: "https://your-idp.example.com/oauth2/userinfo"
-
-    # Required: OAuth2 client credentials
-    oidc_client_id: "your-client-id"
-    oidc_client_secret: "your-client-secret"
-
-    # Scopes, claims mapping, and security settings use sensible defaults
-    # (see defaults table above). Override only if needed.
-
-  auth:
-    jwt_signing_secret: "<random-32+-char-string>"  # generate with: openssl rand -base64 32
-```
-
-### Helm Values to Environment Variable Mapping
-
-The Helm chart creates a Kubernetes Secret (`qualytics-creds`) and injects values as environment variables into the controlplane pods (API and CMD deployments).
-
-| Helm Value (`secrets.oidc.*`) | Environment Variable | Source | Description |
-|-------------------------------|---------------------|--------|-------------|
-| `oidc_scopes` | `OIDC_SCOPES` | Secret | Required. Comma-separated OAuth2 scopes (e.g., `openid,email,profile`). |
-| `oidc_client_id` | `OIDC_CLIENT_ID` | Secret | Required. OAuth2 client ID registered with your IdP. |
-| `oidc_client_secret` | `OIDC_CLIENT_SECRET` | Secret | Required. OAuth2 client secret registered with your IdP. |
-| `oidc_discovery_url` | `OIDC_DISCOVERY_URL` | Secret (if set) | Optional. OpenID Connect discovery URL; auto-discovers endpoints, JWKS, and issuer. |
-| `oidc_authorization_endpoint` | `OIDC_AUTHORIZATION_ENDPOINT` | Secret | Optional when using discovery URL. IdP authorization endpoint. |
-| `oidc_token_endpoint` | `OIDC_TOKEN_ENDPOINT` | Secret | Optional when using discovery URL. IdP token endpoint. |
-| `oidc_userinfo_endpoint` | `OIDC_USERINFO_ENDPOINT` | Secret | Optional when using discovery URL. IdP userinfo endpoint. |
-| `oidc_token_auth_method` | `OIDC_TOKEN_AUTH_METHOD` | Secret (if set) | Optional. `client_secret_post` or `client_secret_basic`. Leave empty to auto-detect from the discovery document; set it for IdPs that accept only one method (e.g. `client_secret_post` for Okta). |
-| `oidc_user_id_key` | `OIDC_USER_ID_KEY` | Secret | Optional. Claim name for the user ID. Default: `sub`. |
-| `oidc_user_email_key` | `OIDC_USER_EMAIL_KEY` | Secret | Optional. Claim name for the user email. Default: `email`. |
-| `oidc_user_name_key` | `OIDC_USER_NAME_KEY` | Secret | Optional. Claim name for the user display name. Default: `name`. |
-| `oidc_user_fname_key` | `OIDC_USER_FNAME_KEY` | Secret | Optional. Claim name for the user first name. Default: `given_name`. |
-| `oidc_user_lname_key` | `OIDC_USER_LNAME_KEY` | Secret | Optional. Claim name for the user last name. Default: `family_name`. |
-| `oidc_user_picture_key` | `OIDC_USER_PICTURE_KEY` | Secret | Optional. Claim name for the user avatar URL. Default: `picture`. |
-| `oidc_user_provider_key` | `OIDC_USER_PROVIDER_KEY` | Secret | Optional. Claim name for the identity provider. Default: `iss`. |
-| `oidc_user_groups_key` | `OIDC_USER_GROUPS_KEY` | Secret (if set) | Optional. Claim holding the user's group listing. Default: `groups`. |
-| `oidc_group_team_sync_enabled` | `OIDC_GROUP_TEAM_SYNC_ENABLED` | Direct value | Optional. Add users to Teams matching their IdP groups. Default: `false`. |
-| `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | Direct value | Optional. Allow HTTP (non-TLS) for OIDC endpoints. Default: `false`. |
-| `oidc_jwt_ttl_minutes` | `OIDC_JWT_TTL_MINUTES` | Secret (if set) | Optional. JWT session lifetime in minutes. Omit to use the controlplane default. |
-| `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | Direct value (if set) | Optional. URL to a custom PEM certificate for token signature validation. |
+| Helm Value (`secrets.oidc.*`) | Environment Variable | Default | Description |
+|-------------------------------|---------------------|---------|-------------|
+| `oidc_group_team_sync_enabled` | `OIDC_GROUP_TEAM_SYNC_ENABLED` | `false` | Add users to Teams matching the groups presented by the provider's groups claim. |
+| `oidc_allow_insecure_transport` | `OIDC_ALLOW_INSECURE_HTTP` | `false` | Allow HTTP (non-TLS) identity provider endpoints. Development only. |
+| `oidc_signer_pem_url` | `OIDC_SIGNER_PEM_URL` | *(unset)* | URL to a custom PEM certificate for validating identity provider TLS signers. |
 
 Additionally, these are set automatically by the Helm chart:
 
 | Environment Variable | Value | Description |
 |---------------------|-------|-------------|
-| `API_AUTH` | `OIDC` | Auth mode |
-| `OIDC_REDIRECT_URL` | `https://<dnsRecord>/api/callback` | Computed from `global.dnsRecord` and `API_ROOT_PATH` |
+| `API_AUTH` | `DB` | Auth mode |
 | `CFA_ROOT_URL` | `https://<dnsRecord>` | Frontend URL |
 | `CORS_ORIGINS` | `<dnsRecord>` | Allowed CORS origins |
 
 ### Group → Team sync (optional)
 
-Qualytics records the group listing presented by your IdP for every user, so you can inspect it while mapping groups to Teams. Recording happens whenever the claim named by `oidc_user_groups_key` (default `groups`) is present in the token — no extra configuration required.
+Qualytics records the group listing presented by an OpenID Connect provider for every user, so you can inspect it while mapping groups to Teams. Recording happens whenever the provider's configured **groups claim** is present in the token.
 
 Turning on `oidc_group_team_sync_enabled` additionally uses those groups to grant Team membership:
 
 ```yaml
 secrets:
   oidc:
-    oidc_scopes: "openid,email,profile,groups"   # your IdP must actually emit the claim
-    oidc_user_groups_key: "groups"
     oidc_group_team_sync_enabled: true
 ```
 
@@ -162,27 +72,24 @@ secrets:
 - Sync is **add-only** — a user is added to any Team whose name matches a presented group, and is never removed from a Team when the group disappears.
 - It is **opt-in (default `false`)** because Team membership carries data access. Enable it only once your Team names line up with your IdP group names.
 
-> If group listings come back empty, the IdP is not emitting the claim. Most IdPs require both an extra scope (add `groups` to `oidc_scopes`) and a claim/token configuration change on the application registration.
+> If group listings come back empty, the IdP is not emitting the claim. Most IdPs require both an extra scope (add `groups` to the provider's scopes) and a claim/token configuration change on the application registration.
 
 ---
 
-## Database-Backed Provider Cutover
+## Cutting Over to Database-Backed Providers
 
 `global.authType: "DB"` is an explicit maintenance-window cutover to providers configured under
-**Settings → Access → Providers**. Provider rows may be staged and verified while `AUTH0` or
-`OIDC` remains authoritative. Legacy OIDC environment configuration is imported into a provider
-row on startup when no provider configurations exist, but it continues to control login until this
-value is changed to `DB`.
+**Settings → Access → Providers**. Provider rows may be staged and verified while `AUTH0` remains
+authoritative.
 
 ```yaml
 global:
   authType: "DB"
 ```
 
-Changing to `DB` deliberately invalidates existing Auth0 and legacy OIDC browser sessions. Users
-must reauthenticate with an enabled database-backed provider after the deployment restarts. The
-chart does not inject legacy Auth0 or OIDC credentials into the API, CMD, or frontend DB-mode
-authentication paths.
+Changing to `DB` deliberately invalidates existing Auth0 browser sessions. Users must
+reauthenticate with an enabled database-backed provider after the deployment restarts. The chart
+does not inject Auth0 credentials into the API, CMD, or frontend DB-mode authentication paths.
 
 Before changing the value:
 
@@ -191,10 +98,29 @@ Before changing the value:
 3. Set `global.authType: "DB"` and deploy the chart.
 4. Verify the login page lists the expected database-backed providers.
 
-`global.authType` is validated by the chart: anything other than exactly `AUTH0`, `OIDC`, or `DB`
-(case-sensitive) fails the render. A typo such as `"db"` used to render API and CMD pods that
-referenced Auth0 Secret keys the chart no longer emits — `CreateContainerConfigError` — while the
-frontend silently booted in Auth0 mode.
+`global.authType` is validated by the chart: anything other than exactly `AUTH0` or `DB`
+(case-sensitive) fails the render, and `OIDC` fails with a message pointing to this guide. A typo
+such as `"db"` used to render API and CMD pods that referenced Auth0 Secret keys the chart no longer
+emits — `CreateContainerConfigError` — while the frontend silently booted in Auth0 mode.
+
+### Migrating from the removed OIDC mode
+
+Deployments still running `global.authType: "OIDC"` must move their identity provider into the
+database **before** upgrading to this chart version: the controlplane image that ships with it exits
+at startup under the removed mode.
+
+1. On your current version, open **Settings → Access → Providers**. Recent versions seeded a
+   provider named *OIDC (migrated from env vars)* from the `secrets.oidc.*` values on startup; if it
+   is present, verify its settings. Otherwise create an OpenID Connect provider with the same
+   discovery URL (or endpoints), client ID, client secret, and scopes.
+2. Add the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>`, to
+   the application registration in your IdP. The former `https://<dnsRecord>/api/callback` URI can
+   stay registered until the cutover is confirmed.
+3. Enable the provider and confirm a test sign-in from a second browser session.
+4. Set `global.authType: "DB"`, remove the IdP values from `secrets.oidc` (only
+   `oidc_group_team_sync_enabled`, `oidc_allow_insecure_transport`, and `oidc_signer_pem_url` remain
+   meaningful), and deploy. Users reauthenticate once.
+5. Upgrade to this chart version.
 
 ### SAML2 and the API ingress WAF
 
@@ -301,7 +227,7 @@ This makes Auth0 incompatible with fully air-gapped deployments.
 
 ## Shared Security Settings
 
-These settings apply to both OIDC and Auth0 modes:
+These settings apply to both authentication modes:
 
 ```yaml
 secrets:
@@ -439,11 +365,11 @@ kubectl get pods -n qualytics -l app=qualytics-api
 # Check API logs for auth initialization
 kubectl logs -n qualytics deployment/qualytics-api | grep -i "auth\|oidc\|auth0"
 
-# Test the login endpoint
-curl -I https://<your-dns-record>/api/login
+# List the providers the login page will offer (database-backed mode)
+curl -s https://<your-dns-record>/api/auth/providers/available
 ```
 
-For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's authorization endpoint. For Auth0, the frontend handles the login redirect.
+For database-backed providers, the endpoint returns the enabled providers as JSON. For Auth0, the frontend handles the login redirect.
 
 > **Next step:** After deployment and authentication are working, your instance has a 31-day grace period. See [License Management](./license-management.md) to activate your license before the grace period ends.
 
@@ -453,23 +379,22 @@ For OIDC, the `/api/login` endpoint should return a `302` redirect to your IdP's
 
 | Symptom | Likely Cause | Solution |
 |---------|-------------|----------|
-| 401 after login callback | Redirect URI mismatch | Ensure your IdP has `https://<dnsRecord>/api/callback` as an allowed redirect URI |
+| 401 after login callback | Redirect URI mismatch | Ensure your IdP lists the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>` |
 | CORS errors in browser | `CORS_ORIGINS` not set correctly | Check that `global.dnsRecord` matches the URL in the browser |
-| Login page not loading | Wrong `authType` | Verify `global.authType` matches your auth provider (`OIDC`, `DB`, or `AUTH0`) |
-| `helm install`/`upgrade` fails on `global.authType` | Value is not exactly `AUTH0`, `OIDC`, or `DB` | Fix the case/spelling — the chart rejects anything else rather than falling back to Auth0 |
+| Login page not loading | Wrong `authType` | Verify `global.authType` matches your auth provider (`DB` or `AUTH0`) |
+| `helm install`/`upgrade` fails on `global.authType` | Value is not exactly `AUTH0` or `DB`, or is the removed `OIDC` mode | Fix the case/spelling, or follow [Migrating from the removed OIDC mode](#migrating-from-the-removed-oidc-mode) — the chart rejects anything else rather than falling back to Auth0 |
 | SAML login returns 403 or 413 from nginx, never reaching the app | OWASP CRS or a body-size limit on the API ingress rejected the `SAMLResponse` POST | See [SAML2 and the API ingress WAF](#saml2-and-the-api-ingress-waf) |
-| "Invalid client" error | Wrong client credentials | Double-check `oidc_client_id` and `oidc_client_secret` match your IdP |
+| "Invalid client" error | Wrong client credentials | Double-check the provider's client ID and client secret under Settings → Access → Providers |
 | Auth0 connection timeout | No egress to auth.qualytics.io | Ensure firewall allows outbound HTTPS to `auth.qualytics.io` |
-| User attributes missing | Claims mapping mismatch | Adjust `oidc_user_*_key` values to match your IdP's claim names |
-| Discovery URL not working | IdP unreachable at startup | Ensure the pod can reach `oidc_discovery_url` over HTTPS. Check `kubectl logs` for discovery fetch errors. Individual endpoint fields are used as fallbacks. |
+| User attributes missing | Claims mapping mismatch | Adjust the provider's claim mappings under Settings → Access → Providers to match your IdP's claim names |
+| Discovery URL not working | IdP unreachable from the API pods | Ensure the pods can reach the provider's discovery URL over HTTPS. Run the provider diagnostics under Settings → Access → Providers, or configure explicit endpoints. |
 | `Unable to complete the token exchange with the identity provider`, with `SSRF blocked: <idp-host> resolved to unsafe IP` in the API log | The IdP resolves to a private address, which auth provider requests refuse by default | Set `controlplane.auth.allowPrivateNetworkFetches: true` — see [On-premises identity providers](#on-premises-identity-providers) |
-| Sessions expire too quickly | Default JWT TTL too short | Set `secrets.oidc.oidc_jwt_ttl_minutes` in `values.yaml` to the desired session duration in minutes (e.g., `480` for 8 hours). |
+| Sessions expire too quickly | Provider session duration too short | Raise the provider's Session Duration under Settings → Access → Providers. |
 
 ---
 
 ## Additional Resources
 
-- [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) — Detailed OIDC setup with IdP-specific examples
 - [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Auth0 setup and request workflow
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
 - [License Management](./license-management.md) — Activate and renew your deployment license

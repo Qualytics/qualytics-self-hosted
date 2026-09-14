@@ -28,7 +28,7 @@ Before deploying Qualytics, ensure you have:
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
 - A Qualytics-issued image registry token and a unique deployment identifier
-- Authentication configuration — either OIDC credentials from your IdP (recommended) or Auth0 credentials from your Qualytics account manager
+- Authentication choice — database-backed providers configured after installation (recommended) or Auth0 credentials from your Qualytics account manager
 
 ## How should I use this chart?
 
@@ -129,26 +129,16 @@ Update these required settings:
 
 3. **Authentication** — choose one of the following:
 
-   **Option A: OIDC — Direct IdP Integration (Recommended)**
+   **Option A: Database-Backed Providers (Recommended)**
 
-   Set `global.authType` to `OIDC` and configure your Identity Provider credentials. Register Qualytics as a Web Application in your IdP with `https://<your-domain>/api/callback` as the redirect URI, Authorization Code grant type, and at minimum `openid` scope.
-
-   With a discovery URL, three values are all that most IdPs need — endpoints, JWKS, and issuer are discovered at startup, and the claims mapping uses OIDC-standard defaults:
+   Set `global.authType` to `DB`. No identity-provider values go into Helm: after installation, open the login page, create the first administrator account, then configure your identity provider (OpenID Connect or SAML 2.0) or password sign-in under Settings → Access → Providers. Register Qualytics in your IdP as a Web Application using the Authorization Code grant and the provider's redirect URI, `https://<your-domain>/api/auth/oidc/callback/<provider-id>`.
 
    ```yaml
    global:
-     authType: "OIDC"
-
-   secrets:
-     oidc:
-       oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
-       oidc_client_id: "your-client-id"
-       oidc_client_secret: "your-client-secret"
+     authType: "DB"
    ```
 
-   If your IdP does not support discovery, set `oidc_authorization_endpoint`, `oidc_token_endpoint`, and `oidc_userinfo_endpoint` individually instead.
-
-   > See [Authentication Configuration](./docs/authentication.md) for the full values-to-environment mapping, claim overrides, group-to-Team sync, and troubleshooting — or the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for IdP-specific examples covering Okta, Azure AD (Entra ID), Keycloak, and Google Workspace.
+   > See [Authentication Configuration](./docs/authentication.md) for first sign-in, the cutover procedure, deployment-wide settings such as group-to-Team sync, and the migration steps from the removed `OIDC` mode.
 
    **Option B: Auth0 — Managed by Qualytics**
 
@@ -255,7 +245,7 @@ The license request, signed license, registry token, and deployment identifier a
 
 ## Can I run a fully "air-gapped" deployment?
 
-Yes. The only *ongoing* runtime dependency on the public internet is https://auth.qualytics.io, which provides Auth0-powered federated authentication. Auth0 is recommended for ease of installation and support, but it is not a strict requirement — a fully private deployment can use an OpenID Connect (OIDC) integration with your enterprise identity provider (IdP) instead.
+Yes. The only *ongoing* runtime dependency on the public internet is https://auth.qualytics.io, which provides Auth0-powered federated authentication. Auth0 is recommended for ease of installation and support, but it is not a strict requirement — a fully private deployment can use database-backed providers that integrate with your enterprise identity provider (IdP) instead.
 
 Beyond authentication, plan for these paths regardless of auth mode:
 
@@ -263,12 +253,10 @@ Beyond authentication, plan for these paths regardless of auth mode:
 - **Your datastores** — the Spark driver and executors need network access to every datastore you connect.
 - **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central by default. Clusters with no route to Maven Central can resolve these from an internal Maven repository (Artifactory, Nexus, …) via `dataplane.ivy` — see [Custom Maven Repository](./docs/custom-maven-repository.md).
 
-To set up OIDC for an air-gapped deployment:
-1. Set `global.authType: "OIDC"` in your `values.yaml`
-2. Configure your enterprise IdP credentials under `secrets.oidc` — see [Authentication Configuration](./docs/authentication.md)
+To set up authentication for an air-gapped deployment:
+1. Set `global.authType: "DB"` in your `values.yaml`
+2. After installation, create the first administrator account and configure your enterprise IdP under Settings → Access → Providers — see [Authentication Configuration](./docs/authentication.md)
 3. Import Qualytics container images into your private registry — see [Qualytics Docker Images](./docs/docker-images.md)
-
-See the [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) for step-by-step instructions.
 
 ## Troubleshooting
 
@@ -312,7 +300,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 
 ## Additional Documentation
 
-- [Authentication Configuration](./docs/authentication.md) — Detailed OIDC and Auth0 configuration reference with Helm values mapping
+- [Authentication Configuration](./docs/authentication.md) — Database-backed providers, Auth0, deployment-wide settings, and migration from the removed OIDC mode
 - [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
 - [Custom Maven Repository](./docs/custom-maven-repository.md) — Resolve the runtime JDBC driver packages from an internal Artifactory/Nexus instead of Maven Central
 - [Controlplane AWS Identity](./docs/controlplane-aws-identity.md) — Give the hub pods their own IAM identity, and configure AgentQ's Amazon Bedrock integration with IAM Role authentication
@@ -320,6 +308,5 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
-- [OIDC Configuration Guide](https://userguide.qualytics.io/deployments/oidc-configuration/) — Configure OIDC authentication with your enterprise IdP
 - [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Configure Auth0 authentication (managed by Qualytics)
 - [Qualytics UserGuide](https://userguide.qualytics.io/) — Full platform documentation
