@@ -77,10 +77,10 @@ jobs:
             --set secrets.auth0.auth0_domain=test.auth0.com \
             --set secrets.auth0.auth0_audience=test-api > /dev/null
 
-          echo "  Testing OIDC authentication..."
+          echo "  Testing database-backed authentication..."
           helm template test-release charts/qualytics \
             "${values_args[@]}" \
-            --set global.authType=OIDC > /dev/null
+            --set global.authType=DB > /dev/null
 
           # Test node selector configurations
           echo "  Testing node selectors..."
