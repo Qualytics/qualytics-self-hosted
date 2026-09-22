@@ -387,6 +387,9 @@ spec:
               value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
             - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
               value: {{ .Values.dataplane.libpostalDataPath | quote }}
+            # Hive Native datastores need Spark Hive support, which the dataplane image leaves off unless this is set.
+            - name: MOTHERSHIP_SPARK_ENABLE_HIVE
+              value: "true"
           volumeMounts:
             - name: executor-pod-template
               mountPath: /opt/spark/conf/executor-template.yaml

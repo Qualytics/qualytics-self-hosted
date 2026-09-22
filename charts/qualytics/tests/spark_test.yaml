@@ -915,6 +915,15 @@ tests:
             value: "3"
         documentIndex: 5
 
+  - it: should enable Spark Hive support on the driver
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_SPARK_ENABLE_HIVE
+            value: "true"
+        documentIndex: 5
+
   # Driver scheduling
   - it: should configure driver node selector and tolerations on the Deployment pod
     set:
