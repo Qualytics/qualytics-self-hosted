@@ -163,6 +163,26 @@ Renders empty when numVolumes <= 0.
 {{- end -}}
 
 {{/*
+One dataplane.extraSparkConf entry as a spark-submit `--conf` argument: `key=value`
+single-quoted for the driver's `bash -c` script, so the value reaches spark-submit
+verbatim (no word splitting, globbing, redirection or $ expansion). spark-submit
+silently drops keys outside spark.*, and the entrypoint sets the bind address and
+deploy mode itself (see "Driver entrypoint invariants" in CLAUDE.md), so those keys
+fail the render instead.
+Input: dict with "key" and "value".
+*/}}
+{{- define "qualytics.spark.extraConfArg" -}}
+{{- $key := .key | toString -}}
+{{- if not (hasPrefix "spark." $key) -}}
+{{- fail (printf "dataplane.extraSparkConf key %q must start with \"spark.\": spark-submit ignores any other key (use spark.hadoop.<key> for Hadoop settings)" $key) -}}
+{{- end -}}
+{{- if has $key (list "spark.driver.bindAddress" "spark.submit.deployMode") -}}
+{{- fail (printf "dataplane.extraSparkConf must not set %s: the dataplane entrypoint sets it" $key) -}}
+{{- end -}}
+{{- printf "%s=%s" $key (toString .value) | replace "'" "'\\''" | squote -}}
+{{- end -}}
+
+{{/*
 Escape a string for use inside a double-quoted XML attribute value
 (ivysettings.xml). Ampersand must be replaced first or it would re-escape
 the other entities.

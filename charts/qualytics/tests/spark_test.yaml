@@ -738,6 +738,69 @@ tests:
           pattern: "spark.local.dir="
         documentIndex: 5
 
+  # dataplane.extraSparkConf: one single-quoted `--conf key=value` per entry, sorted
+  # by key, after the chart's own confs and immediately before the application jar.
+  - it: should not add extra confs by default
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "--conf '"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark-role=driver \\\n\s*local:///opt/spark/jars/qualytics-dataplane\.jar'
+        documentIndex: 5
+
+  - it: should append extraSparkConf entries sorted by key before the application jar
+    set:
+      dataplane.extraSparkConf:
+        spark.hadoop.hadoop.rpc.protection: "privacy"
+        spark.hadoop.dfs.nameservices: "nameservice1"
+        spark.hadoop.dfs.ha.namenodes.nameservice1: "nn1,nn2"
+        spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn1: "namenode1.example.com:8020"
+        spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn2: "namenode2.example.com:8020"
+        spark.hadoop.dfs.client.failover.proxy.provider.nameservice1: "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark-role=driver \\\n\s*--conf ''spark\.hadoop\.dfs\.client\.failover\.proxy\.provider\.nameservice1=org\.apache\.hadoop\.hdfs\.server\.namenode\.ha\.ConfiguredFailoverProxyProvider'' \\\n\s*--conf ''spark\.hadoop\.dfs\.ha\.namenodes\.nameservice1=nn1,nn2'' \\\n\s*--conf ''spark\.hadoop\.dfs\.namenode\.rpc-address\.nameservice1\.nn1=namenode1\.example\.com:8020'' \\\n\s*--conf ''spark\.hadoop\.dfs\.namenode\.rpc-address\.nameservice1\.nn2=namenode2\.example\.com:8020'' \\\n\s*--conf ''spark\.hadoop\.dfs\.nameservices=nameservice1'' \\\n\s*--conf ''spark\.hadoop\.hadoop\.rpc\.protection=privacy'' \\\n\s*local:///opt/spark/jars/qualytics-dataplane\.jar'
+        documentIndex: 5
+
+  - it: should quote extraSparkConf values so bash passes them verbatim
+    set:
+      dataplane.extraSparkConf:
+        spark.hadoop.example.value: "it's $HOME;<host>"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf ''spark\.hadoop\.example\.value=it''\\''''s \$HOME;<host>'' \\'
+        documentIndex: 5
+
+  - it: should render no extra confs when extraSparkConf is null (reuse-values upgrade)
+    set:
+      dataplane.extraSparkConf: null
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "--conf '"
+        documentIndex: 5
+
+  - it: should fail rendering for extraSparkConf keys spark-submit would ignore
+    set:
+      dataplane.extraSparkConf:
+        hadoop.rpc.protection: "privacy"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'key "hadoop\.rpc\.protection" must start with "spark\."'
+
+  - it: should fail rendering when extraSparkConf sets a conf the entrypoint owns
+    set:
+      dataplane.extraSparkConf:
+        spark.driver.bindAddress: "0.0.0.0"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'must not set spark\.driver\.bindAddress'
+
   - it: should configure driver pod resources from cores and memory + overhead
     asserts:
       - equal:

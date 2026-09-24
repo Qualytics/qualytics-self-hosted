@@ -308,6 +308,9 @@ spec:
                 --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Dconfig.resource=prod.conf -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
                 --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
                 --conf spark.kubernetes.driver.label.spark-role=driver \
+                {{- range $key, $value := .Values.dataplane.extraSparkConf }}
+                --conf {{ include "qualytics.spark.extraConfArg" (dict "key" $key "value" $value) }} \
+                {{- end }}
                 local:///opt/spark/jars/qualytics-dataplane.jar
           ports:
             - name: driver-rpc
