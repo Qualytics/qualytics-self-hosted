@@ -227,12 +227,12 @@ tests:
             value: "gcp"
         documentIndex: 0
 
-  - it: should reject an invalid authType
+  - it: should reject a leftover AUTH0 authType
     set:
-      global.authType: "Db"
+      global.authType: "AUTH0"
     asserts:
       - failedTemplate:
-          errorPattern: global.authType must be exactly one of AUTH0 or DB
+          errorPattern: global.authType "AUTH0" is no longer supported
 
   - it: should reject a staged passphrase without an incremented migration id
     set:
@@ -277,20 +277,7 @@ tests:
             value: "user"
         documentIndex: 0
 
-  - it: should configure auth type as AUTH0 by default
-    set:
-      global.authType: "AUTH0"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: API_AUTH
-            value: "AUTH0"
-        documentIndex: 0
-
-  - it: should configure DB auth without legacy provider settings
-    set:
-      global.authType: "DB"
+  - it: should configure database-backed auth without Auth0 settings
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -302,6 +289,7 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: AUTH0_CLIENT_ID
+          any: true
         documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -410,18 +398,6 @@ tests:
             name: SMTP_SENDER_EMAIL
         documentIndex: 0
 
-  - it: should set AUTH0_CLIENT_ID from secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AUTH0_CLIENT_ID
-            valueFrom:
-              secretKeyRef:
-                name: qualytics-creds
-                key: auth0_spa_client_id
-        documentIndex: 0
-
   # Image pull secrets
   - it: should have image pull secrets
     asserts:
@@ -479,13 +455,11 @@ tests:
             value: "databricks"
         documentIndex: 0
 
-  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: the
-  # controlplane reads them from the environment in every authType and there is no
-  # per-provider equivalent on AuthProviderConfiguration, so DB-backed providers depend on
-  # them rendering outside the authType branch.
-  - it: should render the deployment-wide auth env vars under authType DB
+  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: there is
+  # no per-provider equivalent on AuthProviderConfiguration, so database-backed providers
+  # depend on these env vars.
+  - it: should render the deployment-wide auth env vars
     set:
-      global.authType: "DB"
       secrets.oidc.oidc_group_team_sync_enabled: true
       secrets.oidc.oidc_allow_insecure_transport: true
     asserts:

@@ -259,9 +259,7 @@ tests:
           value: custom-egress-info
         documentIndex: 0
 
-  - it: should configure global auth type in API
-    set:
-      global.authType: "DB"
+  - it: should configure database-backed auth without Auth0 settings
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -269,26 +267,19 @@ tests:
             name: API_AUTH
             value: "DB"
         documentIndex: 0
-
-  - it: should configure DB auth without legacy provider settings
-    set:
-      global.authType: "DB"
-    asserts:
-      - contains:
+      - notContains:
           path: spec.template.spec.containers[0].env
           content:
-            name: API_AUTH
-            value: "DB"
+            name: AUTH0_CLIENT_ID
+          any: true
         documentIndex: 0
 
-  # An unrecognized authType falls through to the AUTH0 branch here while secrets.yaml
-  # emits no Auth0 keys, so the pod would fail with CreateContainerConfigError.
-  - it: should reject an invalid authType
+  - it: should reject a leftover AUTH0 authType
     set:
-      global.authType: "db"
+      global.authType: "AUTH0"
     asserts:
       - failedTemplate:
-          errorPattern: global.authType must be exactly one of AUTH0 or DB
+          errorPattern: global.authType "AUTH0" is no longer supported
 
   - it: should reject a staged passphrase without an incremented migration id
     set:
@@ -316,11 +307,6 @@ tests:
           content:
             name: SECRETS_MIGRATION_ID
             value: "2"
-        documentIndex: 0
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AUTH0_CLIENT_ID
         documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
@@ -461,13 +447,11 @@ tests:
             name: SMTP_SENDER_EMAIL
         documentIndex: 0
 
-  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: the
-  # controlplane reads them from the environment in every authType and there is no
-  # per-provider equivalent on AuthProviderConfiguration, so DB-backed providers depend on
-  # them rendering outside the authType branch.
-  - it: should render the deployment-wide auth env vars under authType DB
+  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: there is
+  # no per-provider equivalent on AuthProviderConfiguration, so database-backed providers
+  # depend on these env vars.
+  - it: should render the deployment-wide auth env vars
     set:
-      global.authType: "DB"
       secrets.oidc.oidc_group_team_sync_enabled: true
       secrets.oidc.oidc_allow_insecure_transport: true
     asserts:
@@ -482,18 +466,6 @@ tests:
           content:
             name: OIDC_ALLOW_INSECURE_HTTP
             value: "true"
-        documentIndex: 0
-
-  - it: should set AUTH0_CLIENT_ID from secret
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: AUTH0_CLIENT_ID
-            valueFrom:
-              secretKeyRef:
-                name: qualytics-creds
-                key: auth0_spa_client_id
         documentIndex: 0
 
   - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default

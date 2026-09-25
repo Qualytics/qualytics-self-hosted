@@ -143,31 +143,8 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: deployment_identifier
-          {{- if ( eq .Values.global.authType "DB" ) }}
-          # AIDEV-NOTE: Keep CMD auth authority identical to API during the DB cutover.
           - name: API_AUTH
             value: DB
-          {{- else }}
-          - name: API_AUTH
-            value: AUTH0
-          - name: AUTH0_DOMAIN
-            value: {{ .Values.secrets.auth0.auth0_domain | quote }}
-          - name: AUTH0_AUDIENCE
-            valueFrom:
-              secretKeyRef:
-                name: qualytics-creds
-                key: auth0_audience
-          - name: AUTH0_ORGANIZATION
-            valueFrom:
-              secretKeyRef:
-                name: qualytics-creds
-                key: auth0_organization
-          - name: AUTH0_CLIENT_ID
-            valueFrom:
-              secretKeyRef:
-                name: qualytics-creds
-                key: auth0_spa_client_id
-          {{- end }}
           - name: RABBIT_MQ_HOST
             value: "{{ .Release.Name }}-rabbitmq"
           {{- if eq .Values.rabbitmq.tls.enabled false }}
@@ -209,9 +186,6 @@ spec:
         {{- end }}
           - name: VERIFY_CERTIFICATE_SIGNERS
             value: {{ .Values.controlplane.egress.verifyTLSCertificates | quote }}
-          {{- /* AIDEV-NOTE: Deployment-wide auth settings. The controlplane reads these from the
-                 environment in every authType and there is no per-provider equivalent on
-                 AuthProviderConfiguration, so they must render outside the authType branch above. */}}
           - name: OIDC_ALLOW_INSECURE_HTTP
             value: {{ (.Values.secrets.oidc).oidc_allow_insecure_transport | default false | quote }}
           - name: OIDC_GROUP_TEAM_SYNC_ENABLED

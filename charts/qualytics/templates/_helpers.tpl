@@ -34,21 +34,15 @@ Generate postgres connection URL
 {{- end -}}
 
 {{/*
-Validate global.authType. Renders nothing; fails the render on an unsupported value.
-
-The templates disagree about what an unrecognized value means: secrets.yaml emits neither
-provider's keys, while api.yaml, cmd.yaml, and frontend.yaml fall through to their AUTH0
-branch. A typo such as "db" or "Db" therefore renders API/CMD pods that reference Auth0
-keys the Secret does not contain (CreateContainerConfigError) while the frontend silently
-boots in Auth0 mode. Rejecting the value up front turns that into one clear message.
+Reject a leftover global.authType. Renders nothing. Database-backed authentication is the only
+mode, so the chart no longer reads the value; "DB" is still accepted so existing values files
+render unchanged. Any other value, such as "AUTH0" or the removed "OIDC", fails the render
+rather than silently changing how users sign in.
 */}}
 {{- define "qualytics.validate.authType" -}}
-{{- $authType := .Values.global.authType | toString -}}
-{{- if eq $authType "OIDC" -}}
-{{- fail "global.authType \"OIDC\" is no longer supported: configure your identity provider as a database-backed provider under global.authType \"DB\" (see docs/authentication.md)" -}}
-{{- end -}}
-{{- if not (has $authType (list "AUTH0" "DB")) -}}
-{{- fail (printf "global.authType must be exactly one of AUTH0 or DB (case-sensitive); got %q" $authType) -}}
+{{- $authType := .Values.global.authType | default "DB" | toString -}}
+{{- if ne $authType "DB" -}}
+{{- fail (printf "global.authType %q is no longer supported: database-backed authentication is the only mode. Cut over to database-backed providers on your current chart version before upgrading, then remove global.authType from your values (see docs/authentication.md)" $authType) -}}
 {{- end -}}
 {{- end -}}
 

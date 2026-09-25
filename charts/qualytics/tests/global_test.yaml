@@ -125,7 +125,6 @@ tests:
     set:
       global.platform: "gcp"
       global.dnsRecord: "production.qualytics.io"
-      global.authType: "DB"
       global.imageUrls.dataplaneImageUrl: "gcr.io/project/dataplane"
       dataplaneImage.image.dataplaneImageTag: "latest"
       dataplane.numVolumes: 1
