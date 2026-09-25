@@ -34,21 +34,21 @@ Generate postgres connection URL
 {{- end -}}
 
 {{/*
-Validate global.authType. Renders nothing; fails the render on an unsupported value.
-
-The templates disagree about what an unrecognized value means: secrets.yaml emits neither
-provider's keys, while api.yaml, cmd.yaml, and frontend.yaml fall through to their AUTH0
-branch. A typo such as "db" or "Db" therefore renders API/CMD pods that reference Auth0
-keys the Secret does not contain (CreateContainerConfigError) while the frontend silently
-boots in Auth0 mode. Rejecting the value up front turns that into one clear message.
+Reject leftover Auth0 or OIDC configuration. Renders nothing. Database-backed authentication is
+the only mode, so the chart no longer reads global.authType; "DB" is still accepted so existing
+values files render unchanged, and any other value that is present, including an empty string,
+fails. Without the key, a secrets.auth0 block also fails: the previous chart defaulted to Auth0,
+so a deployment that relied on that default carries its Auth0 values but no global.authType, and
+rendering it would silently change how users sign in.
 */}}
 {{- define "qualytics.validate.authType" -}}
-{{- $authType := .Values.global.authType | toString -}}
-{{- if eq $authType "OIDC" -}}
-{{- fail "global.authType \"OIDC\" is no longer supported: configure your identity provider as a database-backed provider under global.authType \"DB\" (see docs/authentication.md)" -}}
+{{- $authType := .Values.global.authType -}}
+{{- if not (kindIs "invalid" $authType) -}}
+{{- if ne (toString $authType) "DB" -}}
+{{- fail (printf "global.authType %q is no longer supported: database-backed authentication is the only mode. Cut over to database-backed providers on your current chart version before upgrading, then remove global.authType from your values (see docs/authentication.md)" (toString $authType)) -}}
 {{- end -}}
-{{- if not (has $authType (list "AUTH0" "DB")) -}}
-{{- fail (printf "global.authType must be exactly one of AUTH0 or DB (case-sensitive); got %q" $authType) -}}
+{{- else if .Values.secrets.auth0 -}}
+{{- fail "secrets.auth0 is set without global.authType \"DB\": the previous chart defaulted to Auth0, so these values look like a deployment that still signs users in with Auth0, which is no longer supported. If this deployment already uses database-backed providers, remove secrets.auth0 from your values; otherwise cut over on your current chart version before upgrading (see docs/authentication.md)" -}}
 {{- end -}}
 {{- end -}}
 

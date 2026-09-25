@@ -1,28 +1,18 @@
 # Authentication Configuration
 
-This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics supports two authentication modes:
+This guide covers how to configure authentication for a self-hosted Qualytics deployment. Qualytics authenticates users through database-backed providers: identity providers (OpenID Connect or SAML 2.0) and password sign-in, configured in the application. No identity-provider credentials go into Helm values and no egress to a Qualytics-hosted identity service is required, so the same setup works for air-gapped deployments.
 
-| Mode | Helm Value | Description | Air-Gapped Compatible |
-|------|-----------|-------------|:---------------------:|
-| **Database-backed** | `global.authType: "DB"` | Identity providers (OpenID Connect or SAML 2.0) and password sign-in configured in the Qualytics database (recommended) | Yes |
-| **Auth0** | `global.authType: "AUTH0"` | Managed by Qualytics — requires egress to `auth.qualytics.io` | No |
-
-The former `global.authType: "OIDC"` mode, which read a single identity provider from `secrets.oidc.*`, is no longer supported: the chart rejects the value and the controlplane refuses to start with it. See [Migrating from the removed OIDC mode](#migrating-from-the-removed-oidc-mode).
-
-For Auth0 setup, see the [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) in the Qualytics UserGuide.
+Auth0 and the former `OIDC` mode are no longer supported. See [Removed authentication modes](#removed-authentication-modes).
 
 Authentication settings supplement the required installation configuration. Every deployment must also set the Qualytics-provided `secrets.deployment.identifier` described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
 
 ---
 
-## Database-Backed Providers (Recommended)
+## Database-Backed Providers
 
-Set `global.authType` to `"DB"`. Identity providers are configured in the application rather than in Helm values, so the chart renders no IdP credentials.
+Identity providers are configured in the application rather than in Helm values, so the chart renders no IdP credentials. The only authentication value Helm needs is the session signing key:
 
 ```yaml
-global:
-  authType: "DB"
-
 secrets:
   auth:
     jwt_signing_secret: "<random-32+-char-string>"  # generate with: openssl rand -base64 32
@@ -74,54 +64,6 @@ secrets:
 
 > If group listings come back empty, the IdP is not emitting the claim. Most IdPs require both an extra scope (add `groups` to the provider's scopes) and a claim/token configuration change on the application registration.
 
----
-
-## Cutting Over to Database-Backed Providers
-
-`global.authType: "DB"` is an explicit maintenance-window cutover to providers configured under
-**Settings → Access → Providers**. Provider rows may be staged and verified while `AUTH0` remains
-authoritative.
-
-```yaml
-global:
-  authType: "DB"
-```
-
-Changing to `DB` deliberately invalidates existing Auth0 browser sessions. Users must
-reauthenticate with an enabled database-backed provider after the deployment restarts. The chart
-does not inject Auth0 credentials into the API, CMD, or frontend DB-mode authentication paths.
-
-Before changing the value:
-
-1. Confirm at least one staged provider is enabled and usable.
-2. Schedule a maintenance window and notify users that reauthentication is required.
-3. Set `global.authType: "DB"` and deploy the chart.
-4. Verify the login page lists the expected database-backed providers.
-
-`global.authType` is validated by the chart: anything other than exactly `AUTH0` or `DB`
-(case-sensitive) fails the render, and `OIDC` fails with a message pointing to this guide. A typo
-such as `"db"` used to render API and CMD pods that referenced Auth0 Secret keys the chart no longer
-emits — `CreateContainerConfigError` — while the frontend silently booted in Auth0 mode.
-
-### Migrating from the removed OIDC mode
-
-Deployments still running `global.authType: "OIDC"` must move their identity provider into the
-database **before** upgrading to this chart version: the controlplane image that ships with it exits
-at startup under the removed mode.
-
-1. On your current version, open **Settings → Access → Providers**. Recent versions seeded a
-   provider named *OIDC (migrated from env vars)* from the `secrets.oidc.*` values on startup; if it
-   is present, verify its settings. Otherwise create an OpenID Connect provider with the same
-   discovery URL (or endpoints), client ID, client secret, and scopes.
-2. Add the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>`, to
-   the application registration in your IdP. The former `https://<dnsRecord>/api/callback` URI can
-   stay registered until the cutover is confirmed.
-3. Enable the provider and confirm a test sign-in from a second browser session.
-4. Set `global.authType: "DB"`, remove the IdP values from `secrets.oidc` (only
-   `oidc_group_team_sync_enabled`, `oidc_allow_insecure_transport`, and `oidc_signer_pem_url` remain
-   meaningful), and deploy. Users reauthenticate once.
-5. Upgrade to this chart version.
-
 ### SAML2 and the API ingress WAF
 
 A SAML2 provider adds a browser **form POST** from your IdP to
@@ -171,63 +113,47 @@ for the streaming ingress.
 
 ---
 
-## Auth0 Configuration
+## Removed Authentication Modes
 
-Auth0 is managed by Qualytics. To use Auth0 for a self-hosted deployment:
+Database-backed providers are the only authentication mode, so the chart no longer reads
+`global.authType`. Values files that still set it to `"DB"` render unchanged; when you tidy up,
+remove `global.authType` together with any leftover `secrets.auth0` block. Rather than silently
+changing how users sign in, the chart fails the render when `global.authType` is set to anything
+other than `"DB"` — `"AUTH0"`, the removed `"OIDC"`, an empty value, or a misspelling — and when a
+`secrets.auth0` block is present without `global.authType: "DB"`, which is what a deployment still
+relying on the former Auth0 default looks like.
 
-1. Contact your [Qualytics account manager](mailto:hello@qualytics.ai) and request Auth0 resources
-2. Qualytics provisions an Auth0 organization and provides you with:
-   - `auth0_domain`
-   - `auth0_audience`
-   - `auth0_organization`
-   - `auth0_spa_client_id`
-3. Configure the values in your `values.yaml`
+A deployment still on Auth0 or OIDC must cut over to database-backed providers on its current chart
+version before upgrading. For Auth0, follow
+[Cutting Over to Database-Backed Providers](https://github.com/Qualytics/qualytics-self-hosted/blob/qualytics-2026.9.23/docs/authentication.md#cutting-over-to-database-backed-providers)
+in the chart 2026.9.23 documentation: stage and verify a provider, then switch during a maintenance
+window. The switch ends every Auth0 session, and users sign back in with a database-backed
+provider. For OIDC, follow the steps below.
 
-### Helm Values
+### Migrating from the removed OIDC mode
 
-```yaml
-global:
-  authType: "AUTH0"
+Deployments still running `global.authType: "OIDC"` must move their identity provider into the
+database **before** upgrading to this chart version: the controlplane image that ships with it exits
+at startup under the removed mode.
 
-secrets:
-  auth0:
-    auth0_domain: auth.qualytics.io          # provided by Qualytics
-    auth0_audience: your-api-audience         # provided by Qualytics
-    auth0_organization: org_your-org-id       # provided by Qualytics
-    auth0_spa_client_id: your-spa-client-id   # provided by Qualytics
-
-  auth:
-    jwt_signing_secret: "<random-32+-char-string>"
-```
-
-### Helm Values to Environment Variable Mapping
-
-| Helm Value (`secrets.auth0.*`) | Environment Variable | Source |
-|-------------------------------|---------------------|--------|
-| `auth0_domain` | `AUTH0_DOMAIN` | Direct value |
-| `auth0_audience` | `AUTH0_AUDIENCE` | Secret |
-| `auth0_organization` | `AUTH0_ORGANIZATION` | Secret |
-| `auth0_spa_client_id` | `AUTH0_CLIENT_ID` | Secret |
-
-Additionally set automatically:
-
-| Environment Variable | Value | Description |
-|---------------------|-------|-------------|
-| `API_AUTH` | `AUTH0` | Auth mode |
-
-### Network Requirements
-
-Auth0 requires outbound HTTPS access from the cluster to:
-- `https://auth.qualytics.io` — Auth0 tenant for authentication
-- `https://<auth0_domain>/.well-known/jwks.json` — Token verification
-
-This makes Auth0 incompatible with fully air-gapped deployments.
+1. On your current version, open **Settings → Access → Providers**. Recent versions seeded a
+   provider named *OIDC (migrated from env vars)* from the `secrets.oidc.*` values on startup; if it
+   is present, verify its settings. Otherwise create an OpenID Connect provider with the same
+   discovery URL (or endpoints), client ID, client secret, and scopes.
+2. Add the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>`, to
+   the application registration in your IdP. The former `https://<dnsRecord>/api/callback` URI can
+   stay registered until the cutover is confirmed.
+3. Enable the provider and confirm a test sign-in from a second browser session.
+4. Set `global.authType: "DB"`, remove the IdP values from `secrets.oidc` (only
+   `oidc_group_team_sync_enabled`, `oidc_allow_insecure_transport`, and `oidc_signer_pem_url` remain
+   meaningful), and deploy. Users reauthenticate once.
+5. Upgrade to this chart version.
 
 ---
 
 ## Shared Security Settings
 
-These settings apply to both authentication modes:
+These settings apply to every deployment:
 
 ```yaml
 secrets:
@@ -239,7 +165,7 @@ secrets:
 
 | Helm Value | Environment Variable | Description |
 |-----------|---------------------|-------------|
-| `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs. Under `authType: "DB"` this key is the sole browser-session authority. Changing it invalidates all active sessions. |
+| `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs and is the sole browser-session authority. Changing it invalidates all active sessions. |
 | `secrets.postgres.secrets_passphrase` | `SECRETS_PASSPHRASE` | Encrypts sensitive data stored in the database (connection credentials, API keys, IdP client secrets, SAML certificates). |
 
 > **Important:** A fresh install is rejected while **either** `secrets_passphrase` **or**
@@ -363,13 +289,13 @@ After deploying, verify authentication is working:
 kubectl get pods -n qualytics -l app=qualytics-api
 
 # Check API logs for auth initialization
-kubectl logs -n qualytics deployment/qualytics-api | grep -i "auth\|oidc\|auth0"
+kubectl logs -n qualytics deployment/qualytics-api | grep -i "auth\|oidc"
 
-# List the providers the login page will offer (database-backed mode)
+# List the providers the login page will offer
 curl -s https://<your-dns-record>/api/auth/providers/available
 ```
 
-For database-backed providers, the endpoint returns the enabled providers as JSON. For Auth0, the frontend handles the login redirect.
+The endpoint returns the enabled providers as JSON.
 
 > **Next step:** After deployment and authentication are working, your instance has a 31-day grace period. See [License Management](./license-management.md) to activate your license before the grace period ends.
 
@@ -381,11 +307,9 @@ For database-backed providers, the endpoint returns the enabled providers as JSO
 |---------|-------------|----------|
 | 401 after login callback | Redirect URI mismatch | Ensure your IdP lists the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>` |
 | CORS errors in browser | `CORS_ORIGINS` not set correctly | Check that `global.dnsRecord` matches the URL in the browser |
-| Login page not loading | Wrong `authType` | Verify `global.authType` matches your auth provider (`DB` or `AUTH0`) |
-| `helm install`/`upgrade` fails on `global.authType` | Value is not exactly `AUTH0` or `DB`, or is the removed `OIDC` mode | Fix the case/spelling, or follow [Migrating from the removed OIDC mode](#migrating-from-the-removed-oidc-mode) — the chart rejects anything else rather than falling back to Auth0 |
+| `helm install`/`upgrade` fails on `global.authType` or `secrets.auth0` | Your values still carry Auth0 or OIDC configuration | If the deployment already signs users in through database-backed providers, remove `global.authType` and `secrets.auth0` from your values; otherwise cut over first — see [Removed authentication modes](#removed-authentication-modes) |
 | SAML login returns 403 or 413 from nginx, never reaching the app | OWASP CRS or a body-size limit on the API ingress rejected the `SAMLResponse` POST | See [SAML2 and the API ingress WAF](#saml2-and-the-api-ingress-waf) |
 | "Invalid client" error | Wrong client credentials | Double-check the provider's client ID and client secret under Settings → Access → Providers |
-| Auth0 connection timeout | No egress to auth.qualytics.io | Ensure firewall allows outbound HTTPS to `auth.qualytics.io` |
 | User attributes missing | Claims mapping mismatch | Adjust the provider's claim mappings under Settings → Access → Providers to match your IdP's claim names |
 | Discovery URL not working | IdP unreachable from the API pods | Ensure the pods can reach the provider's discovery URL over HTTPS. Run the provider diagnostics under Settings → Access → Providers, or configure explicit endpoints. |
 | `Unable to complete the token exchange with the identity provider`, with `SSRF blocked: <idp-host> resolved to unsafe IP` in the API log | The IdP resolves to a private address, which auth provider requests refuse by default | Set `controlplane.auth.allowPrivateNetworkFetches: true` — see [On-premises identity providers](#on-premises-identity-providers) |
@@ -395,7 +319,6 @@ For database-backed providers, the endpoint returns the enabled providers as JSO
 
 ## Additional Resources
 
-- [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Auth0 setup and request workflow
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
 - [License Management](./license-management.md) — Activate and renew your deployment license
 - [Cluster Sizing Guide](./cluster-sizing.md) — Choose the right cluster configuration

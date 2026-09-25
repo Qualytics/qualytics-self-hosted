@@ -8,31 +8,14 @@ values:
   - values/deployment-identifier.yaml
 tests:
   # Secrets template tests
-  - it: should render secrets with Auth0 configuration
+  - it: should render secrets without identity-provider credentials
     template: secrets.yaml
-    set:
-      global.authType: "AUTH0"
-      secrets.auth0.auth0_audience: "test-api"
-      secrets.auth0.auth0_organization: "org_test"
-      secrets.auth0.auth0_spa_client_id: "spa_test"
     asserts:
       - isKind:
           of: Secret
       - equal:
           path: metadata.name
           value: qualytics-creds
-      - exists:
-          path: data.auth0_audience
-      - exists:
-          path: data.auth0_organization
-      - exists:
-          path: data.auth0_spa_client_id
-
-  - it: should render DB auth without legacy provider secrets
-    template: secrets.yaml
-    set:
-      global.authType: "DB"
-    asserts:
       - notExists:
           path: data.auth0_audience
       - notExists:

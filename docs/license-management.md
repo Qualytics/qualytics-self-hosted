@@ -71,4 +71,4 @@ The signed platform license is requested and applied through the UI. It does not
 ## Additional Resources
 
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
-- [Authentication Configuration](./authentication.md) — OIDC and Auth0 setup
+- [Authentication Configuration](./authentication.md) — Identity provider and password sign-in setup

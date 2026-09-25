@@ -170,29 +170,7 @@ tests:
             value: "app.qualytics.io"
         documentIndex: 0
 
-  - it: should set auth type environment variable
-    set:
-      global.authType: "AUTH0"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: VITE_QUALYTICS_AUTH_PROVIDER
-            value: "AUTH0"
-        documentIndex: 0
-
-  # Without validation the frontend silently boots in Auth0 mode on a typo, which is the
-  # least visible of the three failure modes.
-  - it: should reject an invalid authType
-    set:
-      global.authType: "db"
-    asserts:
-      - failedTemplate:
-          errorPattern: global.authType must be exactly one of AUTH0 or DB
-
-  - it: should configure DB auth without Auth0 client settings
-    set:
-      global.authType: "DB"
+  - it: should configure database-backed auth without Auth0 settings
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
@@ -204,7 +182,15 @@ tests:
           path: spec.template.spec.containers[0].env
           content:
             name: VITE_QUALYTICS_AUTH0_CLIENTID
+          any: true
         documentIndex: 0
+
+  - it: should reject a leftover AUTH0 authType
+    set:
+      global.authType: "AUTH0"
+    asserts:
+      - failedTemplate:
+          errorPattern: global.authType "AUTH0" is no longer supported
 
   - it: should disable downloads by default
     asserts:
@@ -217,19 +203,6 @@ tests:
 
   - it: should enable disabling downloads when set
     set:
-      frontend.disableDownloads: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: VITE_QUALYTICS_DISABLE_DOWNLOADS
-            value: "true"
-        documentIndex: 0
-
-  # Independent of auth type — set for DB deployments too
-  - it: should set disable downloads regardless of DB auth type
-    set:
-      global.authType: "DB"
       frontend.disableDownloads: true
     asserts:
       - contains:
