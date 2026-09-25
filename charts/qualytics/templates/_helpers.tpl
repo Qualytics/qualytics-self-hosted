@@ -34,15 +34,21 @@ Generate postgres connection URL
 {{- end -}}
 
 {{/*
-Reject a leftover global.authType. Renders nothing. Database-backed authentication is the only
-mode, so the chart no longer reads the value; "DB" is still accepted so existing values files
-render unchanged. Any other value, such as "AUTH0" or the removed "OIDC", fails the render
-rather than silently changing how users sign in.
+Reject leftover Auth0 or OIDC configuration. Renders nothing. Database-backed authentication is
+the only mode, so the chart no longer reads global.authType; "DB" is still accepted so existing
+values files render unchanged, and any other value that is present, including an empty string,
+fails. Without the key, a secrets.auth0 block also fails: the previous chart defaulted to Auth0,
+so a deployment that relied on that default carries its Auth0 values but no global.authType, and
+rendering it would silently change how users sign in.
 */}}
 {{- define "qualytics.validate.authType" -}}
-{{- $authType := .Values.global.authType | default "DB" | toString -}}
-{{- if ne $authType "DB" -}}
-{{- fail (printf "global.authType %q is no longer supported: database-backed authentication is the only mode. Cut over to database-backed providers on your current chart version before upgrading, then remove global.authType from your values (see docs/authentication.md)" $authType) -}}
+{{- $authType := .Values.global.authType -}}
+{{- if not (kindIs "invalid" $authType) -}}
+{{- if ne (toString $authType) "DB" -}}
+{{- fail (printf "global.authType %q is no longer supported: database-backed authentication is the only mode. Cut over to database-backed providers on your current chart version before upgrading, then remove global.authType from your values (see docs/authentication.md)" (toString $authType)) -}}
+{{- end -}}
+{{- else if .Values.secrets.auth0 -}}
+{{- fail "secrets.auth0 is set without global.authType \"DB\": the previous chart defaulted to Auth0, so these values look like a deployment that still signs users in with Auth0, which is no longer supported. If this deployment already uses database-backed providers, remove secrets.auth0 from your values; otherwise cut over on your current chart version before upgrading (see docs/authentication.md)" -}}
 {{- end -}}
 {{- end -}}
 

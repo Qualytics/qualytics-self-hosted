@@ -652,7 +652,7 @@ Database-backed providers are the only mode; Auth0 support has been removed and 
 - **Configuration**: identity providers (OpenID Connect, SAML 2.0) and password sign-in are configured in the application under Settings → Access → Providers; the chart renders no IdP secrets
 - **Rendered env**: API and CMD always get `API_AUTH=DB`; the frontend always gets `VITE_QUALYTICS_AUTH_PROVIDER=DB`
 - **Deployment-wide values** (`secrets.oidc`, optional): `oidc_group_team_sync_enabled` (default: false), `oidc_allow_insecure_transport` (default: false), `oidc_signer_pem_url`
-- **Leftover `global.authType`**: `"DB"` is accepted so existing values files render unchanged; any other value (`"AUTH0"`, the removed `"OIDC"`) fails the render via `qualytics.validate.authType`, which api/cmd/frontend/secrets all include
+- **Leftover-config guard** (`qualytics.validate.authType`, included by api/cmd/frontend/secrets): `global.authType: "DB"` is accepted so existing values files render unchanged; any other present value (`"AUTH0"`, `"OIDC"`, `""`) fails the render, and so does a `secrets.auth0` block without `global.authType: "DB"` — what a deployment that relied on the former Auth0 default looks like
 
 ## Node Scheduling
 

@@ -116,11 +116,19 @@ for the streaming ingress.
 ## Removed Authentication Modes
 
 Database-backed providers are the only authentication mode, so the chart no longer reads
-`global.authType`. Values files that still set it to `"DB"` render unchanged; remove the key, and
-any leftover `secrets.auth0` block, at your convenience. Any other value — `"AUTH0"`, the removed
-`"OIDC"`, or a misspelling — fails the render instead of silently changing how users sign in. A
-deployment still on Auth0 or OIDC must cut over to database-backed providers on its current chart
-version before upgrading.
+`global.authType`. Values files that still set it to `"DB"` render unchanged; when you tidy up,
+remove `global.authType` together with any leftover `secrets.auth0` block. Rather than silently
+changing how users sign in, the chart fails the render when `global.authType` is set to anything
+other than `"DB"` — `"AUTH0"`, the removed `"OIDC"`, an empty value, or a misspelling — and when a
+`secrets.auth0` block is present without `global.authType: "DB"`, which is what a deployment still
+relying on the former Auth0 default looks like.
+
+A deployment still on Auth0 or OIDC must cut over to database-backed providers on its current chart
+version before upgrading. For Auth0, follow
+[Cutting Over to Database-Backed Providers](https://github.com/Qualytics/qualytics-self-hosted/blob/qualytics-2026.9.23/docs/authentication.md#cutting-over-to-database-backed-providers)
+in the chart 2026.9.23 documentation: stage and verify a provider, then switch during a maintenance
+window. The switch ends every Auth0 session, and users sign back in with a database-backed
+provider. For OIDC, follow the steps below.
 
 ### Migrating from the removed OIDC mode
 
@@ -299,7 +307,7 @@ The endpoint returns the enabled providers as JSON.
 |---------|-------------|----------|
 | 401 after login callback | Redirect URI mismatch | Ensure your IdP lists the provider's redirect URI, `https://<dnsRecord>/api/auth/oidc/callback/<provider-id>` |
 | CORS errors in browser | `CORS_ORIGINS` not set correctly | Check that `global.dnsRecord` matches the URL in the browser |
-| `helm install`/`upgrade` fails on `global.authType` | Your values still set it to something other than `DB`, such as `AUTH0` or the removed `OIDC` | Remove `global.authType` from your values — see [Removed authentication modes](#removed-authentication-modes) |
+| `helm install`/`upgrade` fails on `global.authType` or `secrets.auth0` | Your values still carry Auth0 or OIDC configuration | If the deployment already signs users in through database-backed providers, remove `global.authType` and `secrets.auth0` from your values; otherwise cut over first — see [Removed authentication modes](#removed-authentication-modes) |
 | SAML login returns 403 or 413 from nginx, never reaching the app | OWASP CRS or a body-size limit on the API ingress rejected the `SAMLResponse` POST | See [SAML2 and the API ingress WAF](#saml2-and-the-api-ingress-waf) |
 | "Invalid client" error | Wrong client credentials | Double-check the provider's client ID and client secret under Settings → Access → Providers |
 | User attributes missing | Claims mapping mismatch | Adjust the provider's claim mappings under Settings → Access → Providers to match your IdP's claim names |
