@@ -249,7 +249,6 @@ Edit `values.yaml`. The keys below are the ones that differ from the template fo
 global:
   platform: "aws"
   dnsRecord: "your-domain.example.com"
-  authType: "OIDC"                         # or "AUTH0"
 
 secrets:
   deployment:
@@ -257,11 +256,6 @@ secrets:
     # while it is empty — copying the template is not sufficient. Paste the value
     # exactly as issued; never reuse it for another installation.
     identifier: "<provided by Qualytics>"
-  oidc:
-    oidc_discovery_url: "https://your-idp.example.com/.well-known/openid-configuration"
-    oidc_scopes: "openid,email,profile"
-    oidc_client_id: "your-client-id"
-    oidc_client_secret: "your-client-secret"
   auth:
     jwt_signing_secret: "<openssl rand -base64 32>"
   postgres:

@@ -11,12 +11,6 @@ global:
   platform: "aws"
   # Your DNS record (REQUIRED) - the domain where Qualytics will be accessible
   dnsRecord: "your-domain.example.com"
-  # Authentication authority. Exactly one of (case-sensitive — the chart rejects anything else):
-  #   "DB"    — providers (OpenID Connect, SAML 2.0, or password) configured in the Qualytics
-  #             database under Settings -> Access -> Providers (recommended for self-hosted)
-  #   "AUTH0" — managed by Qualytics; requires egress to auth.qualytics.io (not air-gapped)
-  # See docs/authentication.md.
-  authType: "DB"
   # Pull secrets applied to every pod. Defaults to the regcred Secret created
   # during installation; uncomment and set to [] if your registry allows
   # unauthenticated pulls (no regcred Secret needed). See docs/docker-images.md.
@@ -24,9 +18,7 @@ global:
 
 #--------------------------------------------------------------------------------
 # Deployment and Authentication Configuration (REQUIRED)
-# Choose ONE of the following: database-backed providers OR Auth0
 # See: docs/authentication.md
-# See: https://userguide.qualytics.io/deployments/auth0-setup/
 #--------------------------------------------------------------------------------
 secrets:
   # Required. Paste the identifier provided by Qualytics for this deployment.
@@ -34,9 +26,8 @@ secrets:
   deployment:
     identifier: ""
 
-  # --- Option A: Database-backed providers (recommended for self-hosted) ---
-  # No identity-provider values are needed in Helm. After installation, open the
-  # login page, create the first administrator account, then configure your
+  # Authentication: no identity-provider values are needed in Helm. After installation,
+  # open the login page, create the first administrator account, then configure your
   # identity provider (OpenID Connect or SAML 2.0) or password sign-in under
   # Settings -> Access -> Providers. Optional deployment-wide settings:
   # oidc:
@@ -44,15 +35,6 @@ secrets:
   #   oidc_group_team_sync_enabled: false
   #   # Development only: allow HTTP (non-TLS) identity provider endpoints.
   #   oidc_allow_insecure_transport: false
-
-  # --- Option B: Auth0 (managed by Qualytics) ---
-  # Uncomment and configure if using authType: "AUTH0"
-  # Values provided by your Qualytics account manager
-  # auth0:
-  #   auth0_domain: auth.qualytics.io
-  #   auth0_audience: changeme-api
-  #   auth0_organization: org_changeme
-  #   auth0_spa_client_id: spa_client_id
 
   # ------------------------------------------------------------------------------
   # System secrets — YOU MUST REPLACE THESE BEFORE INSTALLING
@@ -67,8 +49,8 @@ secrets:
   #   openssl rand -base64 32
   # ------------------------------------------------------------------------------
   auth:
-    # REQUIRED — signs browser session JWTs. Under authType "DB" this key is the sole
-    # session authority: anyone who knows it can mint valid sessions for your deployment.
+    # REQUIRED — signs browser session JWTs and is the sole session authority: anyone
+    # who knows it can mint valid sessions for your deployment.
     # Replace with `openssl rand -base64 32`. Rotating it logs everyone out.
     jwt_signing_secret: ChangeMe!
   postgres:

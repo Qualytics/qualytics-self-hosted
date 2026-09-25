@@ -69,15 +69,8 @@ jobs:
             --set global.platform=azure \
             --set global.dnsRecord=test-azure.qualytics.io > /dev/null
 
-          # Test authentication configurations
-          echo "  Testing AUTH0 authentication..."
-          helm template test-release charts/qualytics \
-            "${values_args[@]}" \
-            --set global.authType=AUTH0 \
-            --set secrets.auth0.auth0_domain=test.auth0.com \
-            --set secrets.auth0.auth0_audience=test-api > /dev/null
-
-          echo "  Testing database-backed authentication..."
+          # Existing values files still set global.authType=DB and must keep rendering
+          echo "  Testing legacy global.authType=DB values..."
           helm template test-release charts/qualytics \
             "${values_args[@]}" \
             --set global.authType=DB > /dev/null

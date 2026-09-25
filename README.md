@@ -28,7 +28,7 @@ Before deploying Qualytics, ensure you have:
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
 - A Qualytics-issued image registry token and a unique deployment identifier
-- Authentication choice — database-backed providers configured after installation (recommended) or Auth0 credentials from your Qualytics account manager
+- An identity provider (OpenID Connect or SAML 2.0) or password sign-in, configured in Qualytics after installation
 
 ## How should I use this chart?
 
@@ -127,35 +127,9 @@ Update these required settings:
      dnsRecord: "your-company.qualytics.io"  # or your custom domain
    ```
 
-3. **Authentication** — choose one of the following:
+3. **Authentication** — no identity-provider values go into Helm: after installation, open the login page, create the first administrator account, then configure your identity provider (OpenID Connect or SAML 2.0) or password sign-in under Settings → Access → Providers. Register Qualytics in your IdP as a Web Application using the Authorization Code grant and the provider's redirect URI, `https://<your-domain>/api/auth/oidc/callback/<provider-id>`.
 
-   **Option A: Database-Backed Providers (Recommended)**
-
-   Set `global.authType` to `DB`. No identity-provider values go into Helm: after installation, open the login page, create the first administrator account, then configure your identity provider (OpenID Connect or SAML 2.0) or password sign-in under Settings → Access → Providers. Register Qualytics in your IdP as a Web Application using the Authorization Code grant and the provider's redirect URI, `https://<your-domain>/api/auth/oidc/callback/<provider-id>`.
-
-   ```yaml
-   global:
-     authType: "DB"
-   ```
-
-   > See [Authentication Configuration](./docs/authentication.md) for first sign-in, the cutover procedure, deployment-wide settings such as group-to-Team sync, and the migration steps from the removed `OIDC` mode.
-
-   **Option B: Auth0 — Managed by Qualytics**
-
-   Contact your [Qualytics account manager](mailto:hello@qualytics.ai) to request Auth0 resources, then configure the provided values:
-
-   ```yaml
-   global:
-     authType: "AUTH0"
-
-   secrets:
-     auth0:
-       auth0_audience: your-api-audience
-       auth0_organization: org_your-org-id
-       auth0_spa_client_id: your-spa-client-id
-   ```
-
-   > See the [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) for details on how to request Auth0 resources from Qualytics.
+   > See [Authentication Configuration](./docs/authentication.md) for first sign-in, deployment-wide settings such as group-to-Team sync, and the removed Auth0 and `OIDC` modes.
 
 4. **Security Secrets** (generate secure random values):
    ```yaml
@@ -245,18 +219,17 @@ The license request, signed license, registry token, and deployment identifier a
 
 ## Can I run a fully "air-gapped" deployment?
 
-Yes. The only *ongoing* runtime dependency on the public internet is https://auth.qualytics.io, which provides Auth0-powered federated authentication. Auth0 is recommended for ease of installation and support, but it is not a strict requirement — a fully private deployment can use database-backed providers that integrate with your enterprise identity provider (IdP) instead.
+Yes. Authentication has no public-internet dependency: users sign in through database-backed providers that integrate with your enterprise identity provider (IdP).
 
-Beyond authentication, plan for these paths regardless of auth mode:
+Plan for these network paths:
 
 - **Container registries** — Docker Hub for the Qualytics images plus the public infrastructure images, or your internal mirror. See [Qualytics Docker Images](./docs/docker-images.md).
 - **Your datastores** — the Spark driver and executors need network access to every datastore you connect.
 - **JDBC drivers resolved at startup** — the Spark driver passes `dataplane.extraPackages` (Teradata and IBM DB2) to `spark-submit --packages`, which resolves from Maven Central by default. Clusters with no route to Maven Central can resolve these from an internal Maven repository (Artifactory, Nexus, …) via `dataplane.ivy` — see [Custom Maven Repository](./docs/custom-maven-repository.md).
 
 To set up authentication for an air-gapped deployment:
-1. Set `global.authType: "DB"` in your `values.yaml`
-2. After installation, create the first administrator account and configure your enterprise IdP under Settings → Access → Providers — see [Authentication Configuration](./docs/authentication.md)
-3. Import Qualytics container images into your private registry — see [Qualytics Docker Images](./docs/docker-images.md)
+1. After installation, create the first administrator account and configure your enterprise IdP under Settings → Access → Providers — see [Authentication Configuration](./docs/authentication.md)
+2. Import Qualytics container images into your private registry — see [Qualytics Docker Images](./docs/docker-images.md)
 
 ## Troubleshooting
 
@@ -300,7 +273,7 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 
 ## Additional Documentation
 
-- [Authentication Configuration](./docs/authentication.md) — Database-backed providers, Auth0, deployment-wide settings, and migration from the removed OIDC mode
+- [Authentication Configuration](./docs/authentication.md) — Database-backed providers, deployment-wide settings, and migration from the removed OIDC mode
 - [Qualytics Docker Images](./docs/docker-images.md) — Release image inventory and private-registry mirroring instructions
 - [Custom Maven Repository](./docs/custom-maven-repository.md) — Resolve the runtime JDBC driver packages from an internal Artifactory/Nexus instead of Maven Central
 - [Controlplane AWS Identity](./docs/controlplane-aws-identity.md) — Give the hub pods their own IAM identity, and configure AgentQ's Amazon Bedrock integration with IAM Role authentication
@@ -308,5 +281,4 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 - [License Management](./docs/license-management.md) — Activate and renew your deployment license (31-day grace period)
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
-- [Auth0 Setup Guide](https://userguide.qualytics.io/deployments/auth0-setup/) — Configure Auth0 authentication (managed by Qualytics)
 - [Qualytics UserGuide](https://userguide.qualytics.io/) — Full platform documentation

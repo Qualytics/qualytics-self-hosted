@@ -175,7 +175,7 @@ This section is how to verify all of that against a real Kubernetes cluster befo
 4. **Upgrade in-place** (`helm upgrade`) to iterate through scenarios. Much faster than uninstall/install.
 5. **Cleanup ritual** at the end, every time.
 
-**Why stripped-down values?** A full install needs private image pulls (`qualyticsai/*`), Auth0 config, 100 GiB PVCs, and customer-specific secrets. A smoke test doesn't. The trick is to disable or replace every such dependency while keeping the *template logic under test* intact.
+**Why stripped-down values?** A full install needs private image pulls (`qualyticsai/*`), 100 GiB PVCs, and customer-specific secrets. A smoke test doesn't. The trick is to disable or replace every such dependency while keeping the *template logic under test* intact.
 
 **Knobs to routinely flip:**
 
@@ -211,7 +211,6 @@ global:
   platform: "aws"
   deploymentMode: "kubernetes"
   dnsRecord: "test.local"
-  authType: "AUTH0"
   imageUrls:
     controlplaneImageUrl: "nginx"
     dataplaneImageUrl: "nginx"
@@ -244,11 +243,6 @@ dataplane:
 secrets:
   deployment:
     identifier: test-deployment-identifier
-  auth0:
-    auth0_domain: auth.test.local
-    auth0_audience: test
-    auth0_organization: org_test
-    auth0_spa_client_id: test
   auth:
     jwt_signing_secret: test
   postgres:
@@ -504,7 +498,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Port**: 8000
 - **Features**:
   - SMTP email notifications (optional; credentials omitted → no SMTP AUTH attempt)
-  - Authentication (AUTH0 or DB; database-backed providers are configured in the application, with deployment-wide `secrets.oidc.oidc_group_team_sync_enabled` and `oidc_allow_insecure_transport`)
+  - Authentication (database-backed providers only, configured in the application, with deployment-wide `secrets.oidc.oidc_group_team_sync_enabled` and `oidc_allow_insecure_transport`)
   - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force browser cookie-session auth)
   - Proxy support (HTTP/SOCKS5)
   - TLS certificate verification control
@@ -620,11 +614,11 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **Sections**:
   1. nginx subchart (ingress controller)
   2. Ingress configuration
-  3. Global values (platform, DNS, auth type, image pull secrets, image URLs)
+  3. Global values (platform, DNS, image pull secrets, image URLs)
   4. Image tags (controlplane, dataplane, frontend)
   5. Storage class configuration
   6. Node scheduling (selectors and tolerations)
-  7. Deployment identifier and secrets (auth0, oidc, auth, postgres, smtp, rabbitmq)
+  7. Deployment identifier and secrets (oidc, auth, postgres, smtp, rabbitmq)
   8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`, `dataplane.ivy.*`, `dataplane.extraSparkConf`, `maxParallelSyncRequests`, and the `syncAdmission` CPU governor)
   9. Controlplane configuration (API and CMD, including `controlplane.auth.{migrateIdpByEmail,scimUsernamePrefix,allowQualyticsIssuer}`)
   10. Frontend configuration (including `frontend.disableDownloads`)
@@ -636,8 +630,8 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **Purpose**: Quick start configuration template
 - **Includes**: Essential settings only
 - **Sections**:
-  1. Global configuration (platform, DNS, auth type)
-  2. Deployment identifier and authentication secrets (auth0, auth, postgres, rabbitmq)
+  1. Global configuration (platform, DNS)
+  2. Deployment identifier and authentication secrets (auth, postgres, rabbitmq)
   3. Node scheduling (with default enabled selectors)
   4. Dependencies (with node selectors)
   5. Ingress configuration
@@ -655,21 +649,11 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 
 ## Authentication Configuration
 
-### AUTH0 (Default)
-- **Type**: Set `global.authType: "AUTH0"`
-- **Required Secrets**:
-  - `auth0_domain` (default: auth.qualytics.io)
-  - `auth0_audience` (API identifier)
-  - `auth0_organization` (organization ID)
-  - `auth0_spa_client_id` (SPA client ID)
-- **Egress Requirement**: Access to `https://auth.qualytics.io`
-
-### Database-backed providers (DB)
-- **Type**: Set `global.authType: "DB"`
+Database-backed providers are the only mode; Auth0 support has been removed and the chart no longer reads `global.authType`.
 - **Configuration**: identity providers (OpenID Connect, SAML 2.0) and password sign-in are configured in the application under Settings → Access → Providers; the chart renders no IdP secrets
+- **Rendered env**: API and CMD always get `API_AUTH=DB`; the frontend always gets `VITE_QUALYTICS_AUTH_PROVIDER=DB`
 - **Deployment-wide values** (`secrets.oidc`, optional): `oidc_group_team_sync_enabled` (default: false), `oidc_allow_insecure_transport` (default: false), `oidc_signer_pem_url`
-- **Removed mode**: `global.authType: "OIDC"` fails the render; docs/authentication.md has the migration steps
-- **Use Case**: Air-gapped deployments or custom enterprise IdP
+- **Leftover-config guard** (`qualytics.validate.authType`, included by api/cmd/frontend/secrets): `global.authType: "DB"` is accepted so existing values files render unchanged; any other present value (`"AUTH0"`, `"OIDC"`, `""`) fails the render, and so does a `secrets.auth0` block without `global.authType: "DB"` — what a deployment that relied on the former Auth0 default looks like
 
 ## Node Scheduling
 
@@ -705,7 +689,6 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 3. `helm` CLI (v3.12+)
 4. Qualytics-issued container-registry token
 5. Unique deployment identifier provided by Qualytics
-6. Auth0 configuration details, unless using database-backed providers
 
 ### Initial Setup
 1. **Create namespace and registry secret**:
@@ -811,7 +794,7 @@ Keep these in sync when chart behavior changes — image tags and version string
 - [docs/docker-images.md](docs/docker-images.md) — image inventory (tags pinned per chart version), private-registry mirroring, runtime-resolved JDBC drivers
 - [docs/custom-maven-repository.md](docs/custom-maven-repository.md) — `dataplane.ivy.*` chart-generated `ivysettings.xml` Secret to resolve `extraPackages` from an internal Artifactory/Nexus instead of Maven Central
 - [docs/cluster-sizing.md](docs/cluster-sizing.md) — six sizing tiers, per-cloud instance types, per-tier Helm values
-- [docs/authentication.md](docs/authentication.md) — DB/Auth0 modes, deployment-wide values → env mapping, group→Team sync, migration from the removed OIDC mode, troubleshooting
+- [docs/authentication.md](docs/authentication.md) — database-backed providers, deployment-wide values → env mapping, group→Team sync, removed Auth0/OIDC modes, troubleshooting
 - [docs/external-postgres-setup.md](docs/external-postgres-setup.md) + [docs/external-postgres-faq.md](docs/external-postgres-faq.md) — `postgres.enabled: false` topology
 - [docs/ingress-tls.md](docs/ingress-tls.md) — BYO TLS Secret precedence
 - [docs/license-management.md](docs/license-management.md) — license activation and the 31-day grace period
