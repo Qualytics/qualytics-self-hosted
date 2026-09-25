@@ -170,7 +170,8 @@ spark-submit lets the file fill only keys no --conf flag sets, so the chart's an
 the entrypoint's own settings always win. Backslashes, newlines and carriage
 returns are escaped the way java.util.Properties reads them back. spark-submit
 drops keys outside spark.*, so those fail the render, as do keys a properties
-file cannot hold unescaped.
+file cannot hold unescaped and values with leading or trailing whitespace, which
+spark-submit trims from the file (Utils.trimExceptCRLF) however it is escaped.
 */}}
 {{- define "qualytics.spark.extraConfProperties" -}}
 {{- $lines := list -}}
@@ -181,7 +182,11 @@ file cannot hold unescaped.
 {{- if not (regexMatch "^spark\\.[^\\s=:\\\\]+$" $key) -}}
 {{- fail (printf "dataplane.extraSparkConf key %q must not contain whitespace, '=', ':' or '\\'" $key) -}}
 {{- end -}}
-{{- $lines = append $lines (printf "%s=%s" $key (toString $value | replace "\\" "\\\\" | replace "\n" "\\n" | replace "\r" "\\r")) -}}
+{{- $str := toString $value -}}
+{{- if regexMatch "^[\\x00-\\x09\\x0B\\x0C\\x0E-\\x20]|[\\x00-\\x09\\x0B\\x0C\\x0E-\\x20]$" $str -}}
+{{- fail (printf "dataplane.extraSparkConf value for %q starts or ends with whitespace, which spark-submit trims from its properties file; remove it" $key) -}}
+{{- end -}}
+{{- $lines = append $lines (printf "%s=%s" $key ($str | replace "\\" "\\\\" | replace "\n" "\\n" | replace "\r" "\\r")) -}}
 {{- end -}}
 {{- join "\n" $lines -}}
 {{- end -}}

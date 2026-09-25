@@ -900,6 +900,24 @@ tests:
       - failedTemplate:
           errorPattern: "must not contain whitespace"
 
+  # spark-submit trims values read from a properties file (Utils.trimExceptCRLF),
+  # escaped or not, so a value it would change fails the render instead.
+  - it: should fail rendering for extraSparkConf values with leading whitespace
+    set:
+      dataplane.extraSparkConf:
+        spark.hadoop.example.value: " leading space"
+    asserts:
+      - failedTemplate:
+          errorPattern: 'value for "spark\.hadoop\.example\.value" starts or ends with whitespace'
+
+  - it: should fail rendering for extraSparkConf values with trailing whitespace
+    set:
+      dataplane.extraSparkConf:
+        spark.hadoop.example.value: "trailing tab\t"
+    asserts:
+      - failedTemplate:
+          errorPattern: "starts or ends with whitespace"
+
   - it: should configure driver pod resources from cores and memory + overhead
     asserts:
       - equal:
