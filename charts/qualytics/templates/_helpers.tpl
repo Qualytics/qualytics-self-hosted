@@ -163,6 +163,35 @@ Renders empty when numVolumes <= 0.
 {{- end -}}
 
 {{/*
+dataplane.extraSparkConf as a Spark properties file (spark-submit --properties-file):
+one `key=value` line per entry, sorted by key. Rendered into the
+<release>-spark-extra-conf Secret so values stay out of the Deployment spec.
+spark-submit lets the file fill only keys no --conf flag sets, so the chart's and
+the entrypoint's own settings always win. Backslashes, newlines and carriage
+returns are escaped the way java.util.Properties reads them back. spark-submit
+drops keys outside spark.*, so those fail the render, as do keys a properties
+file cannot hold unescaped and values with leading or trailing whitespace, which
+spark-submit trims from the file (Utils.trimExceptCRLF) however it is escaped.
+*/}}
+{{- define "qualytics.spark.extraConfProperties" -}}
+{{- $lines := list -}}
+{{- range $key, $value := .Values.dataplane.extraSparkConf -}}
+{{- if not (hasPrefix "spark." $key) -}}
+{{- fail (printf "dataplane.extraSparkConf key %q must start with \"spark.\": spark-submit ignores any other key (use spark.hadoop.<key> for Hadoop settings)" $key) -}}
+{{- end -}}
+{{- if not (regexMatch "^spark\\.[^\\s=:\\\\]+$" $key) -}}
+{{- fail (printf "dataplane.extraSparkConf key %q must not contain whitespace, '=', ':' or '\\'" $key) -}}
+{{- end -}}
+{{- $str := toString $value -}}
+{{- if regexMatch "^[\\x00-\\x09\\x0B\\x0C\\x0E-\\x20]|[\\x00-\\x09\\x0B\\x0C\\x0E-\\x20]$" $str -}}
+{{- fail (printf "dataplane.extraSparkConf value for %q starts or ends with whitespace, which spark-submit trims from its properties file; remove it" $key) -}}
+{{- end -}}
+{{- $lines = append $lines (printf "%s=%s" $key ($str | replace "\\" "\\\\" | replace "\n" "\\n" | replace "\r" "\\r")) -}}
+{{- end -}}
+{{- join "\n" $lines -}}
+{{- end -}}
+
+{{/*
 Escape a string for use inside a double-quoted XML attribute value
 (ivysettings.xml). Ampersand must be replaced first or it would re-escape
 the other entities.
