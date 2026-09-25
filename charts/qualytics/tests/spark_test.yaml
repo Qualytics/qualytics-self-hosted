@@ -738,51 +738,150 @@ tests:
           pattern: "spark.local.dir="
         documentIndex: 5
 
-  # dataplane.extraSparkConf: one single-quoted `--conf key=value` per entry, sorted
-  # by key, after the chart's own confs and immediately before the application jar.
-  - it: should not add extra confs by default
+  # dataplane.extraSparkConf: rendered as a Spark properties file into a
+  # release-managed Secret, mounted into the driver, and passed via
+  # --properties-file. spark-submit lets --conf flags (the chart's and the
+  # entrypoint's) win over the file, so these entries only add settings.
+  - it: should not emit the extra-conf Secret, mount, flag, or checksum by default
     asserts:
+      - hasDocuments:
+          count: 6
       - notMatchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "--conf '"
+          pattern: "--properties-file"
         documentIndex: 5
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: 'spark-role=driver \\\n\s*local:///opt/spark/jars/qualytics-dataplane\.jar'
+      - isNull:
+          path: spec.template.metadata.annotations
         documentIndex: 5
 
-  - it: should append extraSparkConf entries sorted by key before the application jar
+  - it: should render extraSparkConf into a Secret-backed properties file for spark-submit
     set:
       dataplane.extraSparkConf:
         spark.hadoop.hadoop.rpc.protection: "privacy"
         spark.hadoop.dfs.nameservices: "nameservice1"
         spark.hadoop.dfs.ha.namenodes.nameservice1: "nn1,nn2"
         spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn1: "namenode1.example.com:8020"
-        spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn2: "namenode2.example.com:8020"
-        spark.hadoop.dfs.client.failover.proxy.provider.nameservice1: "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
     asserts:
+      - hasDocuments:
+          count: 7
+      - isKind:
+          of: Secret
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-extra-conf
+        documentIndex: 3
+      - equal:
+          path: data["extra-spark.properties"]
+          decodeBase64: true
+          value: |-
+            spark.hadoop.dfs.ha.namenodes.nameservice1=nn1,nn2
+            spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn1=namenode1.example.com:8020
+            spark.hadoop.dfs.nameservices=nameservice1
+            spark.hadoop.hadoop.rpc.protection=privacy
+        documentIndex: 3
+      # With the Secret inserted at index 3, the Deployment shifts to index 6.
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: 'spark-role=driver \\\n\s*--conf ''spark\.hadoop\.dfs\.client\.failover\.proxy\.provider\.nameservice1=org\.apache\.hadoop\.hdfs\.server\.namenode\.ha\.ConfiguredFailoverProxyProvider'' \\\n\s*--conf ''spark\.hadoop\.dfs\.ha\.namenodes\.nameservice1=nn1,nn2'' \\\n\s*--conf ''spark\.hadoop\.dfs\.namenode\.rpc-address\.nameservice1\.nn1=namenode1\.example\.com:8020'' \\\n\s*--conf ''spark\.hadoop\.dfs\.namenode\.rpc-address\.nameservice1\.nn2=namenode2\.example\.com:8020'' \\\n\s*--conf ''spark\.hadoop\.dfs\.nameservices=nameservice1'' \\\n\s*--conf ''spark\.hadoop\.hadoop\.rpc\.protection=privacy'' \\\n\s*local:///opt/spark/jars/qualytics-dataplane\.jar'
-        documentIndex: 5
+          pattern: '--properties-file /opt/spark/conf/extra-spark\.properties \\\n\s*--load-spark-defaults \\'
+        documentIndex: 6
+      # Values stay out of the Deployment spec.
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "nameservice1|rpc\\.protection"
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-spark-conf
+            secret:
+              items:
+                - key: extra-spark.properties
+                  path: extra-spark.properties
+              secretName: RELEASE-NAME-spark-extra-conf
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-spark-conf
+            mountPath: /opt/spark/conf/extra-spark.properties
+            subPath: extra-spark.properties
+        documentIndex: 6
+      # spark-submit reads the file once at start, so a change must roll the driver.
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/extra-spark-conf"]
+          pattern: "^[a-f0-9]{64}$"
+        documentIndex: 6
 
-  - it: should quote extraSparkConf values so bash passes them verbatim
+  - it: should keep chart-owned settings on the command line, where they win over the properties file
     set:
       dataplane.extraSparkConf:
-        spark.hadoop.example.value: "it's $HOME;<host>"
+        spark.kubernetes.driver.label.spark-role: "other"
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: '--conf ''spark\.hadoop\.example\.value=it''\\''''s \$HOME;<host>'' \\'
-        documentIndex: 5
+          pattern: "--conf spark.kubernetes.driver.label.spark-role=driver"
+        documentIndex: 6
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark-role=other"
+        documentIndex: 6
+      - equal:
+          path: data["extra-spark.properties"]
+          decodeBase64: true
+          value: spark.kubernetes.driver.label.spark-role=other
+        documentIndex: 3
 
-  - it: should render no extra confs when extraSparkConf is null (reuse-values upgrade)
+  - it: should escape extraSparkConf values the way java.util.Properties reads them back
+    set:
+      dataplane.extraSparkConf:
+        spark.hadoop.example.path: "C:\\temp\nsecond line"
+    asserts:
+      - equal:
+          path: data["extra-spark.properties"]
+          decodeBase64: true
+          value: 'spark.hadoop.example.path=C:\\temp\nsecond line'
+        documentIndex: 3
+
+  - it: should keep the ivy and extra-conf Secrets, mounts, and checksums side by side
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+      dataplane.extraSparkConf:
+        spark.hadoop.dfs.nameservices: "nameservice1"
+    asserts:
+      - hasDocuments:
+          count: 8
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-ivy-settings
+        documentIndex: 3
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-extra-conf
+        documentIndex: 4
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/ivy-settings"]
+          pattern: "^[a-f0-9]{64}$"
+        documentIndex: 7
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/extra-spark-conf"]
+          pattern: "^[a-f0-9]{64}$"
+        documentIndex: 7
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 3
+        documentIndex: 7
+
+  - it: should render nothing extra when extraSparkConf is null (reuse-values upgrade)
     set:
       dataplane.extraSparkConf: null
     asserts:
+      - hasDocuments:
+          count: 6
       - notMatchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "--conf '"
+          pattern: "--properties-file"
         documentIndex: 5
 
   - it: should fail rendering for extraSparkConf keys spark-submit would ignore
@@ -793,13 +892,13 @@ tests:
       - failedTemplate:
           errorPattern: 'key "hadoop\.rpc\.protection" must start with "spark\."'
 
-  - it: should fail rendering when extraSparkConf sets a conf the entrypoint owns
+  - it: should fail rendering for extraSparkConf keys a properties file cannot hold
     set:
       dataplane.extraSparkConf:
-        spark.driver.bindAddress: "0.0.0.0"
+        "spark.example key": "x"
     asserts:
       - failedTemplate:
-          errorPattern: 'must not set spark\.driver\.bindAddress'
+          errorPattern: "must not contain whitespace"
 
   - it: should configure driver pod resources from cores and memory + overhead
     asserts:

@@ -249,10 +249,13 @@ dataplane:
     # Prefer an identity token / API key over a real password.
     username: ""
     password: ""
-  # Extra Spark configuration for the driver's spark-submit, one `--conf key=value`
-  # per entry, applied after the chart's own settings (a key the chart already sets
-  # is replaced, not merged). Use spark.hadoop.<key> for Hadoop client settings, e.g.
-  # for an HA HDFS nameservice or a cluster that requires RPC privacy:
+  # Extra Spark configuration for the driver, for settings the chart has no
+  # dedicated value for. The entries are rendered into a release-managed Secret and
+  # passed to spark-submit as a properties file, so values stay out of the
+  # Deployment spec. They can only add settings: anything the chart or the dataplane
+  # entrypoint passes itself keeps its value (use the dedicated values for those).
+  # Use spark.hadoop.<key> for Hadoop client settings, e.g. for an HA HDFS
+  # nameservice or a cluster that requires RPC privacy:
   #   extraSparkConf:
   #     spark.hadoop.dfs.nameservices: "nameservice1"
   #     spark.hadoop.dfs.ha.namenodes.nameservice1: "nn1,nn2"
@@ -260,9 +263,8 @@ dataplane:
   #     spark.hadoop.dfs.namenode.rpc-address.nameservice1.nn2: "namenode2.example.com:8020"
   #     spark.hadoop.dfs.client.failover.proxy.provider.nameservice1: "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
   #     spark.hadoop.hadoop.rpc.protection: "privacy"
-  # Keys must start with "spark."; spark.driver.bindAddress and spark.submit.deployMode
-  # are set by the dataplane entrypoint and rejected here. Quote values so YAML keeps
-  # them as strings. Changing this map rolls the driver pod.
+  # Keys must start with "spark.". Quote values so YAML keeps them as strings.
+  # Changing this map rolls the driver pod.
   extraSparkConf: {}
   # RBAC for the driver pod to manage executor pods directly. Replaces the
   # spark-operator's spark/serviceaccount.yaml and spark/rbac.yaml.

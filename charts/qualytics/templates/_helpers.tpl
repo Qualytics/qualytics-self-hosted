@@ -163,23 +163,27 @@ Renders empty when numVolumes <= 0.
 {{- end -}}
 
 {{/*
-One dataplane.extraSparkConf entry as a spark-submit `--conf` argument: `key=value`
-single-quoted for the driver's `bash -c` script, so the value reaches spark-submit
-verbatim (no word splitting, globbing, redirection or $ expansion). spark-submit
-silently drops keys outside spark.*, and the entrypoint sets the bind address and
-deploy mode itself (see "Driver entrypoint invariants" in CLAUDE.md), so those keys
-fail the render instead.
-Input: dict with "key" and "value".
+dataplane.extraSparkConf as a Spark properties file (spark-submit --properties-file):
+one `key=value` line per entry, sorted by key. Rendered into the
+<release>-spark-extra-conf Secret so values stay out of the Deployment spec.
+spark-submit lets the file fill only keys no --conf flag sets, so the chart's and
+the entrypoint's own settings always win. Backslashes, newlines and carriage
+returns are escaped the way java.util.Properties reads them back. spark-submit
+drops keys outside spark.*, so those fail the render, as do keys a properties
+file cannot hold unescaped.
 */}}
-{{- define "qualytics.spark.extraConfArg" -}}
-{{- $key := .key | toString -}}
+{{- define "qualytics.spark.extraConfProperties" -}}
+{{- $lines := list -}}
+{{- range $key, $value := .Values.dataplane.extraSparkConf -}}
 {{- if not (hasPrefix "spark." $key) -}}
 {{- fail (printf "dataplane.extraSparkConf key %q must start with \"spark.\": spark-submit ignores any other key (use spark.hadoop.<key> for Hadoop settings)" $key) -}}
 {{- end -}}
-{{- if has $key (list "spark.driver.bindAddress" "spark.submit.deployMode") -}}
-{{- fail (printf "dataplane.extraSparkConf must not set %s: the dataplane entrypoint sets it" $key) -}}
+{{- if not (regexMatch "^spark\\.[^\\s=:\\\\]+$" $key) -}}
+{{- fail (printf "dataplane.extraSparkConf key %q must not contain whitespace, '=', ':' or '\\'" $key) -}}
 {{- end -}}
-{{- printf "%s=%s" $key (toString .value) | replace "'" "'\\''" | squote -}}
+{{- $lines = append $lines (printf "%s=%s" $key (toString $value | replace "\\" "\\\\" | replace "\n" "\\n" | replace "\r" "\\r")) -}}
+{{- end -}}
+{{- join "\n" $lines -}}
 {{- end -}}
 
 {{/*
