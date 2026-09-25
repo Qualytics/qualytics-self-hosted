@@ -208,7 +208,7 @@ so Maven Central is never contacted. The <credentials> element is emitted
 only for authenticated repositories; its `host` must be the bare hostname
 (no scheme, port, or path) because Ivy matches it against the JVM
 Authenticator's requesting host. Rendered into the release-managed
-<release>-spark-ivy-settings Secret (spark.yaml) and consumed by the driver
+<release>-spark-ivy-settings Secret (dataplane.yaml) and consumed by the driver
 only — executors receive the resolved jars from the driver.
 */}}
 {{- define "qualytics.ivy.settingsXml" -}}

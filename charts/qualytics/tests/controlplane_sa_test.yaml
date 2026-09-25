@@ -1,21 +1,21 @@
 suite: test controlplane ServiceAccount
 templates:
-  - controlplane-serviceaccount.yaml
-  - api.yaml
-  - cmd.yaml
+  - controlplane-sa.yaml
+  - controlplane-api.yaml
+  - controlplane-cmd.yaml
 tests:
   - it: should not create a ServiceAccount or bind one by default
     asserts:
       - hasDocuments:
           count: 0
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
       - notExists:
           path: spec.template.spec.serviceAccountName
-        template: api.yaml
+        template: controlplane-api.yaml
         documentIndex: 0
       - notExists:
           path: spec.template.spec.serviceAccountName
-        template: cmd.yaml
+        template: controlplane-cmd.yaml
         documentIndex: 0
 
   - it: should create a ServiceAccount named after the release and bind it to api and cmd
@@ -24,21 +24,21 @@ tests:
     asserts:
       - isKind:
           of: ServiceAccount
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
       - equal:
           path: metadata.name
           value: RELEASE-NAME-controlplane
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
       # Both hub processes resolve LLM providers, so both need the identity — not just api.
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-controlplane
-        template: api.yaml
+        template: controlplane-api.yaml
         documentIndex: 0
       - equal:
           path: spec.template.spec.serviceAccountName
           value: RELEASE-NAME-controlplane
-        template: cmd.yaml
+        template: controlplane-cmd.yaml
         documentIndex: 0
 
   - it: should carry workload-identity annotations when given them
@@ -50,7 +50,7 @@ tests:
       - equal:
           path: metadata.annotations["eks.amazonaws.com/role-arn"]
           value: arn:aws:iam::123456789012:role/tenant-controlplane
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
 
   - it: should carry no annotations block when none are given
     set:
@@ -58,7 +58,7 @@ tests:
     asserts:
       - notExists:
           path: metadata.annotations
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
 
   # create=false with a name is the BYO path: bind an existing ServiceAccount, create nothing.
   - it: should bind an existing ServiceAccount without creating one
@@ -67,16 +67,16 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
       - equal:
           path: spec.template.spec.serviceAccountName
           value: preexisting-sa
-        template: api.yaml
+        template: controlplane-api.yaml
         documentIndex: 0
       - equal:
           path: spec.template.spec.serviceAccountName
           value: preexisting-sa
-        template: cmd.yaml
+        template: controlplane-cmd.yaml
         documentIndex: 0
 
   - it: should let an explicit name override the derived one
@@ -87,9 +87,9 @@ tests:
       - equal:
           path: metadata.name
           value: custom-sa
-        template: controlplane-serviceaccount.yaml
+        template: controlplane-sa.yaml
       - equal:
           path: spec.template.spec.serviceAccountName
           value: custom-sa
-        template: api.yaml
+        template: controlplane-api.yaml
         documentIndex: 0

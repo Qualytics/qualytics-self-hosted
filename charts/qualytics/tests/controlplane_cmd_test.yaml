@@ -1,208 +1,95 @@
-suite: test API/controlplane configuration
+suite: test CMD deployment
 templates:
-  - api.yaml
+  - controlplane-cmd.yaml
 tests:
-  # Basic API deployment
-  - it: should create API deployment with correct name
+  # Basic CMD deployment
+  - it: should render CMD deployment
     asserts:
+      - hasDocuments:
+          count: 1
       - isKind:
           of: Deployment
         documentIndex: 0
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-api
+          value: RELEASE-NAME-cmd
         documentIndex: 0
 
-  - it: should create API service
-    asserts:
-      - isKind:
-          of: Service
-        documentIndex: 1
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-api-service
-        documentIndex: 1
-
-  # Strategy configuration
-  - it: should roll without surge, keeping one pod serving
+  - it: should use recreate strategy
     asserts:
       - equal:
           path: spec.strategy.type
-          value: RollingUpdate
-        documentIndex: 0
-      - equal:
-          path: spec.strategy.rollingUpdate.maxSurge
-          value: 0
-        documentIndex: 0
-      - equal:
-          path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 3
-        documentIndex: 0
-
-  - it: should degrade to replace-in-place for a single replica
-    set:
-      controlplane.replicas: 1
-    asserts:
-      - equal:
-          path: spec.strategy.rollingUpdate.maxUnavailable
-          value: 1
-        documentIndex: 0
-      - equal:
-          path: spec.maxUnavailable
-          value: 1
-        documentIndex: 2
-
-  - it: should spread pods across nodes and mirror the rollout policy in a PodDisruptionBudget
-    asserts:
-      - equal:
-          path: spec.template.spec.topologySpreadConstraints[0].topologyKey
-          value: kubernetes.io/hostname
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.topologySpreadConstraints[0].whenUnsatisfiable
-          value: ScheduleAnyway
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.topologySpreadConstraints[0].labelSelector.matchLabels.app
-          value: RELEASE-NAME-api
-        documentIndex: 0
-      - isKind:
-          of: PodDisruptionBudget
-        documentIndex: 2
-      - equal:
-          path: metadata.name
-          value: RELEASE-NAME-api
-        documentIndex: 2
-      - equal:
-          path: spec.maxUnavailable
-          value: 3
-        documentIndex: 2
-      - equal:
-          path: spec.selector.matchLabels.app
-          value: RELEASE-NAME-api
-        documentIndex: 2
-      - notExists:
-          path: spec.minAvailable
-        documentIndex: 2
-
-  - it: should hold SIGTERM until the endpoint is withdrawn
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].lifecycle.preStop.exec.command
-          value: ["sleep", "5"]
+          value: Recreate
         documentIndex: 0
 
   # Health probes
-  - it: should have startup probe on /api/health
+  - it: should have startup probe checking python3 process
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].startupProbe.httpGet.path
-          value: /api/health
+          path: spec.template.spec.containers[0].startupProbe.exec.command[0]
+          value: python3
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[2]
+          value: "exit(0)"
         documentIndex: 0
       - notExists:
           path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].startupProbe.periodSeconds
-          value: 2
-        documentIndex: 0
-      - equal:
           path: spec.template.spec.containers[0].startupProbe.failureThreshold
-          value: 150
+          value: 30
         documentIndex: 0
 
-  - it: should configure readiness probe on API
+  - it: should have readiness probe using TCP socket check to RabbitMQ
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
-          value: /api/health
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
+          value: python3
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
-          value: 5
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          value: "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 10
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.failureThreshold
+          value: 3
         documentIndex: 0
 
-  - it: should configure liveness probe on API
+  - it: should have liveness probe checking python3 process not dependencies
     asserts:
       - equal:
-          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
-          value: /api/health
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
+          value: python3
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
+          value: "exit(0)"
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
           value: 5
         documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
+          value: 5
+        documentIndex: 0
 
-  # Replica configuration
-  - it: should configure API replicas
+  - it: should configure CMD deployment with correct replicas
     set:
-      controlplane.replicas: 3
+      cmd.replicas: 1
     asserts:
       - equal:
           path: spec.replicas
-          value: 3
-        documentIndex: 0
-
-  # Node selector configuration
-  - it: should configure node selector for API
-    set:
-      appNodeSelector:
-        nodeType: "app"
-    asserts:
-      - equal:
-          path: spec.template.spec.nodeSelector.nodeType
-          value: "app"
-        documentIndex: 0
-
-  # Resource configuration
-  - it: should configure API resources with defaults
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].resources.requests.memory
-          value: 1Gi
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].resources.requests.cpu
-          value: 500m
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].resources.limits.memory
-          value: 4Gi
-        documentIndex: 0
-
-  - it: should have default memory limits for API
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].resources.requests.memory
-          value: 1Gi
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].resources.limits.memory
-          value: 4Gi
-        documentIndex: 0
-
-  - it: should NOT set CPU limits on API
-    asserts:
-      - isNull:
-          path: spec.template.spec.containers[0].resources.limits.cpu
-        documentIndex: 0
-
-  - it: should allow custom memory limit override without changing requests for API
-    set:
-      controlplane.resources.requests.memory: "1Gi"
-      controlplane.resources.limits.memory: "4Gi"
-    asserts:
-      - equal:
-          path: spec.template.spec.containers[0].resources.requests.memory
-          value: 1Gi
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].resources.limits.memory
-          value: 4Gi
+          value: 1
         documentIndex: 0
 
   # Image configuration
-  - it: should configure controlplane image
+  - it: should use correct image configuration
     set:
       global.imageUrls.controlplaneImageUrl: "custom/controlplane"
       controlplaneImage.image.controlplaneImageTag: "v1.0.0"
@@ -212,8 +99,102 @@ tests:
           value: "custom/controlplane:v1.0.0"
         documentIndex: 0
 
+  - it: should set correct container name and command
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: "cmd"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: "python3"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].command[1]
+          value: "/app/hub_cmd.py"
+        documentIndex: 0
+      - isNull:
+          path: spec.template.spec.containers[0].args
+        documentIndex: 0
+
+  # Resource configuration
+  - it: should set default resource requests and limits for CMD
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "4Gi"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "1000m"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "6Gi"
+        documentIndex: 0
+
+  - it: should have default memory limits for CMD
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "4Gi"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "6Gi"
+        documentIndex: 0
+
+  - it: should NOT set CPU limits on CMD
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+        documentIndex: 0
+
+  - it: should allow custom memory limit override without changing requests for CMD
+    set:
+      controlplaneCmd.resources.requests.memory: "6Gi"
+      controlplaneCmd.resources.limits.memory: "16Gi"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "6Gi"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "16Gi"
+        documentIndex: 0
+
+  # Node selector configuration
+  - it: should configure node selector when set
+    set:
+      appNodeSelector:
+        nodeType: "app"
+    asserts:
+      - equal:
+          path: spec.template.spec.nodeSelector.nodeType
+          value: "app"
+        documentIndex: 0
+
+  # Tolerations configuration
+  - it: should configure tolerations when set
+    set:
+      tolerations.appNodeTolerations:
+        - key: "appNodes"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+    asserts:
+      - contains:
+          path: spec.template.spec.tolerations
+          content:
+            key: "appNodes"
+            operator: "Equal"
+            value: "true"
+            effect: "NoSchedule"
+        documentIndex: 0
+
   # Environment variables
-  - it: should configure global DNS record in API
+  - it: should configure global DNS record in CMD
     set:
       global.dnsRecord: "test.qualytics.io"
     asserts:
@@ -224,54 +205,26 @@ tests:
             value: "test.qualytics.io"
         documentIndex: 0
 
-  - it: should expose estimated node egress and mount optional infrastructure metadata
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: QUALYTICS_NODE_IP
-            valueFrom:
-              fieldRef:
-                fieldPath: status.hostIP
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
-          value: /etc/qualytics/egress
-        documentIndex: 0
-      - isNull:
-          path: spec.template.spec.containers[0].volumeMounts[0].subPath
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.volumes[0].configMap.name
-          value: qualytics-egress-info
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.volumes[0].configMap.optional
-          value: true
-        documentIndex: 0
-
-  - it: should allow a custom egress ConfigMap name
+  - it: should allow private network fetches when enabled
     set:
-      controlplane.egress.configMapName: custom-egress-info
-    asserts:
-      - equal:
-          path: spec.template.spec.volumes[0].configMap.name
-          value: custom-egress-info
-        documentIndex: 0
-
-  - it: should configure database-backed auth without Auth0 settings
+      controlplane.auth.allowPrivateNetworkFetches: true
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: API_AUTH
-            value: "DB"
+            name: SSRF_ALLOW_LOOPBACK
+            value: "true"
         documentIndex: 0
-      - notContains:
+
+  - it: should configure platform environment variable
+    set:
+      global.platform: "gcp"
+    asserts:
+      - contains:
           path: spec.template.spec.containers[0].env
           content:
-            name: AUTH0_CLIENT_ID
-          any: true
+            name: APP_CLOUD_PLATFORM
+            value: "gcp"
         documentIndex: 0
 
   - it: should reject a leftover AUTH0 authType
@@ -288,7 +241,7 @@ tests:
       - failedTemplate:
           errorPattern: secrets.postgres.secrets_migration_id must be incremented
 
-  - it: should expose the staged secrets rotation to API
+  - it: should expose the staged secrets rotation to CMD
     set:
       secrets.postgres.new_secrets_passphrase: "next-passphrase"
       secrets.postgres.secrets_migration_id: 2
@@ -308,42 +261,40 @@ tests:
             name: SECRETS_MIGRATION_ID
             value: "2"
         documentIndex: 0
+
+  - it: should configure RabbitMQ environment variables
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RABBIT_MQ_HOST
+            value: "RELEASE-NAME-rabbitmq"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: RABBIT_MQ_USER
+            value: "user"
+        documentIndex: 0
+
+  - it: should configure database-backed auth without Auth0 settings
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: API_AUTH
+            value: "DB"
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH0_CLIENT_ID
+          any: true
+        documentIndex: 0
       - notContains:
           path: spec.template.spec.containers[0].env
           content:
             name: OIDC_CLIENT_ID
-        documentIndex: 0
-
-  # On-premises identity provider on a private address
-  - it: should allow private network fetches when enabled
-    set:
-      controlplane.auth.allowPrivateNetworkFetches: true
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SSRF_ALLOW_LOOPBACK
-            value: "true"
-        documentIndex: 0
-
-  - it: should not restrict auth provider fetches to public addresses by default
-    asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: SSRF_ALLOW_LOOPBACK
-        documentIndex: 0
-
-  # Platform configuration
-  - it: should configure platform environment variable
-    set:
-      global.platform: "gcp"
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: APP_CLOUD_PLATFORM
-            value: "gcp"
         documentIndex: 0
 
   # SMTP configuration
@@ -447,25 +398,21 @@ tests:
             name: SMTP_SENDER_EMAIL
         documentIndex: 0
 
-  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: there is
-  # no per-provider equivalent on AuthProviderConfiguration, so database-backed providers
-  # depend on these env vars.
-  - it: should render the deployment-wide auth env vars
-    set:
-      secrets.oidc.oidc_group_team_sync_enabled: true
-      secrets.oidc.oidc_allow_insecure_transport: true
+  # Image pull secrets
+  - it: should have image pull secrets
     asserts:
       - contains:
-          path: spec.template.spec.containers[0].env
+          path: spec.template.spec.imagePullSecrets
           content:
-            name: OIDC_GROUP_TEAM_SYNC_ENABLED
-            value: "true"
+            name: regcred
         documentIndex: 0
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: OIDC_ALLOW_INSECURE_HTTP
-            value: "true"
+
+  - it: should omit image pull secrets when global.imagePullSecrets is empty
+    set:
+      global.imagePullSecrets: []
+    asserts:
+      - isNull:
+          path: spec.template.spec.imagePullSecrets
         documentIndex: 0
 
   - it: should set API_AUTH_ALLOW_QUALYTICS_ISSUER to true by default
@@ -507,6 +454,28 @@ tests:
             name: APP_DEPLOYMENT_MODE
             value: "databricks"
         documentIndex: 0
+
+  # The group→Team sync toggle and the insecure-transport flag are deployment-wide: there is
+  # no per-provider equivalent on AuthProviderConfiguration, so database-backed providers
+  # depend on these env vars.
+  - it: should render the deployment-wide auth env vars
+    set:
+      secrets.oidc.oidc_group_team_sync_enabled: true
+      secrets.oidc.oidc_allow_insecure_transport: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_GROUP_TEAM_SYNC_ENABLED
+            value: "true"
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OIDC_ALLOW_INSECURE_HTTP
+            value: "true"
+        documentIndex: 0
+
   # QUA-2163: identifier env is required (no optional: true — CP fails to start without it)
   - it: should require QUALYTICS_DEPLOYMENT_IDENTIFIER from qualytics-creds
     asserts:
@@ -538,30 +507,6 @@ tests:
           content:
             name: POSTGRES_SCHEMA
             value: "qualytics"
-        documentIndex: 0
-
-  - it: should reject an unsafe PostgreSQL schema name
-    set:
-      postgres.schema: "bad'; DROP SCHEMA public; --"
-    asserts:
-      - failedTemplate:
-          errorMessage: "postgres.schema must be a PostgreSQL identifier of 1-63 letters, numbers, or underscores"
-
-  # Image pull secrets
-  - it: should have image pull secrets by default
-    asserts:
-      - contains:
-          path: spec.template.spec.imagePullSecrets
-          content:
-            name: regcred
-        documentIndex: 0
-
-  - it: should omit image pull secrets when global.imagePullSecrets is empty
-    set:
-      global.imagePullSecrets: []
-    asserts:
-      - isNull:
-          path: spec.template.spec.imagePullSecrets
         documentIndex: 0
 
   # Observability (QUA-2402): telemetry export is opt-in
@@ -667,28 +612,13 @@ tests:
             value: "false"
         documentIndex: 0
 
-  - it: should bound synchronous dataplane waits and give in-flight requests a graceful shutdown window
+  - it: should bound synchronous dataplane waits from the CMD process too
     asserts:
       - contains:
           path: spec.template.spec.containers[0].env
           content:
             name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
             value: "600"
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.terminationGracePeriodSeconds
-          value: 60
-        documentIndex: 0
-
-  - it: should let a tenant override the synchronous dataplane bound
-    set:
-      controlplane.synchronousRequestTimeoutSeconds: 120
-    asserts:
-      - contains:
-          path: spec.template.spec.containers[0].env
-          content:
-            name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
-            value: "120"
         documentIndex: 0
 
   # A reuse-values upgrade from a release created before the key existed leaves it nil; the workload must still

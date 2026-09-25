@@ -29,20 +29,19 @@ qualytics-self-hosted/
     │   └── ingress-nginx-4.15.1.tgz    # NGINX ingress controller
     ├── templates/                      # template files + helpers
     │   ├── _helpers.tpl                # Template helper functions
-    │   ├── api.yaml                    # API deployment & service
-    │   ├── cmd.yaml                    # CMD processor deployment
-    │   ├── spark.yaml                  # Spark dataplane: SA+Role+RoleBinding+ConfigMap+Service+Deployment
+    │   ├── controlplane-api.yaml       # API deployment & service
+    │   ├── controlplane-cmd.yaml       # CMD processor deployment
+    │   ├── dataplane.yaml              # Spark dataplane: SA+Role+RoleBinding+ConfigMap+Service+Deployment
     │   ├── frontend.yaml               # Frontend deployment & service
-    │   ├── postgres.yaml               # PostgreSQL statefulset + PVC
+    │   ├── postgres.yaml               # PostgreSQL statefulset + PVC, psql utility pod
     │   ├── rabbitmq.yaml               # RabbitMQ statefulset + PVC
     │   ├── secrets.yaml                # Secrets for credentials
     │   ├── ingress.yaml                # Ingress with WAF (TLS is BYO Secret)
-    │   ├── psql.yaml                   # PostgreSQL utility pod
     │   └── storage-classes.yaml        # Platform-specific storage classes
     └── tests/                          # Helm unit tests
-        ├── api_test.yaml               # API deployment tests
-        ├── cmd_test.yaml               # CMD processor tests
-        ├── spark_test.yaml             # Spark application tests
+        ├── controlplane_api_test.yaml  # API deployment tests
+        ├── controlplane_cmd_test.yaml  # CMD processor tests
+        ├── dataplane_test.yaml         # Spark application tests
         ├── frontend_test.yaml          # Frontend deployment tests
         ├── ingress_test.yaml           # Ingress tests
         ├── postgres_test.yaml          # PostgreSQL statefulset tests
@@ -93,9 +92,9 @@ This chart uses **helm-unittest** plugin for comprehensive unit testing:
 
 ### Test Components
 Each component has a corresponding test file:
-- `api_test.yaml` - API deployment & service tests (168 lines, 10+ test cases)
-- `cmd_test.yaml` - CMD processor tests
-- `spark_test.yaml` - Spark dataplane tests (Deployment + RBAC + Service + ConfigMap)
+- `controlplane_api_test.yaml` - API deployment & service tests (168 lines, 10+ test cases)
+- `controlplane_cmd_test.yaml` - CMD processor tests
+- `dataplane_test.yaml` - Spark dataplane tests (Deployment + RBAC + Service + ConfigMap)
 - `frontend_test.yaml` - Frontend deployment tests
 - `ingress_test.yaml` - Ingress tests
 - `postgres_test.yaml` - PostgreSQL statefulset tests
@@ -140,7 +139,7 @@ tests:
 helm unittest charts/qualytics
 
 # Run specific test suite
-helm unittest -f 'tests/api_test.yaml' charts/qualytics
+helm unittest -f 'tests/controlplane_api_test.yaml' charts/qualytics
 
 # Run with verbose output
 helm unittest -v charts/qualytics
@@ -365,7 +364,7 @@ For those, use a real cloud cluster (EKS/GKE/AKS). Minikube is for behavior, not
 Native-Deployment dataplane migration (replaces the spark-operator):
 
 1. Started minikube; installed baseline + `regcred` token; pre-created `qualytics-creds` Secret with stub values.
-2. `helm install` from the chart → six docs render under `templates/spark.yaml` (SA, Role, RoleBinding, ConfigMap, headless Service, Deployment).
+2. `helm install` from the chart → six docs render under `templates/dataplane.yaml` (SA, Role, RoleBinding, ConfigMap, headless Service, Deployment).
 3. Driver pod scheduled on `driverNodes=true`. `kubectl exec` into it confirmed the env-block: `POD_NAME` / `POD_NAMESPACE` / `SPARK_DRIVER_BIND_ADDRESS` from the downward API, all `MOTHERSHIP_*` vars present.
 4. Container args[0] is `exec /opt/entrypoint.sh driver \ ...` — the image's entrypoint runs SPARK_CLASSPATH + LD_LIBRARY_PATH + user setup before `exec`'ing `spark-submit`. Crucially we don't pass `--deploy-mode client` or `--conf spark.driver.bindAddress=` ourselves; the entrypoint adds them.
 5. SparkMothership reached steady state (`0 messages awaiting processing from qualytics-rabbitmq`) after the cmd/api dependency chain converged.
@@ -605,7 +604,7 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **Storage Classes**:
   - `azure-fast` (Premium_LRS, immediate binding)
   - `azure-slow` (StandardSSD_LRS, WaitForFirstConsumer)
-- **Spark Volumes**: **`emptyDir`, not `hostPath`** — `templates/spark.yaml` only has `hostPath` branches for `aws` and `gcp`; every other `global.platform` (including `azure`) falls through to `emptyDir: {}`. `numVolumes` still controls how many scratch dirs are created and what lands in `spark.local.dir`, but they are backed by node ephemeral storage rather than the temp SSD.
+- **Spark Volumes**: **`emptyDir`, not `hostPath`** — `templates/dataplane.yaml` only has `hostPath` branches for `aws` and `gcp`; every other `global.platform` (including `azure`) falls through to `emptyDir: {}`. `numVolumes` still controls how many scratch dirs are created and what lands in `spark.local.dir`, but they are backed by node ephemeral storage rather than the temp SSD.
 
 ## Configuration Files
 

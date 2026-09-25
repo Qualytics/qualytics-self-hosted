@@ -43,7 +43,7 @@ tests:
       postgres.enabled: true
     asserts:
       - hasDocuments:
-          count: 6
+          count: 7
       - isKind:
           of: StatefulSet
         documentIndex: 2

@@ -8,7 +8,10 @@ tests:
       postgres.enabled: true
     asserts:
       - hasDocuments:
-          count: 6
+          count: 7
+      - isKind:
+          of: Deployment
+        documentIndex: 6
 
   - it: should create postgres StatefulSet when enabled
     set:
@@ -326,9 +329,12 @@ tests:
         documentIndex: 5
 
   # PostgreSQL disabled
-  - it: should not create postgres resources when disabled
+  - it: should render only the psql pod when disabled
     set:
       postgres.enabled: false
     asserts:
       - hasDocuments:
-          count: 0
+          count: 1
+      - isKind:
+          of: Deployment
+        documentIndex: 0

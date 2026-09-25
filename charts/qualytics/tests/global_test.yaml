@@ -1,13 +1,13 @@
 suite: test global values configuration
 templates:
-  - spark.yaml
+  - dataplane.yaml
   - ingress.yaml
 tests:
   # Platform-specific scratch volumes now land in the executor pod template
   # ConfigMap (the driver Deployment delegates per-executor scheduling to
   # spark-submit, which reads this template). doc 3 is the ConfigMap.
   - it: should configure AWS NVMe paths in the executor pod template
-    template: spark.yaml
+    template: dataplane.yaml
     documentIndex: 3
     set:
       global.platform: "aws"
@@ -21,7 +21,7 @@ tests:
           pattern: "/mnt/disks/nvme2n1/spark-local-dir-2"
 
   - it: should configure GCP SSD paths in the executor pod template
-    template: spark.yaml
+    template: dataplane.yaml
     documentIndex: 3
     set:
       global.platform: "gcp"
@@ -35,7 +35,7 @@ tests:
           pattern: "/mnt/disks/ssd1/spark-local-dir-2"
 
   - it: should fall back to emptyDir for Azure
-    template: spark.yaml
+    template: dataplane.yaml
     documentIndex: 3
     set:
       global.platform: "azure"
@@ -60,7 +60,7 @@ tests:
   # Image URL — the driver image lives on the Deployment container (doc 5)
   # and is also passed to spark-submit so executors pull the same image.
   - it: should configure dataplane image URL on the driver Deployment
-    template: spark.yaml
+    template: dataplane.yaml
     documentIndex: 5
     set:
       global.imageUrls.dataplaneImageUrl: "custom-registry/dataplane"
@@ -121,7 +121,7 @@ tests:
   # End-to-end: all globals applied at once. Driver image asserted on doc 5,
   # platform-specific scratch path on doc 3.
   - it: should compose globals across the spark templates
-    template: spark.yaml
+    template: dataplane.yaml
     set:
       global.platform: "gcp"
       global.dnsRecord: "production.qualytics.io"
@@ -143,7 +143,7 @@ tests:
 
   # Platform fallback for unknown platforms
   - it: should fall back to emptyDir for unknown platforms
-    template: spark.yaml
+    template: dataplane.yaml
     documentIndex: 3
     set:
       global.platform: "other"

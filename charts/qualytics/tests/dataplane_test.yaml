@@ -1,6 +1,6 @@
 suite: test spark dataplane (Deployment-based)
 templates:
-  - spark.yaml
+  - dataplane.yaml
 tests:
   # Document count + gating
   - it: should render six docs by default (SA + Role + RoleBinding + ConfigMap + Service + Deployment)
