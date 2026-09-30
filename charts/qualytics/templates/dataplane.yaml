@@ -273,6 +273,14 @@ spec:
                 path: extra-spark.properties
             secretName: {{ .Release.Name }}-spark-extra-conf
         {{- end }}
+        {{- with .Values.dataplane.driver.extraVolumes }}
+        {{- range . }}
+        {{- if has .name (list "executor-pod-template" "ivy-settings" "extra-spark-conf") }}
+        {{- fail (printf "dataplane.driver.extraVolumes: volume name %q is reserved by the chart; choose another name" .name) }}
+        {{- end }}
+        {{- end }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       containers:
         - name: spark-kubernetes-driver
           image: "{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}"
@@ -434,6 +442,9 @@ spec:
             - name: extra-spark-conf
               mountPath: /opt/spark/conf/extra-spark.properties
               subPath: extra-spark.properties
+            {{- end }}
+            {{- with .Values.dataplane.driver.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           resources:
             requests:

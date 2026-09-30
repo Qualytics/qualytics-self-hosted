@@ -1180,3 +1180,137 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: "pullSecrets"
         documentIndex: 5
+
+  # dataplane.driver.extraVolumes / extraVolumeMounts: customer-owned mounts on the
+  # driver pod (e.g. a CA truststore Secret), appended after the chart's own.
+  - it: should add no extra driver volumes or mounts by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: ca-truststore
+          any: true
+        documentIndex: 5
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-truststore
+          any: true
+        documentIndex: 5
+
+  - it: should append extra driver volumes and mounts after the chart's own
+    set:
+      dataplane.driver.extraVolumes:
+        - name: ca-truststore
+          secret:
+            secretName: qualytics-ca-truststore
+      dataplane.driver.extraVolumeMounts:
+        - name: ca-truststore
+          mountPath: /opt/qualytics/ca
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ca-truststore
+            secret:
+              secretName: qualytics-ca-truststore
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: executor-pod-template
+            configMap:
+              name: RELEASE-NAME-spark-executor-template
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-truststore
+            mountPath: /opt/qualytics/ca
+            readOnly: true
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: executor-pod-template
+            mountPath: /opt/spark/conf/executor-template.yaml
+            subPath: executor-template.yaml
+        documentIndex: 5
+
+  # The full setup from docs/custom-ca-certificates.md: the driver mount through
+  # extraVolumes, the JVM flags and executor mount through extraSparkConf.
+  - it: should render the documented CA truststore setup alongside the extra-conf mount
+    set:
+      dataplane.driver.extraVolumes:
+        - name: ca-truststore
+          secret:
+            secretName: qualytics-ca-truststore
+      dataplane.driver.extraVolumeMounts:
+        - name: ca-truststore
+          mountPath: /opt/qualytics/ca
+          readOnly: true
+      dataplane.extraSparkConf:
+        spark.driver.defaultJavaOptions: "-Djavax.net.ssl.trustStore=/opt/qualytics/ca/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit"
+        spark.kubernetes.executor.secrets.qualytics-ca-truststore: "/opt/qualytics/ca"
+        spark.executor.defaultJavaOptions: "-Djavax.net.ssl.trustStore=/opt/qualytics/ca/truststore.p12 -Djavax.net.ssl.trustStorePassword=changeit"
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ca-truststore
+            secret:
+              secretName: qualytics-ca-truststore
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: extra-spark-conf
+            secret:
+              items:
+                - key: extra-spark.properties
+                  path: extra-spark.properties
+              secretName: RELEASE-NAME-spark-extra-conf
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-truststore
+            mountPath: /opt/qualytics/ca
+            readOnly: true
+        documentIndex: 6
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: extra-spark-conf
+            mountPath: /opt/spark/conf/extra-spark.properties
+            subPath: extra-spark.properties
+        documentIndex: 6
+      - matchRegex:
+          path: data["extra-spark.properties"]
+          decodeBase64: true
+          pattern: 'spark\.kubernetes\.executor\.secrets\.qualytics-ca-truststore=/opt/qualytics/ca'
+        documentIndex: 3
+      # The chart's own extraJavaOptions stay on the command line; defaultJavaOptions adds to them.
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.driver\.extraJavaOptions='
+        documentIndex: 6
+
+  - it: should refuse an extra driver volume that reuses a chart-owned name
+    set:
+      dataplane.driver.extraVolumes:
+        - name: executor-pod-template
+          emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'volume name "executor-pod-template" is reserved by the chart'
+
+  - it: should refuse extra-spark-conf as an extra driver volume name even when extraSparkConf is unset
+    set:
+      dataplane.driver.extraVolumes:
+        - name: extra-spark-conf
+          emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'volume name "extra-spark-conf" is reserved by the chart'
