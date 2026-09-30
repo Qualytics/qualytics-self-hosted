@@ -96,10 +96,10 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20260929-d1c0ec0"
+    controlplaneImageTag: "20260930-7cf4441"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20260923-c104549"
+    dataplaneImageTag: "20260930-12fdf92"
 frontendImage:
   image:
     frontendImageTag: "20260921-83e2151"
