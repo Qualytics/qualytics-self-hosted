@@ -272,6 +272,20 @@ dataplane:
   driver:
     cores: 7
     memory: "55000m"
+    # Extra volumes and mounts for the driver pod, e.g. a customer CA truststore that
+    # extraSparkConf points the JVM at (see docs/custom-ca-certificates.md). Executors
+    # mount Secrets through extraSparkConf instead:
+    # spark.kubernetes.executor.secrets.<secret-name>: "<mount-path>".
+    #   extraVolumes:
+    #     - name: ca-truststore
+    #       secret:
+    #         secretName: qualytics-ca-truststore
+    #   extraVolumeMounts:
+    #     - name: ca-truststore
+    #       mountPath: /opt/qualytics/ca
+    #       readOnly: true
+    extraVolumes: []
+    extraVolumeMounts: []
   dynamicAllocation:
     enabled: true
     initialExecutors: 1

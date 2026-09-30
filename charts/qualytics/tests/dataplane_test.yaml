@@ -1180,3 +1180,60 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: "pullSecrets"
         documentIndex: 5
+
+  # dataplane.driver.extraVolumes / extraVolumeMounts: customer-owned mounts on the
+  # driver pod (e.g. a CA truststore Secret), appended after the chart's own.
+  - it: should add no extra driver volumes or mounts by default
+    asserts:
+      - notContains:
+          path: spec.template.spec.volumes
+          content:
+            name: ca-truststore
+          any: true
+        documentIndex: 5
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-truststore
+          any: true
+        documentIndex: 5
+
+  - it: should append extra driver volumes and mounts after the chart's own
+    set:
+      dataplane.driver.extraVolumes:
+        - name: ca-truststore
+          secret:
+            secretName: qualytics-ca-truststore
+      dataplane.driver.extraVolumeMounts:
+        - name: ca-truststore
+          mountPath: /opt/qualytics/ca
+          readOnly: true
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: ca-truststore
+            secret:
+              secretName: qualytics-ca-truststore
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: executor-pod-template
+            configMap:
+              name: RELEASE-NAME-spark-executor-template
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: ca-truststore
+            mountPath: /opt/qualytics/ca
+            readOnly: true
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: executor-pod-template
+            mountPath: /opt/spark/conf/executor-template.yaml
+            subPath: executor-template.yaml
+        documentIndex: 5
