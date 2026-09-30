@@ -1296,3 +1296,21 @@ tests:
           path: spec.template.spec.containers[0].args[0]
           pattern: '--conf spark\.driver\.extraJavaOptions='
         documentIndex: 6
+
+  - it: should refuse an extra driver volume that reuses a chart-owned name
+    set:
+      dataplane.driver.extraVolumes:
+        - name: executor-pod-template
+          emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'volume name "executor-pod-template" is reserved by the chart'
+
+  - it: should refuse extra-spark-conf as an extra driver volume name even when extraSparkConf is unset
+    set:
+      dataplane.driver.extraVolumes:
+        - name: extra-spark-conf
+          emptyDir: {}
+    asserts:
+      - failedTemplate:
+          errorPattern: 'volume name "extra-spark-conf" is reserved by the chart'

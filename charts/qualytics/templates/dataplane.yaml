@@ -274,6 +274,11 @@ spec:
             secretName: {{ .Release.Name }}-spark-extra-conf
         {{- end }}
         {{- with .Values.dataplane.driver.extraVolumes }}
+        {{- range . }}
+        {{- if has .name (list "executor-pod-template" "ivy-settings" "extra-spark-conf") }}
+        {{- fail (printf "dataplane.driver.extraVolumes: volume name %q is reserved by the chart; choose another name" .name) }}
+        {{- end }}
+        {{- end }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       containers:

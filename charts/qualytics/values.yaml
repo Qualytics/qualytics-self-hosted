@@ -276,6 +276,8 @@ dataplane:
     # extraSparkConf points the JVM at (see docs/custom-ca-certificates.md). Executors
     # mount Secrets through extraSparkConf instead:
     # spark.kubernetes.executor.secrets.<secret-name>: "<mount-path>".
+    # The volume names executor-pod-template, ivy-settings and extra-spark-conf are
+    # reserved by the chart.
     #   extraVolumes:
     #     - name: ca-truststore
     #       secret:
