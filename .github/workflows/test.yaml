@@ -24,7 +24,9 @@ jobs:
           version: v3.19.0
 
       - name: Install Helm unittest plugin
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest
+        # Pinned: an unpinned install races brand-new upstream releases, whose
+        # binaries are not yet uploaded when the tag appears.
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v1.2.0
 
       - name: Add Helm repositories
         run: |
