@@ -24,6 +24,60 @@ tests:
         documentIndex: 1
 
   # Strategy configuration
+  # CMD migrates at startup; an API pod must not serve code whose migration has not landed.
+  - it: should hold API pods until the database is at the image's migration head
+    set:
+      global.imageUrls.controlplaneImageUrl: "custom/controlplane"
+      controlplaneImage.image.controlplaneImageTag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-migrations
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: "custom/controlplane:v1.2.3"
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].command[0]
+          value: python3
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: get_current_heads
+        documentIndex: 0
+
+  # The chart renders connection_url into qualytics-creds for both topologies, so the
+  # gate reads the same secret whether postgres is in-cluster or external.
+  - it: should point the migration gate at the chart-rendered connection URL
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POSTGRES_CONNECTION_URL
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: connection_url
+        documentIndex: 0
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: DATABASE_URL
+            value: "postgresql+psycopg2://$(POSTGRES_CONNECTION_URL)"
+        documentIndex: 0
+
+  - it: should keep the migration gate on an external database
+    set:
+      postgres.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: DATABASE_URL
+            value: "postgresql+psycopg2://$(POSTGRES_CONNECTION_URL)"
+        documentIndex: 0
+
   - it: should roll without surge, keeping one pod serving
     asserts:
       - equal:
@@ -584,6 +638,24 @@ tests:
           content:
             name: OTEL_EXPORTER_OTLP_ENDPOINT
           any: true
+        documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_TIMEOUT
+          any: true
+        documentIndex: 0
+
+  # The exporter's 10 s default surfaces as "Failed to export span batch ... Read timed out".
+  - it: should raise the OTLP export timeout whenever telemetry is exported
+    set:
+      controlplane.observability.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_TIMEOUT
+            value: "30"
         documentIndex: 0
 
   - it: should render Logfire env from qualytics-creds when enabled with a token

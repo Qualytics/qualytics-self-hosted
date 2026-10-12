@@ -530,6 +530,24 @@ tests:
             name: OTEL_EXPORTER_OTLP_ENDPOINT
           any: true
         documentIndex: 0
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_TIMEOUT
+          any: true
+        documentIndex: 0
+
+  # The exporter's 10 s default surfaces as "Failed to export span batch ... Read timed out".
+  - it: should raise the OTLP export timeout whenever telemetry is exported
+    set:
+      controlplane.observability.enabled: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: OTEL_EXPORTER_OTLP_TIMEOUT
+            value: "30"
+        documentIndex: 0
 
   - it: should render Logfire env from qualytics-creds when enabled with a token
     set:

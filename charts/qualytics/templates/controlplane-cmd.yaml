@@ -172,6 +172,9 @@ spec:
                 name: qualytics-creds
                 key: logfire_token
           {{- end }}
+          # Seconds per OTLP export; the exporter's 10 s default surfaces as "Failed to export span batch ... Read timed out".
+          - name: OTEL_EXPORTER_OTLP_TIMEOUT
+            value: "30"
           {{- with .Values.controlplane.observability.otlp.endpoint }}
           - name: OTEL_EXPORTER_OTLP_ENDPOINT
             value: {{ . | quote }}

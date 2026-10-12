@@ -50,6 +50,62 @@ spec:
           labelSelector:
             matchLabels:
               app: {{ .Release.Name }}-api
+      # CMD applies migrations at startup; hold each API pod until the database is at this image's
+      # migration head so a rollout never serves code whose migration has not landed. Gives up after
+      # 15 minutes so a failed migration stalls the rollout visibly instead of serving a broken schema.
+      initContainers:
+      - name: wait-for-migrations
+        image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+          - python3
+          - -c
+          - |
+            import os, sys, time
+            from alembic.config import Config
+            from alembic.runtime.migration import MigrationContext
+            from alembic.script import ScriptDirectory
+            from sqlalchemy import create_engine, make_url
+            from sqlalchemy.pool import NullPool
+
+            # alembic.ini's script_location is relative to the image WORKDIR, /app.
+            wanted = set(ScriptDirectory.from_config(Config("/app/alembic.ini")).get_heads())
+            # psycopg 3 is the only installed driver; the chart hands over postgresql+psycopg2:// URLs.
+            # Bound each probe so a database that accepts connections but stops answering cannot outlive the deadline.
+            engine = create_engine(
+                make_url(os.environ["DATABASE_URL"]).set(drivername="postgresql+psycopg"),
+                poolclass=NullPool,
+                connect_args={"connect_timeout": 10, "options": "-c statement_timeout=10000"},
+            )
+            deadline = time.monotonic() + 900
+            while True:
+                try:
+                    with engine.connect() as conn:
+                        current = set(MigrationContext.configure(conn).get_current_heads())
+                    state = f"database at {sorted(current) or 'no alembic_version'}"
+                except Exception as exc:
+                    current, state = None, f"database unreachable: {exc}"
+                if current == wanted:
+                    print(f"migrations current: {sorted(wanted)}")
+                    break
+                if time.monotonic() >= deadline:
+                    sys.exit(f"gave up waiting for migrations {sorted(wanted)}; {state}")
+                print(f"waiting for migrations {sorted(wanted)}; {state}")
+                time.sleep(5)
+        env:
+          - name: POSTGRES_CONNECTION_URL
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: connection_url
+          - name: DATABASE_URL
+            value: "postgresql+psycopg2://$(POSTGRES_CONNECTION_URL)"
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 100m
+          limits:
+            memory: 512Mi
       containers:
       - name: api
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
@@ -198,6 +254,9 @@ spec:
                 name: qualytics-creds
                 key: logfire_token
           {{- end }}
+          # Seconds per OTLP export; the exporter's 10 s default surfaces as "Failed to export span batch ... Read timed out".
+          - name: OTEL_EXPORTER_OTLP_TIMEOUT
+            value: "30"
           {{- with .Values.controlplane.observability.otlp.endpoint }}
           - name: OTEL_EXPORTER_OTLP_ENDPOINT
             value: {{ . | quote }}
