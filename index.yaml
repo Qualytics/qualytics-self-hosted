@@ -2,6 +2,22 @@ apiVersion: v1
 entries:
   qualytics:
   - apiVersion: v2
+    appVersion: 2026.10.16
+    created: "2026-10-16T16:14:48.018403105Z"
+    dependencies:
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.15.1
+    description: A Helm chart for deploying Qualytics on Kubernetes
+    digest: 27b987f9f7f1a4721fb7754ed249df0159a8a77e77a4d1889e1cc2aa4417e490
+    name: qualytics
+    type: application
+    urls:
+    - https://github.com/Qualytics/qualytics-self-hosted/releases/download/qualytics-2026.10.16/qualytics-2026.10.16.tgz
+    version: 2026.10.16
+  - apiVersion: v2
     appVersion: 2026.10.12
     created: "2026-10-12T15:49:26.542310606Z"
     dependencies:
@@ -2093,4 +2109,4 @@ entries:
     urls:
     - https://github.com/Qualytics/qualytics-helm-public/releases/download/qualytics-2025.3.23/qualytics-2025.3.23.tgz
     version: 2025.3.23
-generated: "2026-10-12T15:49:26.542551776Z"
+generated: "2026-10-16T16:14:48.018676532Z"
