@@ -96,7 +96,7 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20261016-b991baa"
+    controlplaneImageTag: "20261021-7105233"
 dataplaneImage:
   image:
     dataplaneImageTag: "20261016-1176e25"
