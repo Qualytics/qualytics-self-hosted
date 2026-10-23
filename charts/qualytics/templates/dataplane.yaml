@@ -205,7 +205,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-spark
+  name: {{ .Release.Name }}-dataplane
 spec:
   replicas: 1
   strategy:
@@ -291,7 +291,7 @@ spec:
               exec /opt/entrypoint.sh driver \
                 --master k8s://https://kubernetes.default.svc:443 \
                 --class io.qualytics.dataplane.SparkMothership \
-                --name {{ .Release.Name }}-spark \
+                --name {{ .Release.Name }}-dataplane \
                 {{- if .Values.dataplane.extraPackages }}
                 --packages {{ join "," .Values.dataplane.extraPackages }} \
                 {{- end }}
@@ -317,7 +317,7 @@ spec:
                 --conf spark.executor.memory={{ .Values.dataplane.executor.memory }} \
                 --conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml \
                 --conf spark.kubernetes.executor.podTemplateContainerName=spark-kubernetes-executor \
-                --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-spark-$(date +%s) \
+                --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-dataplane-$(date +%s) \
                 --conf spark.kubernetes.memoryOverheadFactor={{ .Values.dataplane.memoryOverheadFactor }} \
                 --conf spark.kubernetes.submission.connectionTimeout=480000 \
                 --conf spark.kubernetes.submission.requestTimeout=480000 \

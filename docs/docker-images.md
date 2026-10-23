@@ -20,7 +20,7 @@ These are the core Qualytics images and must be pulled from Docker Hub using the
 | Component | Image | Tag | Used by |
 |---|---|---|---|
 | Control Plane (API & CMD) | `qualyticsai/controlplane` | `20261021-7105233` | `qualytics-api` and `qualytics-cmd` Deployments |
-| Data Plane (Spark) | `qualyticsai/dataplane` | `20261016-1176e25` | `qualytics-spark` driver Deployment and every executor pod the driver creates |
+| Data Plane (Spark) | `qualyticsai/dataplane` | `20261016-1176e25` | `qualytics-dataplane` driver Deployment and every executor pod the driver creates |
 | Frontend | `qualyticsai/frontend` | `20261016-1b6f9d0` | `qualytics-frontend` Deployment |
 
 ### Pull commands

@@ -326,7 +326,7 @@ tests:
         documentIndex: 5
       - equal:
           path: metadata.name
-          value: RELEASE-NAME-spark
+          value: RELEASE-NAME-dataplane
         documentIndex: 5
       - equal:
           path: spec.replicas
@@ -377,8 +377,12 @@ tests:
           value: 3
         documentIndex: 5
 
-  - it: should select pods with spark-role=driver for the headless Service
+  - it: should preserve the driver labels selected by the existing headless Service
     asserts:
+      - equal:
+          path: spec.template.metadata.labels.app
+          value: RELEASE-NAME-spark
+        documentIndex: 5
       - equal:
           path: spec.selector.matchLabels.app
           value: RELEASE-NAME-spark
@@ -471,6 +475,10 @@ tests:
         documentIndex: 5
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
+          pattern: "--name RELEASE-NAME-dataplane"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
           pattern: "--master k8s://https://kubernetes.default.svc:443"
         documentIndex: 5
 
@@ -494,7 +502,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "spark.kubernetes.executor.podNamePrefix=RELEASE-NAME-spark-\\$\\(date \\+%s\\)"
+          pattern: "spark.kubernetes.executor.podNamePrefix=RELEASE-NAME-dataplane-\\$\\(date \\+%s\\)"
         documentIndex: 5
 
   - it: should source SPARK_DRIVER_BIND_ADDRESS from the pod IP via downward API

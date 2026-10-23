@@ -85,7 +85,7 @@ helm upgrade qualytics qualytics/qualytics \
 Ivy logs its resolution at driver startup. Confirm the settings file was loaded and each artifact was found in the `internal` resolver (not `central`):
 
 ```bash
-kubectl -n qualytics logs deployment/qualytics-spark | grep -E "loading settings|found com\."
+kubectl -n qualytics logs deployment/qualytics-dataplane | grep -E "loading settings|found com\."
 ```
 
 Expected output:
