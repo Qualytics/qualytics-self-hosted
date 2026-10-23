@@ -27,7 +27,7 @@ Key properties of this mechanism:
 Start from the `cacerts` of the dataplane image your release runs, then import your CA (and any intermediate CA your servers don't send in their chain):
 
 ```bash
-kubectl -n <namespace> exec deploy/<release>-spark -- sh -c 'cat "$JAVA_HOME/lib/security/cacerts"' > truststore.p12
+kubectl -n <namespace> exec deploy/<release>-dataplane -- sh -c 'cat "$JAVA_HOME/lib/security/cacerts"' > truststore.p12
 
 keytool -importcert -noprompt -alias corp-root-ca -file corp-root-ca.pem \
   -keystore truststore.p12 -storepass changeit
@@ -132,8 +132,8 @@ Apply with `helm upgrade`. Changing `extraSparkConf` restarts the driver automat
 The truststore is mounted and the JVM is using it:
 
 ```bash
-kubectl -n <namespace> exec deploy/<release>-spark -- ls -l /opt/qualytics/ca/truststore.p12
-kubectl -n <namespace> exec deploy/<release>-spark -- sh -c 'ps -o args= -C java | grep -o "javax.net.ssl.trustStore=[^ ]*"'
+kubectl -n <namespace> exec deploy/<release>-dataplane -- ls -l /opt/qualytics/ca/truststore.p12
+kubectl -n <namespace> exec deploy/<release>-dataplane -- sh -c 'ps -o args= -C java | grep -o "javax.net.ssl.trustStore=[^ ]*"'
 ```
 
 Then run an operation against the datastore that was failing, e.g. a profile. The `PKIX path building failed` error should be gone. If the endpoint now answers with an authorization error instead (for a Hadoop KMS, `403` / `not allowed to do 'DECRYPT_EEK'`), TLS is working, and what remains is a permission on the server side.
@@ -143,7 +143,7 @@ Then run an operation against the datastore that was failing, e.g. a profile. Th
 Rebuild `truststore.p12` with the new certificate (step 1) and update the Secret or its Vault source. Pods read the file only when they start, so restart the driver:
 
 ```bash
-kubectl -n <namespace> rollout restart deploy/<release>-spark
+kubectl -n <namespace> rollout restart deploy/<release>-dataplane
 ```
 
 Executors started after the restart pick up the new file automatically. Rebuilding from a current image's `cacerts` also refreshes the public CAs, so it is worth doing after major Qualytics upgrades as well.

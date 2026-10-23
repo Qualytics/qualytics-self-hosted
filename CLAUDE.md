@@ -378,7 +378,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 
 ### Naming Conventions
 - **Resources**: Use `{{ .Release.Name }}-[component]` pattern
-  - Example: `qualytics-api`, `qualytics-postgres`, `qualytics-spark`
+  - Example: `qualytics-api`, `qualytics-postgres`, `qualytics-dataplane`
 - **Services**: `{{ .Release.Name }}-[component]-service` or `{{ .Release.Name }}-[component]`
   - Example: `qualytics-api-service`, `qualytics-postgres`
 - **Template Helpers**: `qualytics.[component].[function]` in `_helpers.tpl`
@@ -455,14 +455,14 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 ### Dataplane (Spark)
 - **Version**: Spark 4.1.1
 - **Shape**: native Kubernetes `Deployment` (replicas: 1, strategy: Recreate) running `/opt/entrypoint.sh driver` which `exec`s `spark-submit --deploy-mode client …`. The pod's PID 1 is the driver JVM. Executors are created directly through the Kubernetes API. The entrypoint contract is documented below.
-- **Driver pod naming**: `<release>-spark-<rs-hash>-<pod-hash>` (Deployment-managed, random suffix). Use `kubectl logs deployment/<release>-spark` or `-l spark-role=driver` rather than hardcoding pod names. Deployment was chosen over StatefulSet for auto-recovery on node failure (StatefulSet pods stay `Terminating` indefinitely on vanilla EKS until the `out-of-service` taint is applied, which nothing in EKS does automatically).
+- **Driver pod naming**: `<release>-dataplane-<rs-hash>-<pod-hash>` (Deployment-managed, random suffix). Use `kubectl logs deployment/<release>-dataplane` or `-l spark-role=driver` rather than hardcoding pod names. Deployment was chosen over StatefulSet for auto-recovery on node failure (StatefulSet pods stay `Terminating` indefinitely on vanilla EKS until the `out-of-service` taint is applied, which nothing in EKS does automatically).
 - **Resources rendered into the chart bundle** (when `dataplane.enabled=true` and `global.deploymentMode="kubernetes"`):
   1. `ServiceAccount` (`qualytics-spark` by default; gated on `dataplane.rbac.create`)
   2. `Role` — pods + configmaps + persistentvolumeclaims + services CRUD + watch
   3. `RoleBinding` to the SA
   4. `ConfigMap` `<release>-spark-executor-template` — Spark-style pod template referenced via `--conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml`
   5. headless `Service` `<release>-spark-driver` for driver↔executor RPC (ports 7078 / 7079 / 4040)
-  6. `Deployment` `<release>-spark`
+  6. `Deployment` `<release>-dataplane`
 - **RBAC opt-out**: `dataplane.rbac.create=false` lets you BYO an existing SA when the cluster restricts ServiceAccount creation. Override SA name via `dataplane.rbac.serviceAccountName`. Annotations (e.g. `eks.amazonaws.com/role-arn` for IRSA, GCP Workload Identity) go on `dataplane.rbac.serviceAccountAnnotations`.
 - **Driver pod resources**: derived from `dataplane.driver.cores` / `dataplane.driver.memory` and the `qualytics.spark.driver.podMemoryMb` helper, which mirrors Spark's `KubernetesUtils.calculatePodMemoryOverhead`: `pod_mem = heap + max(memoryOverheadFactor * heap, 384 MiB)`. Output is `Mi` (mebibytes) so it matches what the operator-managed flow produced.
 - **Executor resources**: computed by Spark from `--conf spark.executor.cores` / `.memory`; same overhead floor formula. The chart doesn't set them on the pod template directly.
@@ -768,7 +768,7 @@ helm upgrade qualytics qualytics/qualytics \
 - Test internal DNS: `kubectl run -it --rm debug --image=busybox --restart=Never -n qualytics -- nslookup qualytics-postgres`
 
 **5. Spark jobs failing**
-- Check driver logs by selector (the pod has a random suffix): `kubectl logs deployment/qualytics-spark -n qualytics --tail=200 -f` or `kubectl logs -l spark-role=driver -n qualytics`
+- Check driver logs by selector (the pod has a random suffix): `kubectl logs deployment/qualytics-dataplane -n qualytics --tail=200 -f` or `kubectl logs -l spark-role=driver -n qualytics`
 - Verify executor resources: `kubectl get pods -n qualytics -l spark-role=executor`
 - Check dynamic allocation: look for executor scaling in driver logs
 - Verify volumes mounted correctly: `kubectl get cm qualytics-spark-executor-template -n qualytics -o jsonpath='{.data.executor-template\.yaml}'`

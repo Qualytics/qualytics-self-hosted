@@ -266,7 +266,7 @@ kubectl rollout restart deployment/qualytics-cmd -n qualytics
 kubectl describe pod <pod-name> -n qualytics
 
 # Get spark driver logs (Deployment-managed, random pod suffix — use the deployment selector)
-kubectl logs -f deployment/qualytics-spark -n qualytics
+kubectl logs -f deployment/qualytics-dataplane -n qualytics
 # Or by label
 kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 ```
