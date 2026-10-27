@@ -99,7 +99,7 @@ controlplaneImage:
     controlplaneImageTag: "20261021-7105233"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20261016-1176e25"
+    dataplaneImageTag: "20261027-7fb3d6c"
 frontendImage:
   image:
     frontendImageTag: "20261016-1b6f9d0"
