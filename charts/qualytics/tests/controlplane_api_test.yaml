@@ -542,6 +542,39 @@ tests:
             value: "false"
         documentIndex: 0
 
+  - it: should cap browser sessions at 1440 minutes by default
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_SESSION_ABSOLUTE_TTL_MINUTES
+            value: "1440"
+        documentIndex: 0
+
+  - it: should configure the absolute browser session lifetime
+    set:
+      controlplane.auth.sessionAbsoluteTtlMinutes: 720
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_SESSION_ABSOLUTE_TTL_MINUTES
+            value: "720"
+        documentIndex: 0
+
+  # --reuse-values from a release predating the key leaves it nil; an empty env value
+  # would fail the controlplane's int() parse, so omit it and keep the application default.
+  - it: should omit the absolute session lifetime when the value is absent
+    set:
+      controlplane.auth.sessionAbsoluteTtlMinutes: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: AUTH_SESSION_ABSOLUTE_TTL_MINUTES
+          any: true
+        documentIndex: 0
+
   - it: should set APP_DEPLOYMENT_MODE to kubernetes by default
     asserts:
       - contains:

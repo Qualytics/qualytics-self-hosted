@@ -340,6 +340,7 @@ spec:
                 --conf spark.executor.decommission.killInterval=120 \
                 --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
+                --conf spark.sql.constraintPropagation.enabled=false \
                 --conf spark.jars.ivy=/tmp \
                 {{- if .Values.dataplane.ivy.enabled }}
                 --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \

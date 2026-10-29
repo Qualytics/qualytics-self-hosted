@@ -96,13 +96,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20261021-7105233"
+    controlplaneImageTag: "20261029-10ee084"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20261027-7fb3d6c"
+    dataplaneImageTag: "20261029-7280f3c"
 frontendImage:
   image:
-    frontendImageTag: "20261016-1b6f9d0"
+    frontendImageTag: "20261029-a06ca8f"
 
 # Storage classes
 storageClass:
@@ -355,6 +355,9 @@ controlplane:
     # When false, Qualytics-issued API/service tokens (Bearer auth) are rejected.
     # Set to false to force all access through browser cookie-session authentication only.
     allowQualyticsIssuer: true
+    # Browser sessions may refresh up to this absolute age, measured from the original
+    # authentication time. This is an independent ceiling over each provider's sliding TTL.
+    sessionAbsoluteTtlMinutes: 1440
   # Controls certificate validation for all requests, httpx, and smtp_ssl sessions
   egress:
     verifyTLSCertificates: true

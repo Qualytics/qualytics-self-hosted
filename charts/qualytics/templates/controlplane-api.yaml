@@ -199,6 +199,10 @@ spec:
             value: {{ printf "http://%s-api-service:8000$(API_ROOT_PATH)" .Release.Name }}
           - name: MOTHERSHIP_SYNCHRONOUS_REQUEST_TIMEOUT
             value: {{ include "qualytics.synchronousRequestTimeoutSeconds" . | quote }}
+          {{- with .Values.controlplane.auth.sessionAbsoluteTtlMinutes }}
+          - name: AUTH_SESSION_ABSOLUTE_TTL_MINUTES
+            value: {{ . | quote }}
+          {{- end }}
           - name: SECRETS_PASSPHRASE
             valueFrom:
               secretKeyRef:

@@ -597,6 +597,13 @@ tests:
           pattern: "spark.dynamicAllocation.shuffleTracking.timeout=600s"
         documentIndex: 5
 
+  - it: should disable SQL constraint propagation
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.sql.constraintPropagation.enabled=false"
+        documentIndex: 5
+
   - it: should set the executor terminationGracePeriodSeconds for block migration
     asserts:
       - matchRegex:

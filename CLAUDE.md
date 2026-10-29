@@ -498,7 +498,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Features**:
   - SMTP email notifications (optional; credentials omitted → no SMTP AUTH attempt)
   - Authentication (database-backed providers only, configured in the application, with deployment-wide `secrets.oidc.oidc_group_team_sync_enabled` and `oidc_allow_insecure_transport`)
-  - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force browser cookie-session auth)
+  - Token/identity toggles under `controlplane.auth`: `migrateIdpByEmail`, `scimUsernamePrefix`, `allowQualyticsIssuer` (set false to reject Qualytics-issued Bearer tokens and force browser cookie-session auth), `sessionAbsoluteTtlMinutes` (absolute browser-session ceiling, default 1440)
   - Proxy support (HTTP/SOCKS5)
   - TLS certificate verification control
   - Telemetry export (opt-in `controlplane.observability`: Pydantic Logfire via `secrets.observability.logfire_token` and/or any OTLP/HTTP backend via `otlp.endpoint` + `secrets.observability.otlp_headers`; applies to API and CMD)
@@ -619,7 +619,7 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
   6. Node scheduling (selectors and tolerations)
   7. Deployment identifier and secrets (oidc, auth, postgres, smtp, rabbitmq)
   8. Dataplane configuration (Spark settings, including `dataplane.rbac.{create,serviceAccountName,serviceAccountAnnotations}`, `dataplane.ivy.*`, `dataplane.extraSparkConf`, `maxParallelSyncRequests`, and the `syncAdmission` CPU governor)
-  9. Controlplane configuration (API and CMD, including `controlplane.auth.{migrateIdpByEmail,scimUsernamePrefix,allowQualyticsIssuer}`)
+  9. Controlplane configuration (API and CMD, including `controlplane.auth.{migrateIdpByEmail,scimUsernamePrefix,allowQualyticsIssuer,sessionAbsoluteTtlMinutes}`)
   10. Frontend configuration (including `frontend.disableDownloads`)
   11. PostgreSQL configuration (including `postgres.schema` and the snapshotter / maintenance CronJob resources)
   12. RabbitMQ configuration

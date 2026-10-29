@@ -167,6 +167,7 @@ secrets:
 |-----------|---------------------|-------------|
 | `secrets.auth.jwt_signing_secret` | `JWT_SIGNING_SECRET` | Signs session JWTs and is the sole browser-session authority. Changing it invalidates all active sessions. |
 | `secrets.postgres.secrets_passphrase` | `SECRETS_PASSPHRASE` | Encrypts sensitive data stored in the database (connection credentials, API keys, IdP client secrets, SAML certificates). |
+| `controlplane.auth.sessionAbsoluteTtlMinutes` | `AUTH_SESSION_ABSOLUTE_TTL_MINUTES` | Default `1440` (24 hours). Maximum age of a browser session, measured from sign-in. Sessions stop refreshing at this age and users must sign in again, regardless of each provider's own session lifetime. |
 
 > **Important:** A fresh install is rejected while **either** `secrets_passphrase` **or**
 > `jwt_signing_secret` is still `ChangeMe!`. Both are enforced by the chart at install time.

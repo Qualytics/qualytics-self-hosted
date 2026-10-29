@@ -233,6 +233,7 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      backoffLimit: 2
       template:
         spec:
           {{- with .Values.global.imagePullSecrets }}
@@ -303,6 +304,7 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      backoffLimit: 2
       template:
         spec:
           {{- with .Values.global.imagePullSecrets }}

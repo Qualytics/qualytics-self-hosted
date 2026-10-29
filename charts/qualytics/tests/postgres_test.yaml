@@ -125,6 +125,19 @@ tests:
           value: RELEASE-NAME-postgres-snapshotter
         documentIndex: 4
 
+  - it: should cap retries of the snapshot and maintenance jobs
+    set:
+      postgres.enabled: true
+    asserts:
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 2
+        documentIndex: 4
+      - equal:
+          path: spec.jobTemplate.spec.backoffLimit
+          value: 2
+        documentIndex: 5
+
   # Resource limits
   - it: should have default memory limits for Postgres
     set:
