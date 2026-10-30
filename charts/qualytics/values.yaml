@@ -383,6 +383,8 @@ controlplane:
       endpoint: ""
 
 controlplaneCmd:
+  # Additional replicas require a compatible controlplane image and capacity for each worker pool.
+  replicas: 1
   resources:
     requests:
       memory: "4Gi"

@@ -179,6 +179,18 @@ helm upgrade --install qualytics qualytics/qualytics \
 > that phase, so `--wait` always reports failure and `--atomic` would roll back mid-rotation. See
 > [Rotating the stored-secrets passphrase](docs/authentication.md#rotating-the-stored-secrets-passphrase).
 
+CMD replicas default to one. Set `controlplaneCmd.replicas` to a positive integer
+only with a compatible controlplane image and capacity for each worker pool
+(default request: 4 GiB and one CPU per replica). Multiple replicas must use the
+same image version. CMD keeps `Recreate`, so all replicas stop during an upgrade;
+additional replicas alone do not provide node-failure or zero-downtime guarantees.
+
+Images containing `hub_cmd_health.py` report local startup, worker readiness and
+liveness; a healthy scheduler standby can be ready. Older images retain the
+previous Python-process and RabbitMQ-connectivity probes. The startup probe
+allows 15 minutes for migrations and initialization; set the deployment command's
+Helm timeout to accommodate the actual startup duration.
+
 **Monitor the deployment:**
 ```bash
 # Check deployment status

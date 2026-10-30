@@ -15,6 +15,66 @@ tests:
           value: RELEASE-NAME-cmd
         documentIndex: 0
 
+  - it: should preserve one CMD when legacy values omit replicas
+    set:
+      controlplaneCmd.replicas: null
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 1
+        documentIndex: 0
+
+  - it: should support two CMD replicas with the configured image and recreate strategy
+    set:
+      controlplaneCmd.replicas: 2
+      global.imageUrls.controlplaneImageUrl: custom/controlplane
+      controlplaneImage.image.controlplaneImageTag: custom-version
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+        documentIndex: 0
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: custom/controlplane:custom-version
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[3]
+          value: ready
+        documentIndex: 0
+
+  - it: should reject zero CMD replica counts
+    set:
+      controlplaneCmd.replicas: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplaneCmd.replicas must be a positive integer
+
+  - it: should reject negative CMD replica counts
+    set:
+      controlplaneCmd.replicas: -1
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplaneCmd.replicas must be a positive integer
+
+  - it: should reject fractional CMD replica counts
+    set:
+      controlplaneCmd.replicas: 1.5
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplaneCmd.replicas must be a positive integer
+
+  - it: should reject boolean CMD replica counts
+    set:
+      controlplaneCmd.replicas: true
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplaneCmd.replicas must be a positive integer
+
   - it: should use recreate strategy
     asserts:
       - equal:
@@ -23,56 +83,92 @@ tests:
         documentIndex: 0
 
   # Health probes
-  - it: should have startup probe checking python3 process
+  - it: should wait for local startup while allowing migrations to finish
     asserts:
       - equal:
           path: spec.template.spec.containers[0].startupProbe.exec.command[0]
           value: python3
         documentIndex: 0
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].startupProbe.exec.command[2]
-          value: "exit(0)"
+          pattern: '/app/hub_cmd_health\.py'
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.exec.command[3]
+          value: startup
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.periodSeconds
+          value: 5
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.failureThreshold
+          value: 180
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.timeoutSeconds
+          value: 5
+        documentIndex: 0
+      - equal:
+          path: spec.progressDeadlineSeconds
+          value: 1200
         documentIndex: 0
       - notExists:
           path: spec.template.spec.containers[0].startupProbe.initialDelaySeconds
         documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].startupProbe.failureThreshold
-          value: 30
-        documentIndex: 0
 
-  - it: should have readiness probe using TCP socket check to RabbitMQ
+  - it: should check worker readiness with a legacy RabbitMQ fallback
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[0]
           value: python3
         documentIndex: 0
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
-          value: "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
+          pattern: '/app/hub_cmd_health\.py'
         documentIndex: 0
       - equal:
-          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
-          value: 10
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[3]
+          value: ready
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 5
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.failureThreshold
           value: 3
         documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.timeoutSeconds
+          value: 10
+        documentIndex: 0
+      - matchRegex:
+          path: spec.template.spec.containers[0].readinessProbe.exec.command[2]
+          pattern: 'socket.create_connection'
+        documentIndex: 0
 
-  - it: should have liveness probe checking python3 process not dependencies
+  - it: should check local liveness without restarting on dependency reconnects
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[0]
           value: python3
         documentIndex: 0
-      - equal:
+      - matchRegex:
           path: spec.template.spec.containers[0].livenessProbe.exec.command[2]
-          value: "exit(0)"
+          pattern: '/app/hub_cmd_health\.py'
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.exec.command[3]
+          value: live
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.failureThreshold
-          value: 5
+          value: 3
         documentIndex: 0
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.timeoutSeconds
@@ -80,8 +176,6 @@ tests:
         documentIndex: 0
 
   - it: should configure CMD deployment with correct replicas
-    set:
-      cmd.replicas: 1
     asserts:
       - equal:
           path: spec.replicas

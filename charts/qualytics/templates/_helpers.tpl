@@ -72,6 +72,34 @@ message re-encrypts nothing and leaves every encrypted column undecryptable.
 {{- end -}}
 
 {{/*
+Preserve the singleton default for values saved before CMD replicas were configurable.
+*/}}
+{{- define "qualytics.controlplaneCmd.replicas" -}}
+{{- $replicas := .Values.controlplaneCmd.replicas -}}
+{{- if kindIs "invalid" $replicas -}}
+1
+{{- else if not (regexMatch "^[1-9][0-9]*$" (toString $replicas)) -}}
+{{- fail (printf "controlplaneCmd.replicas must be a positive integer; got %v" $replicas) -}}
+{{- else -}}
+{{- $replicas -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Use the image's local health checker when available; older images retain their probes.
+*/}}
+{{- define "qualytics.controlplaneCmd.healthCheck" -}}
+import os, sys
+checker = "/app/hub_cmd_health.py"
+if os.path.isfile(checker):
+    os.execv(sys.executable, [sys.executable, checker, sys.argv[1]])
+if sys.argv[1] == "ready":
+    import socket
+    with socket.create_connection((os.environ["RABBIT_MQ_HOST"], int(os.environ.get("RABBIT_MQ_PORT", "5671"))), timeout=5):
+        pass
+{{- end -}}
+
+{{/*
 Effective synchronous dataplane bound and ingress proxy timeout, in seconds. Each coalesces an
 ABSENT value to the chart default (600 / 660) so `helm upgrade --reuse-values` from a release
 created before these keys existed renders instead of failing: --reuse-values replaces the new

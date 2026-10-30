@@ -45,6 +45,9 @@ jobs:
       - name: Run unit tests
         run: helm unittest charts/qualytics
 
+      - name: Verify CMD probe execution
+        run: python3 -m unittest discover -s charts/qualytics/tests -p test_cmd_probes.py -v
+
       - name: Template validation tests for template.values.yaml configurations
         run: |
           echo "Testing template.values.yaml key configurations..."
