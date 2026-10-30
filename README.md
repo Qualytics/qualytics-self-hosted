@@ -179,10 +179,6 @@ helm upgrade --install qualytics qualytics/qualytics \
 > that phase, so `--wait` always reports failure and `--atomic` would roll back mid-rotation. See
 > [Rotating the stored-secrets passphrase](docs/authentication.md#rotating-the-stored-secrets-passphrase).
 
-Upgrades include API downtime. API and CMD use `Recreate`, and each new CMD pod waits 65 seconds before starting, including on a fresh installation. This gives API pods their 60-second termination grace plus a small margin. Replacement API pods still wait for their schema migrations.
-
-The delay is best effort: Kubernetes rolls the API and CMD Deployments independently, so controller or node delays can leave old API pods running when migrations begin. Use it alongside controlplane migration lock timeouts and retries; coordinate other deployments sharing the database separately. Helm rollback does not reverse completed database migrations.
-
 **Monitor the deployment:**
 ```bash
 # Check deployment status

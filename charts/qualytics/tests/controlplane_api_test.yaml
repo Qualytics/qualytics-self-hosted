@@ -78,30 +78,35 @@ tests:
             value: "postgresql+psycopg2://$(POSTGRES_CONNECTION_URL)"
         documentIndex: 0
 
-  - it: should stop the old API revision before starting replacement pods
+  - it: should roll without surge, keeping one pod serving
     asserts:
       - equal:
           path: spec.strategy.type
-          value: Recreate
+          value: RollingUpdate
         documentIndex: 0
-      - notExists:
-          path: spec.strategy.rollingUpdate
+      - equal:
+          path: spec.strategy.rollingUpdate.maxSurge
+          value: 0
+        documentIndex: 0
+      - equal:
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 3
         documentIndex: 0
 
-  - it: should preserve the disruption budget for a single replica
+  - it: should degrade to replace-in-place for a single replica
     set:
       controlplane.replicas: 1
     asserts:
       - equal:
-          path: spec.strategy.type
-          value: Recreate
+          path: spec.strategy.rollingUpdate.maxUnavailable
+          value: 1
         documentIndex: 0
       - equal:
           path: spec.maxUnavailable
           value: 1
         documentIndex: 2
 
-  - it: should spread pods across nodes and preserve the PodDisruptionBudget
+  - it: should spread pods across nodes and mirror the rollout policy in a PodDisruptionBudget
     asserts:
       - equal:
           path: spec.template.spec.topologySpreadConstraints[0].topologyKey

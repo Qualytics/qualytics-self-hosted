@@ -9,7 +9,12 @@ metadata:
 spec:
   replicas: {{ .Values.controlplane.replicas }}
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      # No surge: app nodes are packed to their requests, so replacements reuse the freed slots.
+      # Everything but one pod may cycle at once; a single replica degrades to replace-in-place.
+      maxSurge: 0
+      maxUnavailable: {{ max 1 (sub .Values.controlplane.replicas 1) }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}-api
@@ -333,8 +338,8 @@ kind: PodDisruptionBudget
 metadata:
   name: {{ .Release.Name }}-api
 spec:
-  # Node drains may take every pod but one; release rollouts use Recreate independently.
-  # A single-replica install must not pin a node with a zero disruption budget.
+  # Same policy as the rollout: a drain may take every pod but one. maxUnavailable never reaches
+  # zero, so a single-replica install cannot pin a node the way a minAvailable budget would.
   maxUnavailable: {{ max 1 (sub .Values.controlplane.replicas 1) }}
   selector:
     matchLabels:

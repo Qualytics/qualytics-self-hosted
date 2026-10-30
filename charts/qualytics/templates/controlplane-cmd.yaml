@@ -35,18 +35,6 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
       {{- end }}
-      initContainers:
-      - name: migration-startup-delay
-        image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
-        imagePullPolicy: IfNotPresent
-        # Best effort: the API has a 60-second termination grace period, plus a 5-second margin.
-        command: ["sleep", "65"]
-        resources:
-          requests:
-            memory: 64Mi
-            cpu: 10m
-          limits:
-            memory: 128Mi
       containers:
       - name: cmd
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
