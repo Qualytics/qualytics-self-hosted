@@ -22,6 +22,37 @@ tests:
           value: Recreate
         documentIndex: 0
 
+  - it: should pause CMD startup before running migrations
+    set:
+      global.imageUrls.controlplaneImageUrl: "custom/controlplane"
+      controlplaneImage.image.controlplaneImageTag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: migration-startup-delay
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: custom/controlplane:v1.2.3
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.initContainers[0].command
+          value: [sleep, "65"]
+        documentIndex: 0
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [python3, /app/hub_cmd.py]
+        documentIndex: 0
+      - notExists:
+          path: spec.template.spec.initContainers[0].env
+        documentIndex: 0
+      - notExists:
+          path: spec.template.spec.initContainers[0].volumeMounts
+        documentIndex: 0
+      - notExists:
+          path: spec.template.spec.volumes
+        documentIndex: 0
+
   # Health probes
   - it: should have startup probe checking python3 process
     asserts:

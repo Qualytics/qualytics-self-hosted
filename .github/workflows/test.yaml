@@ -42,9 +42,6 @@ jobs:
           -f template.values.yaml
           -f charts/qualytics/tests/values/deployment-identifier.yaml
 
-      - name: Run rollout gate tests
-        run: python3 charts/qualytics/tests/test_migration_gate.py
-
       - name: Run unit tests
         run: helm unittest charts/qualytics
 
