@@ -35,6 +35,47 @@ spec:
       tolerations:
         {{- toYaml .Values.tolerations.appNodeTolerations | nindent 8 }}
       {{- end }}
+      initContainers:
+      - name: wait-for-api-rollout
+        image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
+        imagePullPolicy: IfNotPresent
+        command:
+          - python3
+          - -u
+          - -c
+          - |
+{{ .Files.Get "files/wait_for_api_rollout.py" | indent 12 }}
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: API_DEPLOYMENT
+            value: {{ printf "%s-api" .Release.Name | quote }}
+          - name: CONTROLPLANE_IMAGE
+            value: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
+        volumeMounts:
+          - name: migration-gate-token
+            mountPath: /var/run/secrets/qualytics-migration-gate
+            readOnly: true
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+      volumes:
+        - name: migration-gate-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
       containers:
       - name: cmd
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"

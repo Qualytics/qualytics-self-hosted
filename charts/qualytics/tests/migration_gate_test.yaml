@@ -1,0 +1,156 @@
+suite: test migration rollout gate
+templates:
+  - controlplane-cmd.yaml
+  - migration-gate-rbac.yaml
+tests:
+  - it: should wait for the API rollout using the CMD image before starting CMD
+    set:
+      global.imageUrls.controlplaneImageUrl: "custom/controlplane"
+      controlplaneImage.image.controlplaneImageTag: "v1.2.3"
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: wait-for-api-rollout
+        template: controlplane-cmd.yaml
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: custom/controlplane:v1.2.3
+        template: controlplane-cmd.yaml
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: CONTROLPLANE_IMAGE
+            value: custom/controlplane:v1.2.3
+        template: controlplane-cmd.yaml
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: API_DEPLOYMENT
+            value: RELEASE-NAME-api
+        template: controlplane-cmd.yaml
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        template: controlplane-cmd.yaml
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[3]
+          pattern: def wait_for_api_rollout
+        template: controlplane-cmd.yaml
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [python3, /app/hub_cmd.py]
+        template: controlplane-cmd.yaml
+
+  - it: should mount a short-lived Kubernetes token only in the gate
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].volumeMounts[0]
+          value:
+            name: migration-gate-token
+            mountPath: /var/run/secrets/qualytics-migration-gate
+            readOnly: true
+        template: controlplane-cmd.yaml
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources
+          value:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 600
+            - configMap:
+                name: kube-root-ca.crt
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+        template: controlplane-cmd.yaml
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts
+        template: controlplane-cmd.yaml
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+        template: controlplane-cmd.yaml
+
+  - it: should only grant read access to the API Deployment and namespace ReplicaSets and pods
+    asserts:
+      - hasDocuments:
+          count: 2
+        template: migration-gate-rbac.yaml
+      - isKind:
+          of: Role
+        template: migration-gate-rbac.yaml
+        documentIndex: 0
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [apps]
+              resources: [deployments]
+              resourceNames: [RELEASE-NAME-api]
+              verbs: [get]
+            - apiGroups: [apps]
+              resources: [replicasets]
+              verbs: [list]
+            - apiGroups: [""]
+              resources: [pods]
+              verbs: [list]
+        template: migration-gate-rbac.yaml
+        documentIndex: 0
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: RELEASE-NAME-migration-gate
+        template: migration-gate-rbac.yaml
+        documentIndex: 1
+      - equal:
+          path: subjects[0]
+          value:
+            kind: ServiceAccount
+            name: default
+            namespace: NAMESPACE
+        template: migration-gate-rbac.yaml
+        documentIndex: 1
+
+  - it: should bind the chart-managed controlplane identity
+    set:
+      controlplane.serviceAccount.create: true
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: RELEASE-NAME-controlplane
+        template: migration-gate-rbac.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: RELEASE-NAME-controlplane
+        template: controlplane-cmd.yaml
+
+  - it: should bind an existing controlplane identity without replacing it
+    set:
+      controlplane.serviceAccount.name: existing-controlplane
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: existing-controlplane
+        template: migration-gate-rbac.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: existing-controlplane
+        template: controlplane-cmd.yaml
+
+  - it: should retain namespace default identity when legacy values omit serviceAccount
+    set:
+      controlplane.serviceAccount: null
+    asserts:
+      - equal:
+          path: subjects[0].name
+          value: default
+        template: migration-gate-rbac.yaml
+        documentIndex: 1
+      - notExists:
+          path: spec.template.spec.serviceAccountName
+        template: controlplane-cmd.yaml
