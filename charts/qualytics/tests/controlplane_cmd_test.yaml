@@ -22,52 +22,6 @@ tests:
           value: Recreate
         documentIndex: 0
 
-  - it: should run CMD as the image's unprivileged user
-    asserts:
-      - equal:
-          path: spec.template.spec.securityContext
-          value:
-            runAsNonRoot: true
-            runAsUser: 65532
-            runAsGroup: 65532
-            seccompProfile:
-              type: RuntimeDefault
-        documentIndex: 0
-      - equal:
-          path: spec.template.spec.containers[0].securityContext
-          value:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-        documentIndex: 0
-
-  # OpenShift's restricted-v2 SCC assigns the user ID and rejects 65532, outside the namespace's range.
-  - it: should leave the user and group to the platform when they are nulled
-    set:
-      controlplane.podSecurityContext.runAsUser: null
-      controlplane.podSecurityContext.runAsGroup: null
-    asserts:
-      - equal:
-          path: spec.template.spec.securityContext
-          value:
-            runAsNonRoot: true
-            seccompProfile:
-              type: RuntimeDefault
-        documentIndex: 0
-
-  # The state of an upgrade with --reuse-values from a release that predates these keys.
-  - it: should render no security context when both are unset
-    set:
-      controlplane.podSecurityContext: null
-      controlplane.securityContext: null
-    asserts:
-      - notExists:
-          path: spec.template.spec.securityContext
-        documentIndex: 0
-      - notExists:
-          path: spec.template.spec.containers[0].securityContext
-        documentIndex: 0
-
   # Health probes
   - it: should have startup probe checking python3 process
     asserts:

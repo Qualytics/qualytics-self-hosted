@@ -325,21 +325,6 @@ controlplane:
     # existing ServiceAccount instead of creating one.
     name: ""
     annotations: {}
-  # Security context of the hub api and cmd pods, including the API's migration check. The pods run as the
-  # controlplane image's unprivileged nonroot user (UID/GID 65532). On OpenShift, set runAsUser and runAsGroup
-  # to null: restricted-v2 then assigns a user ID from the namespace's range. With runAsUser set, the pods need
-  # nonroot-v2, because restricted-v2 rejects a user ID outside the range and anyuid rejects the seccomp profile.
-  podSecurityContext:
-    runAsNonRoot: true
-    runAsUser: 65532
-    runAsGroup: 65532
-    seccompProfile:
-      type: RuntimeDefault
-  securityContext:
-    allowPrivilegeEscalation: false
-    capabilities:
-      drop:
-        - ALL
   ingress:
     path: "/api/?(.*)"
     servicePort: "8000"

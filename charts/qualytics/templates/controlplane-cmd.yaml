@@ -18,10 +18,6 @@ spec:
       labels:
         app: {{ .Release.Name }}-cmd
     spec:
-      {{- with .Values.controlplane.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       {{- with $saName }}
       serviceAccountName: {{ . }}
       {{- end }}
@@ -43,10 +39,6 @@ spec:
       - name: cmd
         image: "{{ tpl .Values.global.imageUrls.controlplaneImageUrl . }}:{{ .Values.controlplaneImage.image.controlplaneImageTag }}"
         imagePullPolicy: IfNotPresent
-        {{- with .Values.controlplane.securityContext }}
-        securityContext:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
         command: ["python3","/app/hub_cmd.py"]
         resources:
           requests:
