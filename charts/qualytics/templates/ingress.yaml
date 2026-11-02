@@ -18,11 +18,19 @@ nginx.ingress.kubernetes.io/enable-cors: 'false'
 nginx.ingress.kubernetes.io/enable-modsecurity: 'true'
 nginx.ingress.kubernetes.io/configuration-snippet: |
   proxy_set_header X-Original-URI $request_uri;
+{{- if .frontend }}
   more_set_headers "X-Frame-Options: SAMEORIGIN";
+{{- else }}
+  more_set_headers "X-Frame-Options: DENY";
+{{- end }}
   more_set_headers "X-Content-Type-Options: nosniff";
   more_set_headers "Referrer-Policy: same-origin";
   more_set_headers "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload";
+{{- if .frontend }}
+  # The frontend keeps its existing CSP. API responses use the Controlplane CSP;
+  # replacing it here would weaken the OAuth token entry page.
   more_set_headers "Content-Security-Policy: default-src https: blob: data: 'unsafe-eval' 'unsafe-inline'; worker-src https: blob:";
+{{- end }}
   more_set_headers "Permissions-Policy: autoplay=(self),cross-origin-isolated=(self),display-capture=(self),encrypted-media=(self),fullscreen=(self),keyboard-map=(self),picture-in-picture=(self),publickey-credentials-get=(self),screen-wake-lock=(self),sync-xhr=(self)";
   more_set_headers "X-Xss-Protection: 1; mode=block";
 {{- end -}}
@@ -78,7 +86,7 @@ metadata:
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "50"
-    {{- include "common.ingress.annotations" . | nindent 4 }}
+    {{- include "common.ingress.annotations" (dict "Values" .Values "frontend" false) | nindent 4 }}
     # Higher priority to match before regular API ingress
     nginx.ingress.kubernetes.io/priority: "100"
     # Streams and file downloads legitimately run long; connecting to an in-cluster pod does not.
@@ -144,7 +152,7 @@ metadata:
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "50"
-    {{- include "common.ingress.annotations" . | nindent 4 }}
+    {{- include "common.ingress.annotations" (dict "Values" .Values "frontend" false) | nindent 4 }}
     # Lower priority than streaming ingress
     nginx.ingress.kubernetes.io/priority: "10"
     # Looser than every timeout inside the API (synchronous dataplane waits stop at 600 s), so a genuine
@@ -207,7 +215,7 @@ metadata:
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-weight: "50"
-    {{- include "common.ingress.annotations" . | nindent 4 }}
+    {{- include "common.ingress.annotations" (dict "Values" .Values "frontend" true) | nindent 4 }}
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
     nginx.ingress.kubernetes.io/proxy-read-timeout: {{ $proxyTimeoutSeconds | quote }}
     nginx.ingress.kubernetes.io/proxy-send-timeout: {{ $proxyTimeoutSeconds | quote }}
