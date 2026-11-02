@@ -340,6 +340,10 @@ controlplane:
     sender: "no-reply@qualytics.ai"
     port: "465"
   auth:
+    # Optional comma-separated browser origins allowed to call the MCP endpoint.
+    # Empty uses Controlplane's default: the external API origin and configured CORS_ORIGINS.
+    # Set explicit origins for browser MCP clients hosted on other domains; wildcards are rejected.
+    mcpCorsOrigins: ""
     # SCIM username prefix
     scimUsernamePrefix: ""
     # Set to true when your identity provider is hosted inside your own network and resolves to a
