@@ -4,10 +4,19 @@
 # This template creates a GKE cluster with the recommended node pools for
 # deploying Qualytics. Customize the variables in terraform.tfvars to match
 # your requirements.
+#
+# Apply this directory first, then terraform/gcp/postgres (which reads the
+# project and VPC network from this module's state).
 ################################################################################
 
 terraform {
   required_version = ">= 1.3.0"
+
+  backend "gcs" {
+    prefix = "gcp/cluster"
+    # bucket is supplied at init time:
+    # terraform init -backend-config="bucket=<your-tfstate-bucket>"
+  }
 
   required_providers {
     google = {

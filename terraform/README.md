@@ -6,8 +6,8 @@ This directory contains Terraform templates for deploying the infrastructure req
 
 | Cloud Provider | Directory | Description |
 |----------------|-----------|-------------|
-| AWS | [`/aws`](./aws) | Amazon Elastic Kubernetes Service (EKS) |
-| GCP | [`/gcp`](./gcp) | Google Kubernetes Engine (GKE) |
+| AWS | [`/aws`](./aws) | Amazon Elastic Kubernetes Service (EKS) + Aurora PostgreSQL |
+| GCP | [`/gcp`](./gcp) | Google Kubernetes Engine (GKE) + AlloyDB for PostgreSQL |
 | Azure | [`/azure`](./azure) | Azure Kubernetes Service (AKS) |
 
 ## Overview
@@ -28,15 +28,17 @@ All templates include:
 
 ## Quick Start
 
-**AWS:** the AWS deployment is two Terraform modules applied in order (`aws/cluster`, then
-`aws/postgres`) plus TLS and Helm setup — follow [`aws/README.md`](./aws/README.md) instead
-of the generic steps below.
+**AWS / GCP:** each deployment is two Terraform modules applied in order — `aws/cluster`
+then `aws/postgres`, or `gcp/cluster` then `gcp/postgres` — plus TLS and Helm setup. The
+second module creates the cloud-managed PostgreSQL that Qualytics uses instead of the
+in-cluster StatefulSet. Follow [`aws/README.md`](./aws/README.md) or
+[`gcp/README.md`](./gcp/README.md) instead of the generic steps below.
 
-**GCP / Azure:**
+**Azure:**
 
-1. **Choose your cloud provider** and navigate to the appropriate directory
+1. **Navigate to** [`/azure`](./azure)
 2. **Copy the example configuration**: `cp terraform.tfvars.example terraform.tfvars`
-3. **Edit the configuration** with your settings (subscription/project ID, region, etc.)
+3. **Edit the configuration** with your settings (subscription ID, region, etc.)
 4. **Initialize Terraform**: `terraform init`
 5. **Preview changes**: `terraform plan`
 6. **Apply changes**: `terraform apply`
@@ -96,7 +98,7 @@ Each template supports cost optimization features:
 
 ## Prerequisites
 
-- [Terraform](https://www.terraform.io/downloads) >= 1.3.0 (the AWS modules require >= 1.11.1 for S3 backend state locking)
+- [Terraform](https://www.terraform.io/downloads) >= 1.3.0 (the AWS modules require >= 1.11.1 for S3 backend state locking; `gcp/postgres` requires >= 1.11.1 for write-only password arguments)
 - Cloud provider CLI configured with appropriate credentials:
   - AWS: `aws configure`
   - GCP: `gcloud auth application-default login`
@@ -105,11 +107,12 @@ Each template supports cost optimization features:
 
 ## Post-Deployment
 
-**AWS:** Follow the complete step-by-step guide in [`aws/README.md`](./aws/README.md) — it
-covers TLS certificate setup (bring-your-own Secret), Aurora PostgreSQL, Helm
-configuration, DNS, and verification.
+**AWS / GCP:** Follow the complete step-by-step guide in [`aws/README.md`](./aws/README.md)
+or [`gcp/README.md`](./gcp/README.md) — each covers TLS certificate setup (bring-your-own
+Secret), the managed PostgreSQL (Aurora / AlloyDB), Helm configuration, DNS, and
+verification.
 
-**GCP / Azure:** After creating the cluster:
+**Azure:** After creating the cluster:
 
 1. Verify cluster access: `kubectl get nodes`
 2. Create the `qualytics` namespace and Docker registry secret (if not done automatically):

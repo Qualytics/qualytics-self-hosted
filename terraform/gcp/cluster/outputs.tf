@@ -3,6 +3,20 @@
 ################################################################################
 
 #-------------------------------------------------------------------------------
+# Project
+#-------------------------------------------------------------------------------
+
+output "project_id" {
+  description = "The GCP project ID hosting the cluster (auto-generated when var.project_id is empty)"
+  value       = local.project_id
+}
+
+output "region" {
+  description = "The GCP region of the cluster"
+  value       = var.region
+}
+
+#-------------------------------------------------------------------------------
 # Cluster Information
 #-------------------------------------------------------------------------------
 
@@ -87,7 +101,7 @@ output "node_pools" {
 
 output "configure_kubectl" {
   description = "Command to configure kubectl for the cluster"
-  value       = "gcloud container clusters get-credentials ${module.gke.name} --region ${var.region} --project ${var.project_id}"
+  value       = "gcloud container clusters get-credentials ${module.gke.name} --region ${var.region} --project ${local.project_id}"
 }
 
 #-------------------------------------------------------------------------------
@@ -105,7 +119,7 @@ output "next_steps" {
     Next steps to deploy Qualytics:
 
     1. Configure kubectl:
-       gcloud container clusters get-credentials ${module.gke.name} --region ${var.region} --project ${var.project_id}
+       gcloud container clusters get-credentials ${module.gke.name} --region ${var.region} --project ${local.project_id}
 
     2. Verify cluster access:
        kubectl get nodes
@@ -122,7 +136,14 @@ output "next_steps" {
          --docker-password="$QUALYTICS_REGISTRY_TOKEN"
        unset QUALYTICS_REGISTRY_TOKEN
 
-    5. Deploy Qualytics using Helm:
+    5. Create the TLS Secret for the ingress (see docs/ingress-tls.md):
+       kubectl create secret tls qualytics-tls-cert -n qualytics \
+         --cert=./fullchain.pem --key=./privkey.pem
+
+    6. Deploy AlloyDB for PostgreSQL:
+       See terraform/gcp/postgres
+
+    7. Deploy Qualytics using Helm:
        helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
        helm repo update
        CHART_VERSION="<version provided by Qualytics>"
@@ -132,6 +153,8 @@ output "next_steps" {
          -f values.yaml \
          --wait \
          --timeout=5m
+
+    Full step-by-step guide: terraform/gcp/README.md
 
     For more information, visit:
     https://github.com/qualytics/qualytics-self-hosted

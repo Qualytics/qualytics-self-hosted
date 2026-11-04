@@ -23,7 +23,8 @@ jobs:
         module:
           - terraform/aws/cluster
           - terraform/aws/postgres
-          - terraform/gcp
+          - terraform/gcp/cluster
+          - terraform/gcp/postgres
           - terraform/azure
     steps:
       - name: Checkout
