@@ -1394,6 +1394,19 @@ tests:
           apiVersion: networking.k8s.io/v1
         not: true
 
+  # helm upgrade --reuse-values renders with the previous release's values, which
+  # predate dataplane.networkPolicy.
+  - it: should render without a NetworkPolicy when the values have no networkPolicy key
+    set:
+      dataplane.networkPolicy: null
+    asserts:
+      - hasDocuments:
+          count: 6
+      - containsDocument:
+          kind: NetworkPolicy
+          apiVersion: networking.k8s.io/v1
+        not: true
+
   - it: should admit only this release's executors to the driver's RPC and block manager ports
     set:
       dataplane.networkPolicy.enabled: true
@@ -1436,6 +1449,14 @@ tests:
                 - protocol: TCP
                   port: 7079
         documentIndex: 6
+
+  - it: should not render the NetworkPolicy when the dataplane is disabled
+    set:
+      dataplane.networkPolicy.enabled: true
+      dataplane.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
 
   - it: should render the NetworkPolicy when the chart does not manage the driver's RBAC
     set:

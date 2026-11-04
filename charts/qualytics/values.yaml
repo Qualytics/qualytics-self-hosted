@@ -270,13 +270,14 @@ dataplane:
     #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
     serviceAccountAnnotations: {}
   # NetworkPolicy on the driver pod: its Spark RPC (7078) and block manager (7079)
-  # ports admit only this release's executor pods, and every other connection to the
-  # driver is refused, including the Spark UI (4040), which no in-cluster component
-  # uses (kubectl port-forward still reaches it). Takes effect only when the cluster's
-  # CNI enforces NetworkPolicy (for example Calico, Cilium, Azure Network Policy
-  # Manager, GKE Dataplane V2, or the Amazon VPC CNI with network policy enabled);
-  # other CNIs accept the object and ignore it. Policies are additive, so another
-  # policy that selects the driver pod can still admit more.
+  # ports admit only this release's executor pods, and no other pod reaches the driver
+  # on any port, including the Spark UI (4040), which no in-cluster component uses
+  # (kubectl port-forward still reaches it). Kubernetes always admits traffic from the
+  # driver's own node, host-network pods there included. Takes effect only when the
+  # cluster's CNI enforces NetworkPolicy (for example Calico, Cilium, Azure Network
+  # Policy Manager, GKE Dataplane V2, or the Amazon VPC CNI with network policy
+  # enabled); other CNIs accept the object and ignore it. Policies are additive, so
+  # another policy that selects the driver pod can still admit more.
   networkPolicy:
     enabled: false
   driver:

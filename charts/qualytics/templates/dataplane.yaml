@@ -456,13 +456,14 @@ spec:
               memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
             limits:
               memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
-{{- if .Values.dataplane.networkPolicy.enabled }}
+{{- if (.Values.dataplane.networkPolicy | default dict).enabled }}
 ---
 # Admits the driver's RPC (7078) and block manager (7079) ports only from this release's
 # executors: Spark labels them spark-role=executor, and the driver adds app=<release>-spark
-# through spark.kubernetes.executor.label.app. All other ingress to the driver is dropped,
+# through spark.kubernetes.executor.label.app. No other pod reaches the driver on any port,
 # including the Spark UI (4040), which nothing in the cluster reads; kubectl port-forward
-# does not cross the pod network, so it still reaches the UI.
+# does not cross the pod network, so it still reaches the UI. Kubernetes always admits
+# traffic from the driver's own node, host-network pods there included.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
