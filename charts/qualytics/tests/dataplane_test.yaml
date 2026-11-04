@@ -667,7 +667,7 @@ tests:
       # With the Secret inserted at index 3, the Deployment shifts to index 6.
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml"
+          pattern: "spark.jars.ivySettings=/opt/spark/driver-conf/ivysettings.xml"
         documentIndex: 6
       - contains:
           path: spec.template.spec.volumes
@@ -683,7 +683,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: ivy-settings
-            mountPath: /opt/spark/conf/ivysettings.xml
+            mountPath: /opt/spark/driver-conf/ivysettings.xml
             subPath: ivysettings.xml
         documentIndex: 6
       # Credential/URL changes must roll the driver: subPath Secret mounts
@@ -798,7 +798,7 @@ tests:
       # With the Secret inserted at index 3, the Deployment shifts to index 6.
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: '--properties-file /opt/spark/conf/extra-spark\.properties \\\n\s*--load-spark-defaults \\'
+          pattern: '--properties-file /opt/spark/driver-conf/extra-spark\.properties \\\n\s*--load-spark-defaults \\'
         documentIndex: 6
       # Values stay out of the Deployment spec.
       - notMatchRegex:
@@ -819,7 +819,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: extra-spark-conf
-            mountPath: /opt/spark/conf/extra-spark.properties
+            mountPath: /opt/spark/driver-conf/extra-spark.properties
             subPath: extra-spark.properties
         documentIndex: 6
       # spark-submit reads the file once at start, so a change must roll the driver.
@@ -1298,7 +1298,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: extra-spark-conf
-            mountPath: /opt/spark/conf/extra-spark.properties
+            mountPath: /opt/spark/driver-conf/extra-spark.properties
             subPath: extra-spark.properties
         documentIndex: 6
       - matchRegex:
@@ -1329,3 +1329,121 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'volume name "extra-spark-conf" is reserved by the chart'
+
+  # Secret-backed driver files stay out of /opt/spark/conf: Spark copies that
+  # directory into a plaintext ConfigMap it mounts into every executor.
+  - it: should mount the ivy settings and extra Spark properties outside the Spark conf directory
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+      dataplane.ivy.username: "svc-user"
+      dataplane.ivy.password: "secret"
+      dataplane.extraSparkConf:
+        spark.hadoop.fs.s3a.secret.key: "secret"
+    asserts:
+      - isKind:
+          of: Deployment
+        documentIndex: 7
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /opt/spark/conf/ivysettings.xml
+          any: true
+        documentIndex: 7
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /opt/spark/conf/extra-spark.properties
+          any: true
+        documentIndex: 7
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '/opt/spark/conf/(ivysettings\.xml|extra-spark\.properties)'
+        documentIndex: 7
+      # The executor pod template stays the only chart file under /opt/spark/conf.
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: executor-pod-template
+            mountPath: /opt/spark/conf/executor-template.yaml
+            subPath: executor-template.yaml
+        documentIndex: 7
+
+  # dataplane.networkPolicy: driver ingress limited to this release's executors.
+  - it: should label executor pods with the release's app label
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.kubernetes\.executor\.label\.app=RELEASE-NAME-spark \\'
+        documentIndex: 5
+
+  - it: should keep the executor app label on the command line, where it wins over extraSparkConf
+    set:
+      dataplane.extraSparkConf:
+        spark.kubernetes.executor.label.app: "other"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.kubernetes\.executor\.label\.app=RELEASE-NAME-spark \\'
+        documentIndex: 6
+
+  - it: should not render a NetworkPolicy by default
+    asserts:
+      - containsDocument:
+          kind: NetworkPolicy
+          apiVersion: networking.k8s.io/v1
+        not: true
+
+  - it: should admit only this release's executors to the driver's RPC and block manager ports
+    set:
+      dataplane.networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 7
+      - isKind:
+          of: NetworkPolicy
+        documentIndex: 6
+      - equal:
+          path: metadata.name
+          value: RELEASE-NAME-spark-driver
+        documentIndex: 6
+      # Same labels as the driver Deployment's pod template.
+      - equal:
+          path: spec.podSelector
+          value:
+            matchLabels:
+              app: RELEASE-NAME-spark
+              spark-role: driver
+        documentIndex: 6
+      - equal:
+          path: spec.policyTypes
+          value:
+            - Ingress
+        documentIndex: 6
+      # A single rule: executors (spark-role from Spark, app from
+      # spark.kubernetes.executor.label.app) on 7078/7079. Nothing reaches 4040.
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector:
+                    matchLabels:
+                      app: RELEASE-NAME-spark
+                      spark-role: executor
+              ports:
+                - protocol: TCP
+                  port: 7078
+                - protocol: TCP
+                  port: 7079
+        documentIndex: 6
+
+  - it: should render the NetworkPolicy when the chart does not manage the driver's RBAC
+    set:
+      dataplane.networkPolicy.enabled: true
+      dataplane.rbac.create: false
+    asserts:
+      - hasDocuments:
+          count: 4
+      - isKind:
+          of: NetworkPolicy
+        documentIndex: 3

@@ -58,7 +58,7 @@ roleRef:
 # Ivy settings for resolving extraPackages from an internal Maven repository
 # instead of Maven Central (docs/custom-maven-repository.md). Rendered from
 # dataplane.ivy.* values via the qualytics.ivy.settingsXml helper, mounted
-# into the driver at /opt/spark/conf/ivysettings.xml, and passed to
+# into the driver at /opt/spark/driver-conf/ivysettings.xml, and passed to
 # spark-submit via --conf spark.jars.ivySettings. Loading a settings file
 # replaces Spark's built-in resolvers entirely, so the repository must serve
 # every coordinate in extraPackages. Driver-only: executors receive the
@@ -76,9 +76,9 @@ data:
 {{- if .Values.dataplane.extraSparkConf }}
 ---
 # dataplane.extraSparkConf as a Spark properties file (qualytics.spark.extraConfProperties),
-# mounted into the driver at /opt/spark/conf/extra-spark.properties and passed to spark-submit
-# via --properties-file. A Secret keeps the values out of the Deployment spec, and --conf
-# flags win over the file, so these entries only add settings.
+# mounted into the driver at /opt/spark/driver-conf/extra-spark.properties and passed to
+# spark-submit via --properties-file. A Secret keeps the values out of the Deployment spec, and
+# --conf flags win over the file, so these entries only add settings.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -296,7 +296,7 @@ spec:
                 --packages {{ join "," .Values.dataplane.extraPackages }} \
                 {{- end }}
                 {{- if .Values.dataplane.extraSparkConf }}
-                --properties-file /opt/spark/conf/extra-spark.properties \
+                --properties-file /opt/spark/driver-conf/extra-spark.properties \
                 --load-spark-defaults \
                 {{- end }}
                 --conf spark.kubernetes.namespace={{ .Release.Namespace }} \
@@ -339,11 +339,12 @@ spec:
                 --conf spark.storage.decommission.rddBlocks.enabled=true \
                 --conf spark.executor.decommission.killInterval=120 \
                 --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
+                --conf spark.kubernetes.executor.label.app={{ .Release.Name }}-spark \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
                 --conf spark.sql.constraintPropagation.enabled=false \
                 --conf spark.jars.ivy=/tmp \
                 {{- if .Values.dataplane.ivy.enabled }}
-                --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \
+                --conf spark.jars.ivySettings=/opt/spark/driver-conf/ivysettings.xml \
                 {{- end }}
                 {{- if gt (int .Values.dataplane.numVolumes) 0 }}
                 --conf spark.local.dir={{ include "qualytics.spark.localDirs" . }} \
@@ -434,14 +435,16 @@ spec:
             - name: executor-pod-template
               mountPath: /opt/spark/conf/executor-template.yaml
               subPath: executor-template.yaml
+            # Secret-backed files stay out of /opt/spark/conf: Spark copies that directory
+            # into a plaintext ConfigMap it mounts into every executor.
             {{- if .Values.dataplane.ivy.enabled }}
             - name: ivy-settings
-              mountPath: /opt/spark/conf/ivysettings.xml
+              mountPath: /opt/spark/driver-conf/ivysettings.xml
               subPath: ivysettings.xml
             {{- end }}
             {{- if .Values.dataplane.extraSparkConf }}
             - name: extra-spark-conf
-              mountPath: /opt/spark/conf/extra-spark.properties
+              mountPath: /opt/spark/driver-conf/extra-spark.properties
               subPath: extra-spark.properties
             {{- end }}
             {{- with .Values.dataplane.driver.extraVolumeMounts }}
@@ -453,4 +456,36 @@ spec:
               memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
             limits:
               memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
+{{- if .Values.dataplane.networkPolicy.enabled }}
+---
+# Admits the driver's RPC (7078) and block manager (7079) ports only from this release's
+# executors: Spark labels them spark-role=executor, and the driver adds app=<release>-spark
+# through spark.kubernetes.executor.label.app. All other ingress to the driver is dropped,
+# including the Spark UI (4040), which nothing in the cluster reads; kubectl port-forward
+# does not cross the pod network, so it still reaches the UI.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-spark-driver
+  labels:
+    app: {{ .Release.Name }}-spark
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}-spark
+      spark-role: driver
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ .Release.Name }}-spark
+              spark-role: executor
+      ports:
+        - protocol: TCP
+          port: 7078
+        - protocol: TCP
+          port: 7079
+{{- end }}
 {{- end }}

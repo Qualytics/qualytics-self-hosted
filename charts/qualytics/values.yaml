@@ -269,6 +269,16 @@ dataplane:
     # For AWS IRSA (IAM Roles for Service Accounts), add:
     #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
     serviceAccountAnnotations: {}
+  # NetworkPolicy on the driver pod: its Spark RPC (7078) and block manager (7079)
+  # ports admit only this release's executor pods, and every other connection to the
+  # driver is refused, including the Spark UI (4040), which no in-cluster component
+  # uses (kubectl port-forward still reaches it). Takes effect only when the cluster's
+  # CNI enforces NetworkPolicy (for example Calico, Cilium, Azure Network Policy
+  # Manager, GKE Dataplane V2, or the Amazon VPC CNI with network policy enabled);
+  # other CNIs accept the object and ignore it. Policies are additive, so another
+  # policy that selects the driver pod can still admit more.
+  networkPolicy:
+    enabled: false
   driver:
     cores: 7
     memory: "55000m"
@@ -276,6 +286,8 @@ dataplane:
     # extraSparkConf points the JVM at (see docs/custom-ca-certificates.md). Executors
     # mount Secrets through extraSparkConf instead:
     # spark.kubernetes.executor.secrets.<secret-name>: "<mount-path>".
+    # Keep Secrets out of /opt/spark/conf: Spark copies the files there into a plaintext
+    # ConfigMap for the executors.
     # The volume names executor-pod-template, ivy-settings and extra-spark-conf are
     # reserved by the chart.
     #   extraVolumes:
