@@ -36,6 +36,11 @@ output "kube_config_raw" {
 # Resource Group
 #-------------------------------------------------------------------------------
 
+output "subscription_id" {
+  description = "Azure subscription hosting the cluster (read by terraform/azure/postgres)"
+  value       = var.subscription_id
+}
+
 output "resource_group_name" {
   description = "The name of the resource group"
   value       = azurerm_resource_group.qualytics.name
@@ -44,6 +49,11 @@ output "resource_group_name" {
 output "resource_group_location" {
   description = "The location of the resource group"
   value       = azurerm_resource_group.qualytics.location
+}
+
+output "node_group_az" {
+  description = "Availability zone the node pools are pinned to (read by terraform/azure/postgres to co-locate the database primary)"
+  value       = var.node_group_az
 }
 
 #-------------------------------------------------------------------------------
@@ -58,6 +68,11 @@ output "vnet_id" {
 output "vnet_name" {
   description = "The name of the Virtual Network"
   value       = azurerm_virtual_network.qualytics.name
+}
+
+output "vnet_address_space" {
+  description = "Address space of the Virtual Network (read by terraform/azure/postgres for its subnet NSG rule)"
+  value       = azurerm_virtual_network.qualytics.address_space
 }
 
 output "aks_subnet_id" {
@@ -160,7 +175,12 @@ output "next_steps" {
          --docker-password="$QUALYTICS_REGISTRY_TOKEN"
        unset QUALYTICS_REGISTRY_TOKEN
 
-    5. Deploy Qualytics using Helm:
+    5. Create the TLS Secret for your domain (see docs/ingress-tls.md)
+
+    6. Deploy Azure Database for PostgreSQL:
+       See terraform/azure/postgres
+
+    7. Deploy Qualytics using Helm:
        helm repo add qualytics https://qualytics.github.io/qualytics-self-hosted
        helm repo update
        CHART_VERSION="<version provided by Qualytics>"
@@ -171,7 +191,7 @@ output "next_steps" {
          --wait \
          --timeout=5m
 
-    For more information, visit:
+    Full step-by-step guide: terraform/azure/README.md
     https://github.com/qualytics/qualytics-self-hosted
 
   EOT

@@ -4,10 +4,22 @@
 # This template creates an AKS cluster with the recommended node pools for
 # deploying Qualytics. Customize the variables in terraform.tfvars to match
 # your requirements.
+#
+# Apply this directory first, then terraform/azure/postgres (which reads the
+# resource group, virtual network and zone from this state).
 ################################################################################
 
 terraform {
   required_version = ">= 1.3.0"
+
+  backend "azurerm" {
+    key = "azure/cluster/terraform.tfstate"
+    # storage account, container and its resource group are supplied at init time:
+    # terraform init \
+    #   -backend-config="resource_group_name=<tfstate-resource-group>" \
+    #   -backend-config="storage_account_name=<tfstate-storage-account>" \
+    #   -backend-config="container_name=tfstate"
+  }
 
   required_providers {
     azurerm = {
