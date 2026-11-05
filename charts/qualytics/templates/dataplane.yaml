@@ -460,9 +460,8 @@ spec:
 ---
 # Admits the driver's RPC (7078) and block manager (7079) ports only from this release's
 # executors: Spark labels them spark-role=executor, and the driver adds app=<release>-spark
-# through spark.kubernetes.executor.label.app. No other pod reaches the driver on any port,
-# including the Spark UI (4040), which nothing in the cluster reads; kubectl port-forward
-# does not cross the pod network, so it still reaches the UI. Kubernetes always admits
+# through spark.kubernetes.executor.label.app. The Spark UI (4040) stays open to any source;
+# it has no authentication. No other port admits other pods. Kubernetes always admits
 # traffic from the driver's own node, host-network pods there included.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -488,5 +487,8 @@ spec:
           port: 7078
         - protocol: TCP
           port: 7079
+    - ports:
+        - protocol: TCP
+          port: 4040
 {{- end }}
 {{- end }}

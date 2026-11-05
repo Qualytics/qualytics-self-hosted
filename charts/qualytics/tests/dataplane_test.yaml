@@ -1433,8 +1433,8 @@ tests:
           value:
             - Ingress
         documentIndex: 6
-      # A single rule: executors (spark-role from Spark, app from
-      # spark.kubernetes.executor.label.app) on 7078/7079. Nothing reaches 4040.
+      # Executors (spark-role from Spark, app from spark.kubernetes.executor.label.app)
+      # on 7078/7079; the Spark UI (4040) from any source.
       - equal:
           path: spec.ingress
           value:
@@ -1448,6 +1448,9 @@ tests:
                   port: 7078
                 - protocol: TCP
                   port: 7079
+            - ports:
+                - protocol: TCP
+                  port: 4040
         documentIndex: 6
 
   - it: should not render the NetworkPolicy when the dataplane is disabled

@@ -167,8 +167,8 @@ dataplane:
   #   realm: "Artifactory Realm"
   #   username: "svc-user"      # optional — set both or neither
   #   password: "<token>"
-  # Clusters whose CNI enforces NetworkPolicy: admit the driver's Spark ports only
-  # from this release's executors (see values.yaml).
+  # Clusters whose CNI enforces NetworkPolicy: admit the driver's Spark RPC and block
+  # manager ports only from this release's executors (see values.yaml).
   # networkPolicy:
   #   enabled: true
   # I/O-bound sync ceiling; the dataplane's CPU governor (values.yaml syncAdmission) scales
