@@ -113,6 +113,8 @@ data:
         {{- end }}
       {{- end }}
       restartPolicy: Never
+      # Spark 4.1+ replaces this with spark.kubernetes.executor.terminationGracePeriodSeconds
+      # (default 30s), which the driver sets to the same 120s.
       terminationGracePeriodSeconds: 120
       {{- if .Values.executorNodeSelector }}
       nodeSelector:
@@ -338,6 +340,7 @@ spec:
                 --conf spark.storage.decommission.shuffleBlocks.enabled=true \
                 --conf spark.storage.decommission.rddBlocks.enabled=true \
                 --conf spark.executor.decommission.killInterval=120 \
+                --conf spark.kubernetes.executor.terminationGracePeriodSeconds=120 \
                 --conf spark.kubernetes.executor.annotation.cluster-autoscaler.kubernetes.io/safe-to-evict=false \
                 --conf spark.eventLog.enabled={{ .Values.dataplane.eventLog }} \
                 --conf spark.sql.constraintPropagation.enabled=false \
