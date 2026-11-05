@@ -278,6 +278,17 @@ tests:
             value: "test.qualytics.io"
         documentIndex: 0
 
+  - it: should pass explicit MCP browser origins to Controlplane
+    set:
+      controlplane.auth.mcpCorsOrigins: "https://mcp.example.com,https://inspector.example.com"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MCP_CORS_ORIGINS
+            value: "https://mcp.example.com,https://inspector.example.com"
+        documentIndex: 0
+
   - it: should expose estimated node egress and mount optional infrastructure metadata
     asserts:
       - contains:
