@@ -610,6 +610,11 @@ tests:
           path: data["executor-template.yaml"]
           pattern: "terminationGracePeriodSeconds: 120"
         documentIndex: 3
+      # Spark 4.1+ applies this conf (default 30s) over the pod template's value.
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.kubernetes\.executor\.terminationGracePeriodSeconds=120 \\'
+        documentIndex: 5
 
   - it: should pass JDBC packages to spark-submit
     asserts:
