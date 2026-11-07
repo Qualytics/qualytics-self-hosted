@@ -7,9 +7,10 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}-cmd
 spec:
-  replicas: 1
+  replicas: {{ include "qualytics.controlplaneCmd.replicas" . }}
   strategy:
     type: Recreate
+  progressDeadlineSeconds: 1200
   selector:
     matchLabels:
       app: {{ .Release.Name }}-cmd
@@ -60,8 +61,9 @@ spec:
             command:
               - python3
               - -c
-              - "import socket,os; s=socket.create_connection((os.environ['RABBIT_MQ_HOST'], int(os.environ.get('RABBIT_MQ_PORT','5671'))), timeout=5); s.close()"
-          periodSeconds: 30
+              - |
+                {{- include "qualytics.controlplaneCmd.readinessCheck" . | nindent 16 }}
+          periodSeconds: 5
           timeoutSeconds: 10
           failureThreshold: 3
         livenessProbe:

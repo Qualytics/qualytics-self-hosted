@@ -414,7 +414,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 - **Secret Management**: All credentials stored in `qualytics-creds` secret
 
 ### Resource Patterns
-- **Deployment Strategy**: API and frontend use `RollingUpdate` with `maxSurge: 0` and `maxUnavailable: replicas-1` (no spare node capacity needed, one pod always serving), each mirrored by a `PodDisruptionBudget` with the same `maxUnavailable`. CMD stays `Recreate` (singleton scheduler and migrator). RabbitMQ carries no PDB (a budget on a single replica only blocks node drains); it is annotated `karpenter.sh/do-not-disrupt` instead, bounded by the app NodePool `terminationGracePeriod` in `terraform/aws/cluster`.
+- **Deployment Strategy**: API and frontend use `RollingUpdate` with `maxSurge: 0` and `maxUnavailable: replicas-1` (no spare node capacity needed, one pod always serving), each mirrored by a `PodDisruptionBudget` with the same `maxUnavailable`. CMD stays `Recreate` (migrations run before workers start, and all replicas must share one image version). RabbitMQ carries no PDB (a budget on a single replica only blocks node drains); it is annotated `karpenter.sh/do-not-disrupt` instead, bounded by the app NodePool `terminationGracePeriod` in `terraform/aws/cluster`.
 - **Image Pull Policy**: `IfNotPresent`
 - **Termination Grace Period**: Default 10 seconds
 - **Resource Requests/Limits**: Always specify for production workloads
@@ -506,7 +506,8 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 - **Strategy**: `RollingUpdate`, `maxSurge: 0`, `maxUnavailable: replicas-1`, plus a matching `PodDisruptionBudget`
 
 ### Control Plane CMD
-- **Replicas**: 1
+- **Replicas**: `controlplaneCmd.replicas` (default 1; absent from reuse-values → 1; non-positive-integer fails the render). Extra replicas share the broker backlog; scheduled work and migrations are serialized by the controlplane's PostgreSQL leadership locks. All replicas must run the same image, and `Recreate` still stops every replica during an upgrade.
+- **Probes**: readiness runs `/app/hub_cmd_health.py ready` when the image ships it (local worker + background-service health), else falls back to the RabbitMQ TCP check. Startup and liveness stay `exit(0)` so migration-lock waits and long migrations never trigger a restart. `progressDeadlineSeconds: 1200`. `tests/test_cmd_probes.py` (run in CI) executes the rendered probe commands.
 - **Resources**: Configurable via `controlplaneCmd.resources`
 - **Purpose**: Background job processor
 - **Similar configuration to API**: Same image and environment variables

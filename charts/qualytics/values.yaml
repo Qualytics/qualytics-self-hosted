@@ -96,13 +96,13 @@ global:
 # Platform image tags
 controlplaneImage:
   image:
-    controlplaneImageTag: "20261029-10ee084"
+    controlplaneImageTag: "20261106-92f18e7"
 dataplaneImage:
   image:
-    dataplaneImageTag: "20261029-7280f3c"
+    dataplaneImageTag: "20261106-d1d7a15"
 frontendImage:
   image:
-    frontendImageTag: "20261029-a06ca8f"
+    frontendImageTag: "20261106-8e9a8b6"
 
 # Storage classes
 storageClass:
@@ -383,6 +383,8 @@ controlplane:
       endpoint: ""
 
 controlplaneCmd:
+  # Additional replicas require a compatible controlplane image and capacity for each worker pool.
+  replicas: 1
   resources:
     requests:
       memory: "4Gi"
