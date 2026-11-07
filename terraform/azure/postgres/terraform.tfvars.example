@@ -1,0 +1,106 @@
+################################################################################
+# Qualytics Azure Database for PostgreSQL - Example Configuration
+#
+# Copy this file to terraform.tfvars and customize for your deployment.
+# Run terraform/azure/cluster first — this module reads the subscription,
+# resource group, virtual network and zone from that state automatically.
+################################################################################
+
+#-------------------------------------------------------------------------------
+# General
+# cluster_name and the tfstate_* values must match those used in
+# terraform/azure/cluster
+#-------------------------------------------------------------------------------
+
+cluster_name                 = "qualytics"
+tfstate_resource_group_name  = "<tfstate-resource-group>"
+tfstate_storage_account_name = "<tfstate-storage-account>"
+tfstate_container_name       = "tfstate"
+
+default_tags = {
+  Terraform   = "true"
+  Application = "qualytics"
+  Environment = "production"
+}
+
+#-------------------------------------------------------------------------------
+# Naming
+# Server and Key Vault names are unique across all of Azure, so by default both
+# get a random suffix. Set them only if you need predictable names.
+#-------------------------------------------------------------------------------
+
+# server_name    = "acme-qualytics-pg"
+# key_vault_name = "acme-qualytics-pg-kv"
+
+# Other identities (e.g. a CI service principal) that will run this module
+# later need secret access on the Key Vault. The identity running Terraform now
+# is always granted.
+# key_vault_admin_object_ids = ["<entra-object-id>"]
+
+#-------------------------------------------------------------------------------
+# Database
+#-------------------------------------------------------------------------------
+
+database_name       = "surveillance_hub"
+administrator_login = "postgres"
+postgresql_version  = "17"
+
+#-------------------------------------------------------------------------------
+# Compute & Storage
+# GP_Standard_D2ds_v5  —  2 vCPU,  8 GB  (development / small production)
+# GP_Standard_D4ds_v5  —  4 vCPU, 16 GB  (medium production)
+# GP_Standard_D8ds_v5  —  8 vCPU, 32 GB  (large production)
+#
+# ZoneRedundant keeps an HA standby in another zone (roughly doubles compute
+# cost). Use Disabled for non-production environments.
+#-------------------------------------------------------------------------------
+
+sku_name               = "GP_Standard_D2ds_v5"
+storage_mb             = 32768
+auto_grow_enabled      = true
+high_availability_mode = "ZoneRedundant"
+
+#-------------------------------------------------------------------------------
+# Networking
+# Subnet delegated to the server. Must sit inside the cluster VNet and not
+# overlap the AKS subnet (10.0.0.0/20 by default).
+#-------------------------------------------------------------------------------
+
+postgres_subnet_cidr = "10.0.16.0/24"
+
+#-------------------------------------------------------------------------------
+# Backup & Maintenance
+#-------------------------------------------------------------------------------
+
+backup_retention_days        = 7
+geo_redundant_backup_enabled = false
+
+maintenance_window = {
+  day_of_week  = 0 # Sunday
+  start_hour   = 3 # UTC
+  start_minute = 0
+}
+
+#-------------------------------------------------------------------------------
+# Safety Controls
+#
+# deletion_protection = true — `terraform destroy`, and any change that would
+#   replace the server, fails until you first re-apply with
+#   -var="deletion_protection=false" (see ./README.md, Teardown).
+#
+# For throwaway / non-production environments, set deletion_protection = false
+# so that `terraform destroy` completes in a single pass.
+#-------------------------------------------------------------------------------
+
+deletion_protection = true
+
+# Password rotation is OFF. Nothing in this module rotates the database password
+# on a schedule or automatically, and routine `terraform apply` runs leave it
+# unchanged.
+#
+# Rotation is a deliberate, manual act: uncomment the line below and increment
+# it. That regenerates the password, sends it to the server, and updates the Key
+# Vault secret — you must then copy the new value into your Helm values.yaml
+# (secrets.postgres.password) and upgrade the release, or the application can no
+# longer authenticate. Leave it commented out unless you are rotating right now.
+# password_wo_version = 2
