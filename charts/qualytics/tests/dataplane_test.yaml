@@ -672,7 +672,7 @@ tests:
       # With the Secret inserted at index 3, the Deployment shifts to index 6.
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: "spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml"
+          pattern: "spark.jars.ivySettings=/opt/spark/driver-conf/ivysettings.xml"
         documentIndex: 6
       - contains:
           path: spec.template.spec.volumes
@@ -688,7 +688,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: ivy-settings
-            mountPath: /opt/spark/conf/ivysettings.xml
+            mountPath: /opt/spark/driver-conf/ivysettings.xml
             subPath: ivysettings.xml
         documentIndex: 6
       # Credential/URL changes must roll the driver: subPath Secret mounts
@@ -803,7 +803,7 @@ tests:
       # With the Secret inserted at index 3, the Deployment shifts to index 6.
       - matchRegex:
           path: spec.template.spec.containers[0].args[0]
-          pattern: '--properties-file /opt/spark/conf/extra-spark\.properties \\\n\s*--load-spark-defaults \\'
+          pattern: '--properties-file /opt/spark/driver-conf/extra-spark\.properties \\\n\s*--load-spark-defaults \\'
         documentIndex: 6
       # Values stay out of the Deployment spec.
       - notMatchRegex:
@@ -824,7 +824,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: extra-spark-conf
-            mountPath: /opt/spark/conf/extra-spark.properties
+            mountPath: /opt/spark/driver-conf/extra-spark.properties
             subPath: extra-spark.properties
         documentIndex: 6
       # spark-submit reads the file once at start, so a change must roll the driver.
@@ -1303,7 +1303,7 @@ tests:
           path: spec.template.spec.containers[0].volumeMounts
           content:
             name: extra-spark-conf
-            mountPath: /opt/spark/conf/extra-spark.properties
+            mountPath: /opt/spark/driver-conf/extra-spark.properties
             subPath: extra-spark.properties
         documentIndex: 6
       - matchRegex:
@@ -1334,3 +1334,42 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: 'volume name "extra-spark-conf" is reserved by the chart'
+
+  # Secret-backed driver files stay out of /opt/spark/conf: Spark copies that
+  # directory into a plaintext ConfigMap it mounts into every executor.
+  - it: should mount the ivy settings and extra Spark properties outside the Spark conf directory
+    set:
+      dataplane.ivy.enabled: true
+      dataplane.ivy.repositoryUrl: "https://repo.example.com/artifactory/maven-remote/"
+      dataplane.ivy.username: "svc-user"
+      dataplane.ivy.password: "secret"
+      dataplane.extraSparkConf:
+        spark.hadoop.fs.s3a.secret.key: "secret"
+    asserts:
+      - isKind:
+          of: Deployment
+        documentIndex: 7
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /opt/spark/conf/ivysettings.xml
+          any: true
+        documentIndex: 7
+      - notContains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /opt/spark/conf/extra-spark.properties
+          any: true
+        documentIndex: 7
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '/opt/spark/conf/(ivysettings\.xml|extra-spark\.properties)'
+        documentIndex: 7
+      # The executor pod template stays the only chart file under /opt/spark/conf.
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            name: executor-pod-template
+            mountPath: /opt/spark/conf/executor-template.yaml
+            subPath: executor-template.yaml
+        documentIndex: 7

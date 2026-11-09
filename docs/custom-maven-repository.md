@@ -91,7 +91,7 @@ kubectl -n qualytics logs deployment/qualytics-dataplane | grep -E "loading sett
 Expected output:
 
 ```text
-:: loading settings :: url = file:/opt/spark/conf/ivysettings.xml
+:: loading settings :: file = /opt/spark/driver-conf/ivysettings.xml
 found com.teradata.jdbc#terajdbc;20.00.00.56 in internal
 found com.ibm.db2#jcc;12.1.4.0 in internal
 ```
