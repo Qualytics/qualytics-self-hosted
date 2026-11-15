@@ -311,6 +311,14 @@ controlplane:
   # frontend bounds these routes at 615 s. Raise your load balancer's idle timeout above this value for clients
   # without keepalives (curl, the CLI); AWS NLB listeners default to 350 s.
   synchronousRequestTimeoutSeconds: 600
+  # Authenticated reference-data discovery/install/refresh. Both API and CMD use the
+  # existing qualytics-creds/deployment_identifier secret; never put the token in values.
+  # Downloads require a current central MDM entitlement, in addition to the deployment license.
+  # Selected releases install into a customer enrichment store; operational reads stay local.
+  referenceData:
+    enabled: false
+    gatewayUrl: "https://reference-data.qualytics.io" # HTTPS base URL without credentials, query or fragment.
+    timeoutSeconds: 30 # Positive integer; gateway requests only, not the whole DP materialization.
   # Optional workload identity for the hub api and cmd pods. Both resolve LLM providers.
   #
   # create: true is enough for EKS Pod Identity — the association is made on the AWS side against

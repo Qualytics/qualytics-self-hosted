@@ -267,3 +267,39 @@ The derived name must match any cloud-side workload-identity binding.
 {{- printf "%s-controlplane" .Release.Name -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+AIDEV-NOTE: Only API/CMD call the reference gateway. Reuse their existing signed deployment
+identifier Secret; DP receives operation-scoped download grants; normal reads use customer storage.
+Absent referenceData values (older --reuse-values releases) remain disabled. Do not use
+`default` on enabled/timeout: it would swallow explicit false/zero instead of validating it.
+*/}}
+{{- define "qualytics.controlplane.referenceDataEnv" -}}
+{{- $config := .Values.controlplane.referenceData | default dict -}}
+{{- $enabled := false -}}
+{{- if hasKey $config "enabled" -}}
+{{- if not (kindIs "bool" $config.enabled) -}}
+{{- fail "controlplane.referenceData.enabled must be a boolean" -}}
+{{- end -}}
+{{- $enabled = $config.enabled -}}
+{{- end -}}
+{{- $timeout := 30 -}}
+{{- if hasKey $config "timeoutSeconds" -}}
+{{- if not (regexMatch "^[1-9][0-9]*$" (toString $config.timeoutSeconds)) -}}
+{{- fail "controlplane.referenceData.timeoutSeconds must be a positive integer" -}}
+{{- end -}}
+{{- $timeout = $config.timeoutSeconds -}}
+{{- end }}
+- name: REFERENCE_DATA_ENABLED
+  value: {{ $enabled | quote }}
+{{- if $enabled -}}
+{{- $url := $config.gatewayUrl | default "" -}}
+{{- if not (regexMatch `^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:0*([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(/[^?#[:space:]]*)?$` $url) -}}
+{{- fail "controlplane.referenceData.gatewayUrl must be an HTTPS base URL without credentials, query or fragment when enabled" -}}
+{{- end }}
+- name: REFERENCE_DATA_GATEWAY_URL
+  value: {{ $url | quote }}
+- name: REFERENCE_DATA_TIMEOUT_SECONDS
+  value: {{ $timeout | quote }}
+{{- end -}}
+{{- end -}}

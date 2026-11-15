@@ -1,0 +1,163 @@
+suite: reference distribution configuration on API and CMD
+templates:
+  - controlplane-api.yaml
+  - controlplane-cmd.yaml
+tests:
+  - it: keeps distribution disabled by default without gateway configuration
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_ENABLED
+            value: "false"
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_GATEWAY_URL
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_TIMEOUT_SECONDS
+          any: true
+
+  - it: uses the public gateway by default when distribution is enabled
+    set:
+      controlplane.referenceData.enabled: true
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_GATEWAY_URL
+            value: https://reference-data.qualytics.io
+
+  - it: configures both CP processes and reuses their existing identifier secret
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com/distribution
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_ENABLED
+            value: "true"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_GATEWAY_URL
+            value: https://reference.example.com/distribution
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_TIMEOUT_SECONDS
+            value: "30"
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUALYTICS_DEPLOYMENT_IDENTIFIER
+            valueFrom:
+              secretKeyRef:
+                name: qualytics-creds
+                key: deployment_identifier
+
+  - it: uses the configured timeout and existing CP resource controls
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com:8443
+      controlplane.referenceData.timeoutSeconds: 45
+      controlplane.resources.requests.memory: 2Gi
+      controlplaneCmd.resources.requests.memory: 2Gi
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_TIMEOUT_SECONDS
+            value: "45"
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: 2Gi
+
+  - it: supports older reuse-values releases without the new configuration object
+    set:
+      controlplane.referenceData: null
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_ENABLED
+            value: "false"
+
+  - it: rejects enabled distribution without an endpoint
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: ""
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects gateway ports above the TCP range
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com:99999
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects HTTP endpoints
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: http://reference.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects credentials embedded in the endpoint
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://user:secret@reference.example.com
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects query parameters containing credentials
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com?token=secret
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects URL fragments
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com/#fragment
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.gatewayUrl
+
+  - it: rejects zero rather than silently replacing it with the default
+    set:
+      controlplane.referenceData.timeoutSeconds: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: controlplane.referenceData.timeoutSeconds

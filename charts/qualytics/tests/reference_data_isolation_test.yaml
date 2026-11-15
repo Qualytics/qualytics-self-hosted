@@ -1,0 +1,42 @@
+suite: reference distribution credentials stay out of frontend and Spark
+templates:
+  - frontend.yaml
+  - dataplane.yaml
+tests:
+  - it: does not give operational workloads gateway configuration or deployment identity
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_ENABLED
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_GATEWAY_URL
+          any: true
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: QUALYTICS_DEPLOYMENT_IDENTIFIER
+          any: true
+
+  - it: gives replacement and dynamic executors no distribution credentials
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: https://reference.example.com
+    documentSelector:
+      path: kind
+      value: ConfigMap
+    asserts:
+      - notMatchRegex:
+          path: data["executor-template.yaml"]
+          pattern: REFERENCE_DATA|QUALYTICS_DEPLOYMENT_IDENTIFIER|deployment_identifier
+        template: dataplane.yaml
