@@ -272,7 +272,7 @@ The derived name must match any cloud-side workload-identity binding.
 AIDEV-NOTE: Only API/CMD call the reference gateway. Reuse their existing signed deployment
 identifier Secret; DP receives operation-scoped download grants; normal reads use customer storage.
 Absent referenceData values (older --reuse-values releases) remain disabled. Do not use
-`default` on enabled/timeout: it would swallow explicit false/zero instead of validating it.
+`default` on enabled/timeout/gatewayUrl: it would swallow explicit false/zero/empty URLs instead of validating it.
 */}}
 {{- define "qualytics.controlplane.referenceDataEnv" -}}
 {{- $config := .Values.controlplane.referenceData | default dict -}}
@@ -293,7 +293,10 @@ Absent referenceData values (older --reuse-values releases) remain disabled. Do 
 - name: REFERENCE_DATA_ENABLED
   value: {{ $enabled | quote }}
 {{- if $enabled -}}
-{{- $url := $config.gatewayUrl | default "" -}}
+{{- $url := "https://reference-data.qualytics.io" -}}
+{{- if hasKey $config "gatewayUrl" -}}
+{{- $url = $config.gatewayUrl -}}
+{{- end -}}
 {{- if not (regexMatch `^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:0*([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(/[^?#[:space:]]*)?$` $url) -}}
 {{- fail "controlplane.referenceData.gatewayUrl must be an HTTPS base URL without credentials, query or fragment when enabled" -}}
 {{- end }}

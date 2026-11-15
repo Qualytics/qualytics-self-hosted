@@ -39,6 +39,21 @@ tests:
             name: REFERENCE_DATA_GATEWAY_URL
             value: https://reference-data.qualytics.io
 
+  - it: uses the public gateway when reused values omit the URL
+    set:
+      controlplane.referenceData.enabled: true
+      controlplane.referenceData.gatewayUrl: null
+    documentSelector:
+      path: kind
+      value: Deployment
+      matchMany: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: REFERENCE_DATA_GATEWAY_URL
+            value: https://reference-data.qualytics.io
+
   - it: configures both CP processes and reuses their existing identifier secret
     set:
       controlplane.referenceData.enabled: true

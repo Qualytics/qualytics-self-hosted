@@ -22,7 +22,9 @@ An override must be an HTTPS base URL, optionally including a path prefix or TCP
 from 1 through 65535, without credentials, query parameters or fragments.
 `timeoutSeconds` must be a positive integer and limits each gateway request, rather
 than the complete installation. Existing releases whose reused values omit
-`referenceData` remain disabled.
+`referenceData` remain disabled. If you enable the feature while reusing older values
+that omit `gatewayUrl`, the public gateway default still applies. An explicitly empty
+URL is rejected.
 
 API and CMD receive `REFERENCE_DATA_ENABLED` and, when enabled,
 `REFERENCE_DATA_GATEWAY_URL` and `REFERENCE_DATA_TIMEOUT_SECONDS`. They reuse
