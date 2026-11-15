@@ -45,6 +45,9 @@ jobs:
       - name: Run unit tests
         run: helm unittest charts/qualytics
 
+      - name: Verify reference gateway URL validation
+        run: python3 -m unittest discover -s charts/qualytics/tests -p test_reference_url_schema.py -v
+
       - name: Verify CMD probe execution
         run: python3 -m unittest discover -s charts/qualytics/tests -p test_cmd_probes.py -v
 

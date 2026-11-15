@@ -800,3 +800,11 @@ Keep these in sync when chart behavior changes — image tags and version string
 - [docs/ingress-tls.md](docs/ingress-tls.md) — BYO TLS Secret precedence
 - [docs/license-management.md](docs/license-management.md) — license activation and the 31-day grace period
 - [docs/observability.md](docs/observability.md) — `controlplane.observability.*` telemetry export to Pydantic Logfire and/or any OTLP/HTTP backend (Splunk via OTel Collector), values → env mapping
+
+### Reference data
+
+`controlplane.referenceData` configures authenticated catalog/install/refresh access on API and CMD only.
+Keep it disabled by default and reuse the existing deployment-identifier secret. Self-hosted MDM
+entitlements come from the signed license; never add managed-chart module toggles. See
+[docs/reference-data.md](docs/reference-data.md) for gateway and distribution-S3 egress requirements.
+Run URL validation with `python3 -m unittest discover -s charts/qualytics/tests -p test_reference_url_schema.py -v`.
