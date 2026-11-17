@@ -1003,6 +1003,45 @@ tests:
           pattern: '--conf spark\.executor\.cores=7 \\\n\s+--conf spark\.executor\.memory=55000m \\\n\s+--conf spark\.executor\.memoryOverhead=5500m \\'
         documentIndex: 5
 
+  # extraSparkConf could set the executor overhead before the chart passed one. On legacy
+  # sizing that entry still decides it; doc 6 is the Deployment once the extra-conf Secret renders.
+  - it: should leave an executor overhead from extraSparkConf in charge on legacy sizing
+    set:
+      dataplane.extraSparkConf:
+        spark.executor.memoryOverhead: "12000m"
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark\.executor\.memoryOverhead='
+        documentIndex: 6
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.memory=55000m \\'
+        documentIndex: 6
+
+  - it: should leave an executor overhead factor from extraSparkConf in charge on legacy sizing
+    set:
+      dataplane.extraSparkConf:
+        spark.executor.memoryOverheadFactor: "0.25"
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark\.executor\.memoryOverhead='
+        documentIndex: 6
+
+  - it: should let executor resources decide the overhead over extraSparkConf
+    set:
+      dataplane.executor.resources:
+        cpu: 7
+        memory: "60500Mi"
+      dataplane.extraSparkConf:
+        spark.executor.memoryOverhead: "12000m"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.memory=55000m \\\n\s+--conf spark\.executor\.memoryOverhead=5500m \\'
+        documentIndex: 6
+
   - it: should keep a memoryOverheadFactor finer than a whole percent
     set:
       dataplane.memoryOverheadFactor: 0.125

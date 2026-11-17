@@ -1,6 +1,9 @@
 {{- if and ( eq .Values.dataplane.enabled true ) ( eq .Values.global.deploymentMode "kubernetes" ) }}
 {{- $driver := include "qualytics.spark.sizing" (dict "root" . "role" "driver") | fromJson -}}
 {{- $executor := include "qualytics.spark.sizing" (dict "root" . "role" "executor") | fromJson -}}
+{{- /* An executor overhead set through extraSparkConf predates the chart passing one, so on legacy sizing it stays in charge. */ -}}
+{{- $extraConf := .Values.dataplane.extraSparkConf | default dict -}}
+{{- $customExecutorOverhead := and (not .Values.dataplane.executor.resources) (or (hasKey $extraConf "spark.executor.memoryOverhead") (hasKey $extraConf "spark.executor.memoryOverheadFactor")) -}}
 {{- if .Values.dataplane.rbac.create }}
 # Driver ServiceAccount + Role + RoleBinding. Replaces the bundle the
 # spark-operator chart used to install (templates/spark/serviceaccount.yaml,
@@ -283,7 +286,9 @@ spec:
                 --conf spark.executor.instances={{ .Values.dataplane.executor.instances }} \
                 --conf spark.executor.cores={{ $executor.cores | int }} \
                 --conf spark.executor.memory={{ $executor.heapMb | int }}m \
+                {{- if not $customExecutorOverhead }}
                 --conf spark.executor.memoryOverhead={{ $executor.overheadMb | int }}m \
+                {{- end }}
                 --conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml \
                 --conf spark.kubernetes.executor.podTemplateContainerName=spark-kubernetes-executor \
                 --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-dataplane-$(date +%s) \

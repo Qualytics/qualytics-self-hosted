@@ -246,6 +246,9 @@ dataplane:
   # passed to spark-submit as a properties file, so values stay out of the
   # Deployment spec. They can only add settings: anything the chart or the dataplane
   # entrypoint passes itself keeps its value (use the dedicated values for those).
+  # The one exception is the executor memory overhead while executor.resources is not
+  # set: a spark.executor.memoryOverhead or spark.executor.memoryOverheadFactor entry
+  # here still decides it. With executor.resources set, the pod size does.
   # Use spark.hadoop.<key> for Hadoop client settings, e.g. for an HA HDFS
   # nameservice or a cluster that requires RPC privacy:
   #   extraSparkConf:
