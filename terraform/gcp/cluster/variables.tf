@@ -174,7 +174,7 @@ variable "executor_use_spot" {
 }
 
 variable "executor_local_ssd_count" {
-  description = "Number of local SSDs to attach to executor nodes (375GB each). Set to 0 to disable."
+  description = "Number of local SSDs (375GB each) backing each executor node's ephemeral storage, where Spark scratch lands. Set to 0 to use the boot disk."
   type        = number
   default     = 2
 }

@@ -815,3 +815,19 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: must be a positive number of seconds
+
+  - it: should label the deployment size from driver cores
+    set:
+      dataplane.driver.resources:
+        cpu: 31
+        memory: "242000Mi"
+      dataplane.executor.resources:
+        cpu: 15
+        memory: "121000Mi"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: APP_DEPLOYMENT_SIZE
+            value: "xlarge"
+        documentIndex: 0

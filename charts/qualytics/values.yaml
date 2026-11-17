@@ -206,7 +206,6 @@ dataplane:
   enabled: true
   sparkVersion: "4.1.1"
   eventLog: false
-  numVolumes: -1
   parallelismScaleFactor: -1
   # Ceiling on concurrent synchronous operations (catalog, metadata, preview, connection tests).
   # These are overwhelmingly datastore-I/O-bound, so the ceiling sits well above driver core count;
@@ -221,6 +220,7 @@ dataplane:
     floor: 3
     cpuHighWatermark: 0.80
     cpuLowWatermark: 0.50
+  # Share of a Spark pod kept for non-heap memory: heap = pod memory / (1 + factor).
   memoryOverheadFactor: 0.1
   libpostalDataPath: "/opt/libpostal"
   extraPackages:
@@ -270,6 +270,11 @@ dataplane:
     #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<role-name>"
     serviceAccountAnnotations: {}
   driver:
+    # The pod in Kubernetes units: whole cpu cores, memory in Mi or Gi (request and limit).
+    # The chart derives the JVM heap and Spark overhead from it, e.g.
+    # {cpu: 7, memory: "60500Mi"}. docs/cluster-sizing.md lists the size for each tier.
+    resources: {}
+    # Legacy sizing, used only while resources is empty: Spark cores and heap in MiB.
     cores: 7
     memory: "55000m"
     # Extra volumes and mounts for the driver pod, e.g. a customer CA truststore that
@@ -297,6 +302,8 @@ dataplane:
     ## Note that if dynamic allocation is enabled, the number of executors to request initially is set to the biggest
     # of .spec.dynamicAllocation.initialExecutors and .spec.executor.instances if both are set.
     instances: 1
+    # Same contract as driver.resources.
+    resources: {}
     cores: 7
     memory: "55000m"
 

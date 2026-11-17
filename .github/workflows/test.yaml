@@ -61,15 +61,13 @@ jobs:
           helm template test-release charts/qualytics \
             "${values_args[@]}" \
             --set global.platform=aws \
-            --set global.dnsRecord=test-aws.qualytics.io \
-            --set dataplane.numVolumes=2 > /dev/null
+            --set global.dnsRecord=test-aws.qualytics.io > /dev/null
 
           echo "  Testing GCP platform configuration..."
           helm template test-release charts/qualytics \
             "${values_args[@]}" \
             --set global.platform=gcp \
-            --set global.dnsRecord=test-gcp.qualytics.io \
-            --set dataplane.numVolumes=1 > /dev/null
+            --set global.dnsRecord=test-gcp.qualytics.io > /dev/null
 
           echo "  Testing Azure platform configuration..."
           helm template test-release charts/qualytics \
@@ -95,18 +93,22 @@ jobs:
           echo "  Testing dataplane resource configurations..."
           helm template test-release charts/qualytics \
             "${values_args[@]}" \
+            --set dataplane.driver.resources.cpu=4 \
+            --set dataplane.driver.resources.memory=35200Mi \
+            --set dataplane.executor.resources.cpu=8 \
+            --set dataplane.executor.resources.memory=70400Mi \
+            --set dataplane.dynamicAllocation.maxExecutors=20 > /dev/null
+
+          # Existing values files still size Spark with cores and heap memory and must keep rendering
+          echo "  Testing legacy dataplane cores and memory..."
+          helm template test-release charts/qualytics \
+            "${values_args[@]}" \
+            --set dataplane.driver.resources=null \
+            --set dataplane.executor.resources=null \
             --set dataplane.driver.cores=4 \
             --set dataplane.driver.memory=32000m \
             --set dataplane.executor.cores=8 \
-            --set dataplane.executor.memory=64000m \
-            --set dataplane.dynamicAllocation.maxExecutors=20 > /dev/null
-
-          # Test volume configurations
-          echo "  Testing volume configurations..."
-          helm template test-release charts/qualytics \
-            "${values_args[@]}" \
-            --set dataplane.numVolumes=3 \
-            --set global.platform=aws > /dev/null
+            --set dataplane.executor.memory=64000m > /dev/null
 
           # Test storage configurations
           echo "  Testing storage configurations..."
@@ -134,7 +136,8 @@ jobs:
             --set ingress.cors=true \
             --set global.dnsRecord=test.qualytics.io > /dev/null
 
-          # Test minimal configuration (customer might disable components)
+          # Test minimal configuration (customer might disable components). Existing values
+          # files still carry the deprecated numVolumes key, which is ignored.
           echo "  Testing minimal configuration..."
           helm template test-release charts/qualytics \
             "${values_args[@]}" \

@@ -177,70 +177,26 @@ tests:
           pattern: "name: spark-kubernetes-executor"
         documentIndex: 3
 
-  - it: should mount AWS NVMe spark-local-dir volumes in executor template
-    set:
-      dataplane.numVolumes: 2
-      global.platform: aws
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/nvme1n1/spark-local-dir-1"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/nvme2n1/spark-local-dir-2"
-        documentIndex: 3
-
-  - it: should mount GCP SSD spark-local-dir volumes in executor template
-    set:
-      dataplane.numVolumes: 2
-      global.platform: gcp
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/ssd0/spark-local-dir-1"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/ssd1/spark-local-dir-2"
-        documentIndex: 3
-
-  - it: should fall back to emptyDir for non-aws/gcp platforms
-    set:
-      dataplane.numVolumes: 2
-      global.platform: azure
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "emptyDir: \\{\\}"
-        documentIndex: 3
-
-  - it: should include the init-spark-local-dir initContainer when numVolumes > 0
-    set:
-      dataplane.numVolumes: 2
-      global.platform: aws
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "name: init-spark-local-dir"
-        documentIndex: 3
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "chmod 777 /tmp/spark-local-dir-\\*"
-        documentIndex: 3
-
-  - it: should not emit initContainer or volumes when numVolumes is unset
-    set:
-      dataplane.numVolumes: -1
+  - it: should leave executor scratch to Spark's default emptyDir
     asserts:
       - notMatchRegex:
           path: data["executor-template.yaml"]
-          pattern: "init-spark-local-dir"
+          pattern: "volumes:|volumeMounts:|initContainers:|hostPath"
         documentIndex: 3
+
+  # Existing values files may still carry numVolumes; it is deprecated and has no effect.
+  - it: should ignore a leftover numVolumes
+    set:
+      dataplane.numVolumes: 2
+    asserts:
       - notMatchRegex:
           path: data["executor-template.yaml"]
-          pattern: "spark-local-dir-1"
+          pattern: "volumes:|volumeMounts:|initContainers:|hostPath|spark-local-dir"
         documentIndex: 3
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "spark.local.dir="
+        documentIndex: 5
 
   - it: should propagate executor node selector into the executor pod template
     set:
@@ -739,19 +695,7 @@ tests:
       - failedTemplate:
           errorPattern: "must both be set"
 
-  - it: should set spark.local.dir conf when numVolumes > 0
-    set:
-      dataplane.numVolumes: 2
-      global.platform: aws
-    asserts:
-      - matchRegex:
-          path: spec.template.spec.containers[0].args[0]
-          pattern: "spark.local.dir=/tmp/spark-local-dir-1,/tmp/spark-local-dir-2"
-        documentIndex: 5
-
-  - it: should not set spark.local.dir when numVolumes is unset
-    set:
-      dataplane.numVolumes: -1
+  - it: should leave spark.local.dir to Spark's default
     asserts:
       - notMatchRegex:
           path: spec.template.spec.containers[0].args[0]
@@ -988,6 +932,131 @@ tests:
           path: spec.template.spec.containers[0].resources.requests.memory
           value: "1408Mi"
         documentIndex: 5
+
+  - it: should pass the legacy executor overhead explicitly
+    asserts:
+      # max(55000 * 0.1, 384) = 5500, the pod Spark built from the factor before
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.memory=55000m \\\n\s+--conf spark\.executor\.memoryOverhead=5500m \\'
+        documentIndex: 5
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: "memoryOverheadFactor"
+        documentIndex: 5
+
+  # dataplane.<role>.resources is the pod; heap = pod / (1 + memoryOverheadFactor)
+  - it: should derive heap and overhead from pod-level resources
+    set:
+      dataplane.driver.resources:
+        cpu: 7
+        memory: "59Gi"
+      dataplane.executor.resources:
+        cpu: 15
+        memory: "121000Mi"
+    asserts:
+      # driver: 59Gi = 60416Mi, heap = 60416 / 1.1 = 54923
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: "7"
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.memory
+          value: "60416Mi"
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "60416Mi"
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.driver\.memory=54923m \\'
+        documentIndex: 5
+      # executor: heap = 121000 / 1.1 = 110000, overhead = 121000 - 110000
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.cores=15 \\\n\s+--conf spark\.executor\.memory=110000m \\\n\s+--conf spark\.executor\.memoryOverhead=11000m \\'
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
+            value: "15"
+        documentIndex: 5
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
+            value: "110000"
+        documentIndex: 5
+
+  - it: should prefer resources over the legacy cores and memory
+    set:
+      dataplane.executor.cores: 3
+      dataplane.executor.memory: "24000m"
+      dataplane.executor.resources:
+        cpu: 7
+        memory: "60500Mi"
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.cores=7 \\\n\s+--conf spark\.executor\.memory=55000m \\\n\s+--conf spark\.executor\.memoryOverhead=5500m \\'
+        documentIndex: 5
+
+  - it: should keep a memoryOverheadFactor finer than a whole percent
+    set:
+      dataplane.memoryOverheadFactor: 0.125
+      dataplane.executor.resources:
+        cpu: 7
+        memory: "57600Mi"
+    asserts:
+      # heap = 57600 / 1.125 = 51200
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.executor\.memory=51200m \\\n\s+--conf spark\.executor\.memoryOverhead=6400m \\'
+        documentIndex: 5
+
+  - it: should keep Spark's 384 MiB overhead floor for small pods
+    set:
+      dataplane.driver.resources:
+        cpu: 1
+        memory: "2Gi"
+    asserts:
+      # 2048 - 384 = 1664 heap; the factor alone would leave only 187 MiB of overhead
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: '--conf spark\.driver\.memory=1664m \\'
+        documentIndex: 5
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.memory
+          value: "2048Mi"
+        documentIndex: 5
+
+  - it: should reject resources memory outside Mi or Gi
+    set:
+      dataplane.executor.resources:
+        cpu: 7
+        memory: "59G"
+    asserts:
+      - failedTemplate:
+          errorPattern: dataplane.executor.resources.memory must be a Kubernetes quantity in Mi or Gi
+
+  - it: should reject fractional resources cpu
+    set:
+      dataplane.driver.resources:
+        cpu: 7.5
+        memory: "59Gi"
+    asserts:
+      - failedTemplate:
+          errorPattern: dataplane.driver.resources.cpu must be a whole number of cores
+
+  # "55g" used to render a 384Mi driver pod and MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR=0
+  - it: should reject legacy memory that is not Spark mebibytes
+    set:
+      dataplane.driver.memory: "55g"
+    asserts:
+      - failedTemplate:
+          errorPattern: dataplane.driver.memory must be Spark mebibytes such as 55000m
 
   # MOTHERSHIP_* env wiring
   - it: should set MOTHERSHIP_RABBIT_HOST + RABBIT_PASS on the driver

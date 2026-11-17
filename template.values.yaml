@@ -157,7 +157,6 @@ controlplane:
 #--------------------------------------------------------------------------------
 dataplane:
   enabled: true
-  numVolumes: -1
   parallelismScaleFactor: -1
   # Air-gapped clusters: resolve the Teradata/DB2 JDBC drivers from an internal
   # Maven repository instead of Maven Central — see docs/custom-maven-repository.md.
@@ -177,9 +176,12 @@ dataplane:
     serviceAccountName: "qualytics-spark"
     # serviceAccountAnnotations:
     #   eks.amazonaws.com/role-arn: "arn:aws:iam::<account-id>:role/<tenant>-dataplane-connector-role"
+  # Size of each Spark pod in Kubernetes units; the chart derives the JVM heap and Spark
+  # overhead from it. Use the size for your tier from docs/cluster-sizing.md.
   driver:
-    cores: 7
-    memory: "55000m"
+    resources:
+      cpu: 7
+      memory: "60500Mi"
   dynamicAllocation:
     enabled: true
     initialExecutors: 1
@@ -187,8 +189,9 @@ dataplane:
     maxExecutors: 12
   executor:
     instances: 1
-    cores: 7
-    memory: "55000m"
+    resources:
+      cpu: 7
+      memory: "60500Mi"
 
 #--------------------------------------------------------------------------------
 # Storage Configuration

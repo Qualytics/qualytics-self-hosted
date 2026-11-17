@@ -98,7 +98,8 @@ executor_node_max_size = 12
 # Use spot instances for cost savings
 executor_use_spot = true
 
-# Number of local SSDs (375GB each) - 2 recommended for Spark performance
+# Number of local SSDs (375GB each) backing node ephemeral storage, where Spark scratch
+# lands - 2 recommended for Spark performance
 executor_local_ssd_count = 2
 
 #-------------------------------------------------------------------------------

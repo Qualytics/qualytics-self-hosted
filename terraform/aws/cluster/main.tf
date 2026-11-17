@@ -237,9 +237,7 @@ resource "kubectl_manifest" "ec2nodeclass_exec" {
   # (RAID 0 across multiple drives) and uses it as node ephemeral storage — which is
   # where Spark's emptyDir scratch lands. Setting a size at or above the NVMe capacity
   # has the inverse effect: the NVMe is exposed as a raw device and ephemeral storage
-  # moves to a large EBS volume. Keep the chart's dataplane.numVolumes at -1 to match;
-  # a value > 0 makes the chart mount hostPath /mnt/disks/nvme<n>n1, which nothing
-  # here creates.
+  # moves to a large EBS volume.
   yaml_body = yamlencode({
     apiVersion = "eks.amazonaws.com/v1"
     kind       = "NodeClass"
