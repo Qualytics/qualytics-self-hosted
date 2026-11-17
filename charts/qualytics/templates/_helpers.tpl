@@ -137,10 +137,10 @@ template that passes the bound on.
 {{- end -}}
 
 {{/*
-Determine deployment size based on dataplane.driver.cores
+Deployment size label, from the driver's cores.
 */}}
 {{- define "qualytics.global.size" -}}
-  {{- $cores := .Values.dataplane.driver.cores | int -}}
+  {{- $cores := (include "qualytics.spark.sizing" (dict "root" . "role" "driver") | fromJson).cores | int -}}
   {{- if and (ge $cores 1) (le $cores 4) -}}
     small
   {{- else if and (gt $cores 4) (le $cores 8) -}}
@@ -155,38 +155,54 @@ Determine deployment size based on dataplane.driver.cores
 {{- end }}
 
 {{/*
-Driver pod memory in MiB. Mirrors Spark's KubernetesUtils overhead computation:
-  overhead = max(memoryOverheadFactor * heap, 384)
-The 384 MiB floor matters for small drivers; for production-sized 55 GiB drivers
-the factor (e.g. 5500 MiB at 0.1) dominates. Without the floor, small driver
-pods would have less non-heap headroom than spark-operator-managed ones and
-risk OOMKill — the side-by-side smoke against the SparkApplication shape
-showed exactly this: operator pod = 1408Mi (1024 + 384), this without floor
-= 1126 (1024 + 102).
-Input shape: dataplane.driver.memory expressed in Spark units like "55000m" (= MiB).
-*/}}
-{{- define "qualytics.spark.driver.podMemoryMb" -}}
-{{- $heapMb := .Values.dataplane.driver.memory | trimSuffix "m" | int -}}
-{{- $factorPct := mulf .Values.dataplane.memoryOverheadFactor 100 | int -}}
-{{- /* Sprig pipes pass the value as the trailing arg, so `mul A B | div 100`
-       means div(100, A*B). Use explicit parens to compute (A*B)/100. */ -}}
-{{- $factorOverhead := div (mul $heapMb $factorPct) 100 -}}
-{{- $overhead := max $factorOverhead 384 -}}
-{{- add $heapMb $overhead -}}
-{{- end -}}
+Spark sizing for one role ("driver" or "executor") as JSON: cores, heapMb, overheadMb, podMb.
 
-{{/*
-Comma-separated spark.local.dir paths, one per dataplane.numVolumes.
-Renders empty when numVolumes <= 0.
+dataplane.<role>.resources is the pod itself in Kubernetes units: whole cpu cores and
+memory in Mi or Gi. Heap is pod / (1 + memoryOverheadFactor); the rest is Spark overhead,
+never below Spark's 384 MiB floor.
+
+Without resources the legacy cores and Spark-unit heap ("55000m" = 55000 MiB) apply, and
+the pod is heap + max(memoryOverheadFactor * heap, 384), as Spark computes it.
+
+Usage: include "qualytics.spark.sizing" (dict "root" . "role" "executor") | fromJson
 */}}
-{{- define "qualytics.spark.localDirs" -}}
-{{- $dirs := list -}}
-{{- if gt (.Values.dataplane.numVolumes | int) 0 -}}
-{{- range $i := until (int .Values.dataplane.numVolumes) -}}
-{{- $dirs = append $dirs (printf "/tmp/spark-local-dir-%d" (add1 $i)) -}}
+{{- define "qualytics.spark.sizing" -}}
+{{- $cfg := index .root.Values.dataplane .role -}}
+{{- /* Integer parts per million keep factors such as 0.125 exact; float division drifts by 1 MiB. */ -}}
+{{- $factorPpm := round (mulf .root.Values.dataplane.memoryOverheadFactor 1000000) 0 | int -}}
+{{- $cores := 0 -}}
+{{- $heapMb := 0 -}}
+{{- $overheadMb := 0 -}}
+{{- with $cfg.resources -}}
+  {{- $cpu := toString (.cpu | default "") -}}
+  {{- if not (regexMatch "^[1-9][0-9]*$" $cpu) -}}
+    {{- fail (printf "dataplane.%s.resources.cpu must be a whole number of cores, got %q" $.role $cpu) -}}
+  {{- end -}}
+  {{- $memory := toString (.memory | default "") -}}
+  {{- if not (regexMatch "^[1-9][0-9]*(Mi|Gi)$" $memory) -}}
+    {{- fail (printf "dataplane.%s.resources.memory must be a Kubernetes quantity in Mi or Gi, got %q" $.role $memory) -}}
+  {{- end -}}
+  {{- $podMb := trimSuffix "Mi" $memory | int -}}
+  {{- if hasSuffix "Gi" $memory -}}
+    {{- $podMb = mul (trimSuffix "Gi" $memory | int) 1024 -}}
+  {{- end -}}
+  {{- $cores = int $cpu -}}
+  {{- $heapMb = div (mul $podMb 1000000) (add 1000000 $factorPpm) -}}
+  {{- $overheadMb = max (sub $podMb $heapMb) 384 -}}
+  {{- $heapMb = sub $podMb $overheadMb -}}
+  {{- if lt $heapMb 1 -}}
+    {{- fail (printf "dataplane.%s.resources.memory %q leaves no heap after the 384Mi Spark overhead" $.role $memory) -}}
+  {{- end -}}
+{{- else -}}
+  {{- $memory := toString $cfg.memory -}}
+  {{- if not (regexMatch "^[1-9][0-9]*m$" $memory) -}}
+    {{- fail (printf "dataplane.%s.memory must be Spark mebibytes such as 55000m, got %q; use dataplane.%s.resources.memory for Mi or Gi" .role $memory .role) -}}
+  {{- end -}}
+  {{- $cores = int $cfg.cores -}}
+  {{- $heapMb = trimSuffix "m" $memory | int -}}
+  {{- $overheadMb = max (div (mul $heapMb $factorPpm) 1000000) 384 -}}
 {{- end -}}
-{{- end -}}
-{{- join "," $dirs -}}
+{{- dict "cores" $cores "heapMb" $heapMb "overheadMb" $overheadMb "podMb" (add $heapMb $overheadMb) | toJson -}}
 {{- end -}}
 
 {{/*
@@ -265,5 +281,44 @@ The derived name must match any cloud-side workload-identity binding.
 {{- $sa.name -}}
 {{- else if $sa.create -}}
 {{- printf "%s-controlplane" .Release.Name -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+AIDEV-NOTE: Only API/CMD call the reference gateway. Reuse their existing signed deployment
+identifier Secret; DP receives operation-scoped download grants; normal reads use customer storage.
+Absent referenceData values (older --reuse-values releases) remain disabled. Do not use
+`default` on enabled/timeout/gatewayUrl: it would swallow explicit false/zero/empty URLs instead of validating it.
+*/}}
+{{- define "qualytics.controlplane.referenceDataEnv" -}}
+{{- $config := .Values.controlplane.referenceData | default dict -}}
+{{- $enabled := false -}}
+{{- if hasKey $config "enabled" -}}
+{{- if not (kindIs "bool" $config.enabled) -}}
+{{- fail "controlplane.referenceData.enabled must be a boolean" -}}
+{{- end -}}
+{{- $enabled = $config.enabled -}}
+{{- end -}}
+{{- $timeout := 30 -}}
+{{- if hasKey $config "timeoutSeconds" -}}
+{{- if not (regexMatch "^[1-9][0-9]*$" (toString $config.timeoutSeconds)) -}}
+{{- fail "controlplane.referenceData.timeoutSeconds must be a positive integer" -}}
+{{- end -}}
+{{- $timeout = $config.timeoutSeconds -}}
+{{- end }}
+- name: REFERENCE_DATA_ENABLED
+  value: {{ $enabled | quote }}
+{{- if $enabled -}}
+{{- $url := "https://reference-data.qualytics.io" -}}
+{{- if hasKey $config "gatewayUrl" -}}
+{{- $url = $config.gatewayUrl -}}
+{{- end -}}
+{{- if not (regexMatch `^https://[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?(:0*([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?(/[^?#[:space:]]*)?$` $url) -}}
+{{- fail "controlplane.referenceData.gatewayUrl must be an HTTPS base URL without credentials, query or fragment when enabled" -}}
+{{- end }}
+- name: REFERENCE_DATA_GATEWAY_URL
+  value: {{ $url | quote }}
+- name: REFERENCE_DATA_TIMEOUT_SECONDS
+  value: {{ $timeout | quote }}
 {{- end -}}
 {{- end -}}

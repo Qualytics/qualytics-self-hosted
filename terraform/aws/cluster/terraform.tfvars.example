@@ -63,7 +63,7 @@ driver_node_instance_types = ["r8g.2xlarge"]
 # Spark Executor Nodes
 # Use instances with local NVMe SSDs ('d' suffix). EKS Auto Mode manages the
 # instance store as the node's ephemeral storage, which is where Spark's scratch
-# space lands — keep the chart's dataplane.numVolumes at its -1 default to match.
+# space lands.
 # EKS Auto Mode provisions and scales these automatically.
 #-------------------------------------------------------------------------------
 

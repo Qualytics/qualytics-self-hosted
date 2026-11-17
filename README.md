@@ -283,3 +283,9 @@ kubectl logs -l spark-role=driver -n qualytics --tail=200 -f
 - [Cluster Sizing Guide](./docs/cluster-sizing.md) — Choose the right cluster size based on your data volume
 - [Self-Hosted Deployment Guide](https://userguide.qualytics.io/deployments/self-hosted-deployment/) — End-to-end deployment walkthrough
 - [Qualytics UserGuide](https://userguide.qualytics.io/) — Full platform documentation
+
+## Reference data
+
+Install licensed reference datasets into an enrichment store with the optional
+`controlplane.referenceData` configuration. See [Reference data configuration](docs/reference-data.md)
+for enablement, credentials and outbound network requirements.

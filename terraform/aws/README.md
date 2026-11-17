@@ -302,12 +302,10 @@ postgres:
 
 dataplane:
   enabled: true
-  numVolumes: -1                           # required on Auto Mode — see below
-  # Set driver and executor cores/memory from your tier in docs/cluster-sizing.md,
-  # but keep numVolumes at -1 regardless of what the per-tier snippets there show.
+  # Set driver and executor resources from your tier in docs/cluster-sizing.md.
 ```
 
-**Leave `dataplane.numVolumes` at `-1`.** EKS Auto Mode formats the instance-store NVMe (RAID 0 across multiple drives) and uses it as the node's ephemeral storage, so Spark's scratch space lands on it automatically. A value greater than `0` makes the chart mount `hostPath /mnt/disks/nvme<n>n1` — a path nothing in these modules creates, because Auto Mode's NodeClass has no `userData` or `blockDeviceMappings` hooks.
+Spark scratch needs no chart setting: EKS Auto Mode formats the instance-store NVMe (RAID 0 across multiple drives) and uses it as the node's ephemeral storage, which is where the chart's `emptyDir` scratch lands.
 
 Do **not** add a `storageClass:` block for this topology — see the appendix below.
 

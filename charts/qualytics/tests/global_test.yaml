@@ -3,47 +3,17 @@ templates:
   - dataplane.yaml
   - ingress.yaml
 tests:
-  # Platform-specific scratch volumes now land in the executor pod template
-  # ConfigMap (the driver Deployment delegates per-executor scheduling to
-  # spark-submit, which reads this template). doc 3 is the ConfigMap.
-  - it: should configure AWS NVMe paths in the executor pod template
-    template: dataplane.yaml
-    documentIndex: 3
-    set:
-      global.platform: "aws"
-      dataplane.numVolumes: 2
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/nvme1n1/spark-local-dir-1"
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/nvme2n1/spark-local-dir-2"
-
-  - it: should configure GCP SSD paths in the executor pod template
+  # Scratch is the same on every platform: Spark's default emptyDir. doc 3 is the
+  # executor pod template ConfigMap.
+  - it: should not mount host disks on any platform
     template: dataplane.yaml
     documentIndex: 3
     set:
       global.platform: "gcp"
-      dataplane.numVolumes: 2
     asserts:
-      - matchRegex:
+      - notMatchRegex:
           path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/ssd0/spark-local-dir-1"
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/ssd1/spark-local-dir-2"
-
-  - it: should fall back to emptyDir for Azure
-    template: dataplane.yaml
-    documentIndex: 3
-    set:
-      global.platform: "azure"
-      dataplane.numVolumes: 1
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "emptyDir: \\{\\}"
+          pattern: "hostPath|/mnt/disks"
 
   # DNS record configuration in ingress
   - it: should configure DNS record in ingress
@@ -127,7 +97,6 @@ tests:
       global.dnsRecord: "production.qualytics.io"
       global.imageUrls.dataplaneImageUrl: "gcr.io/project/dataplane"
       dataplaneImage.image.dataplaneImageTag: "latest"
-      dataplane.numVolumes: 1
     asserts:
       - isKind:
           of: Deployment
@@ -136,19 +105,3 @@ tests:
           path: spec.template.spec.containers[0].image
           value: "gcr.io/project/dataplane:latest"
         documentIndex: 5
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "/mnt/disks/ssd0/spark-local-dir-1"
-        documentIndex: 3
-
-  # Platform fallback for unknown platforms
-  - it: should fall back to emptyDir for unknown platforms
-    template: dataplane.yaml
-    documentIndex: 3
-    set:
-      global.platform: "other"
-      dataplane.numVolumes: 1
-    asserts:
-      - matchRegex:
-          path: data["executor-template.yaml"]
-          pattern: "emptyDir: \\{\\}"

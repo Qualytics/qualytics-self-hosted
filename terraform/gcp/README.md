@@ -280,10 +280,10 @@ postgres:
 
 dataplane:
   enabled: true
-  numVolumes: 2                            # = executor_local_ssd_count from Step 2
+  # Set driver and executor resources from your tier in docs/cluster-sizing.md.
 ```
 
-**Set `dataplane.numVolumes` to `executor_local_ssd_count`.** GKE mounts each local SSD at `/mnt/disks/ssd<n>`, which is where the chart points Spark's scratch directories when `global.platform` is `gcp`. Use `-1` if you set `executor_local_ssd_count = 0`.
+Spark scratch needs no chart setting: the executor node pool backs its ephemeral storage with the local SSDs from Step 2 (`executor_local_ssd_count`), and the chart writes scratch to an `emptyDir` there.
 
 ---
 

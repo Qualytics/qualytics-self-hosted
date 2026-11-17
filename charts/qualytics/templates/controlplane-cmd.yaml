@@ -145,6 +145,7 @@ spec:
               secretKeyRef:
                 name: qualytics-creds
                 key: deployment_identifier
+          {{- include "qualytics.controlplane.referenceDataEnv" . | nindent 10 }}
           - name: API_AUTH
             value: DB
           - name: RABBIT_MQ_HOST

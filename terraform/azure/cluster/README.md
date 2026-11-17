@@ -27,7 +27,7 @@ See [`docs/cluster-sizing.md`](../../../docs/cluster-sizing.md) for VM size reco
 
 All three pools are pinned to one availability zone (`node_group_az`, default `1`). Managed Disks are zone-locked, so a replacement node in another zone could not attach the existing volumes. `terraform/azure/postgres` places the database primary in the same zone.
 
-Executor nodes use Spot VMs by default (`executor_use_spot = true`). On `global.platform: azure` the chart backs Spark scratch directories with `emptyDir` (node ephemeral storage), not the temp SSD — see [`docs/cluster-sizing.md`](../../../docs/cluster-sizing.md).
+Executor nodes use Spot VMs by default (`executor_use_spot = true`). The chart writes Spark scratch to an `emptyDir` on the node's ephemeral storage, which is the OS disk here, not the temp SSD — see [`docs/cluster-sizing.md`](../../../docs/cluster-sizing.md#scratch-storage).
 
 ## Node Taints
 

@@ -26,7 +26,7 @@ See [`docs/cluster-sizing.md`](../../../docs/cluster-sizing.md) for machine type
 | Spark driver | `driverNodes=true` | n4-highmem-8 | 8 | 64 GB | PD |
 | Spark executor | `executorNodes=true` | n2-highmem-8 | 8 | 64 GB | 2 × 375 GB Local SSD |
 
-N4 machines do not support local SSDs, so executors use the N2 series. GKE mounts each local SSD at `/mnt/disks/ssd<n>`; set the chart's `dataplane.numVolumes` to `executor_local_ssd_count`.
+N4 machines do not support local SSDs, so executors use the N2 series. The local SSDs back each executor node's ephemeral storage, which is where the chart's Spark scratch (`emptyDir`) lands. Changing `executor_local_ssd_count` on an existing cluster replaces the executor node pool.
 
 Executor nodes use Spot VMs by default (`executor_use_spot = true`).
 
@@ -54,7 +54,7 @@ Executor nodes use Spot VMs by default (`executor_use_spot = true`).
 | `driver_node_machine_type` / `_min_size` / `_max_size` | Driver pool | `n4-highmem-8`, 0–1 |
 | `executor_node_machine_type` / `_min_size` / `_max_size` | Executor pool | `n2-highmem-8`, 1–12 |
 | `executor_use_spot` | Spot VMs for executors | `true` |
-| `executor_local_ssd_count` | Local SSDs per executor node (375 GB each) | `2` |
+| `executor_local_ssd_count` | Local SSDs per executor node (375 GB each), used as ephemeral storage | `2` |
 | `enable_node_taints` | Taint node pools for dedicated workloads | `true` |
 | `create_qualytics_namespace` | Create the `qualytics` namespace | `true` |
 | `docker_registry_token` | Registry token (provided by Qualytics) | `""` |
