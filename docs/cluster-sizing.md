@@ -83,7 +83,7 @@ Assuming the recommended default of 12 executor nodes:
 - **Container runtime**: containerd (recommended) or CRI-O
 - **Node labels**: Apply `appNodes=true`, `driverNodes=true`, and `executorNodes=true` to the respective node pools
 - **Networking**: 10 Gbps minimum between executor nodes (25 Gbps recommended for Large and above)
-- **Storage class**: Executor pods need `hostPath` or `local` PV access to node-local SSDs
+- **Scratch storage**: Executor pods write Spark scratch to the node's ephemeral storage; place it on the node-local SSDs (see [Scratch Storage](#scratch-storage))
 - **Resource headroom**: Reserve ~10–15% of each node's CPU and RAM for the kubelet and OS
 
 ---
@@ -116,7 +116,7 @@ All tiers use the **same instance family** per provider, scaling by instance siz
 | **2X-Large** | n4-standard-8 (8 vCPU, 32 GB) | n4-highmem-32 (32 vCPU, 256 GB) | n2-highmem-48 + Local SSD (48 vCPU, 384 GB) | 6 × 375 GB |
 | **4X-Large** | n4-standard-8 (8 vCPU, 32 GB) | n4-highmem-32 (32 vCPU, 256 GB) | n2-highmem-64 + Local SSD (64 vCPU, 512 GB) | 8 × 375 GB |
 
-> GKE: Attach local SSDs via node pool config (`--local-nvme-ssd-block count=N`). Each local SSD provides 375 GB.
+> GKE: Attach local SSDs as ephemeral storage via node pool config (`--ephemeral-storage-local-ssd count=N`). Each local SSD provides 375 GB.
 
 ### Azure AKS
 
@@ -135,127 +135,109 @@ Executor nodes can use **spot/preemptible instances** to reduce costs. Applicati
 
 ## Helm Configuration by Tier
 
-The values that change between tiers are the executor and driver resource requests. The `numVolumes` value controls how many local SSD volumes are mounted into executor pods — set it to match the number of NVMe disks on your instance type.
+The values that change between tiers are the sizes of the driver and executor pods. Set each one under `resources` in Kubernetes units, the same way you size any other pod. The chart derives the JVM heap and Spark's memory overhead from it: with the default `memoryOverheadFactor: 0.1`, the heap is the pod's memory divided by 1.1.
 
-> **EKS Auto Mode:** the `numVolumes` values in the per-tier snippets below apply to self-managed node groups that format and mount the instance store at the host paths described here. On an EKS Auto Mode cluster — including the [`terraform/aws/cluster`](../terraform/aws/cluster) module — keep `numVolumes` at its `-1` default: Auto Mode manages the instance-store NVMe as the node's ephemeral storage, so Spark scratch already lands on it and the host paths below do not exist. Use the `cores` and `memory` rows for your tier as shown.
+> **Resource headroom**: The `cpu` and `memory` values are set below node capacity to leave room for the kubelet and OS.
 
-> **Platform support for local disks:** `numVolumes` mounts host disks directly only when `global.platform` is `aws` (`/mnt/disks/nvme<n>n1`) or `gcp` (`/mnt/disks/ssd<n>`). On `azure` — and any other value — the scratch directories are created as `emptyDir` volumes backed by the node's ephemeral storage instead of the temp SSD. Size the AKS node's OS/ephemeral disk accordingly, or contact [hello@qualytics.ai](mailto:hello@qualytics.ai) to arrange direct temp-disk mounts. On `aws`, those host paths are created only by self-managed node groups; this repository's AWS Terraform module provisions EKS Auto Mode, which manages the instance store as node ephemeral storage instead.
-
-> **Resource headroom**: The `cores` and `memory` values are set below node capacity to leave room for the kubelet, OS, and Spark's memory overhead (`memoryOverheadFactor: 0.1`).
+> **Existing deployments**: `dataplane.driver.cores` / `memory` and `dataplane.executor.cores` / `memory` (Spark heap, such as `55000m`) keep working while `resources` is not set. `dataplane.numVolumes` is deprecated and has no effect, because the chart no longer mounts host disks (see [Scratch Storage](#scratch-storage)); remove it from your values when convenient.
 
 ### Small
 
 ```yaml
 dataplane:
-  numVolumes: 1
   driver:
-    cores: 3
-    memory: "24000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 3
+      memory: "26400Mi"
   executor:
-    instances: 1
-    cores: 3
-    memory: "24000m"
+    resources:
+      cpu: 3
+      memory: "26400Mi"
 ```
 
 ### Medium (Default)
 
 ```yaml
 dataplane:
-  numVolumes: 1
   driver:
-    cores: 7
-    memory: "55000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 7
+      memory: "60500Mi"
   executor:
-    instances: 1
-    cores: 7
-    memory: "55000m"
+    resources:
+      cpu: 7
+      memory: "60500Mi"
 ```
 
 ### Large
 
 ```yaml
 dataplane:
-  numVolumes: 1
   driver:
-    cores: 15
-    memory: "110000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 15
+      memory: "121000Mi"
   executor:
-    instances: 1
-    cores: 15
-    memory: "110000m"
+    resources:
+      cpu: 15
+      memory: "121000Mi"
 ```
 
 ### X-Large
 
 ```yaml
 dataplane:
-  numVolumes: 1
   driver:
-    cores: 31
-    memory: "220000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 31
+      memory: "242000Mi"
   executor:
-    instances: 1
-    cores: 31
-    memory: "220000m"
+    resources:
+      cpu: 31
+      memory: "242000Mi"
 ```
 
 ### 2X-Large
 
 ```yaml
 dataplane:
-  numVolumes: 3
   driver:
-    cores: 31
-    memory: "220000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 31
+      memory: "242000Mi"
   executor:
-    instances: 1
-    cores: 47
-    memory: "330000m"
+    resources:
+      cpu: 47
+      memory: "363000Mi"
 ```
 
 ### 4X-Large
 
 ```yaml
 dataplane:
-  numVolumes: 2
   driver:
-    cores: 31
-    memory: "220000m"
-  dynamicAllocation:
-    enabled: true
-    initialExecutors: 1
-    minExecutors: 1
-    maxExecutors: 12
+    resources:
+      cpu: 31
+      memory: "242000Mi"
   executor:
-    instances: 1
-    cores: 63
-    memory: "440000m"
+    resources:
+      cpu: 63
+      memory: "484000Mi"
 ```
+
+---
+
+## Scratch Storage
+
+Spark writes its scratch data (shuffle and spill files) to an `emptyDir` volume, which lives on the node's ephemeral storage. The chart does this the same way on every platform and mounts no host disks, so point the executor nodes' ephemeral storage at their local NVMe or SSD:
+
+| Platform | How ephemeral storage lands on local disks |
+|----------|--------------------------------------------|
+| **EKS Auto Mode** | Automatic. Auto Mode formats the instance-store NVMe (RAID 0 across multiple drives) as the node's ephemeral storage, as long as the NodeClass `ephemeralStorage` size stays below the NVMe capacity. The [`terraform/aws/cluster`](../terraform/aws/cluster) module relies on this. |
+| **EKS, self-managed nodes** | Set `localStorage.strategy: RAID0` in the nodeadm `NodeConfig`, or `instanceStorePolicy: RAID0` in a Karpenter `EC2NodeClass`. |
+| **GKE** | Create the executor node pool with local SSD-backed ephemeral storage (`--ephemeral-storage-local-ssd count=N`). The [`terraform/gcp/cluster`](../terraform/gcp/cluster) module does this. |
+| **AKS** | Scratch uses the node's OS disk by default; size it for your tier. To use the VM's temp disk instead, set the node pool's kubelet disk type to `Temporary`. |
+| **On-premises** | Put the kubelet's root directory (`/var/lib/kubelet` by default) on the local SSD. |
 
 ---
 
@@ -266,6 +248,6 @@ dataplane:
 3. **Consider scan frequency** — if you need hourly full scans of large datasets, consider one tier up
 4. **Match the tier** to the instance types for your cloud provider and update your `values.yaml`
 
-When in doubt, start with **Medium** — it handles the majority of production workloads. Moving between tiers only requires changing instance types in your node pools and updating `cores` and `memory` in your Helm configuration.
+When in doubt, start with **Medium** — it handles the majority of production workloads. Moving between tiers only requires changing instance types in your node pools and updating the driver and executor `resources` in your Helm configuration.
 
 For workloads beyond 4X-Large or for custom configurations, contact [hello@qualytics.ai](mailto:hello@qualytics.ai).

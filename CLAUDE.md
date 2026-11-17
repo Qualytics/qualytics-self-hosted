@@ -226,7 +226,6 @@ frontendImage:
 dataplane:
   enabled: true
   sparkVersion: "4.1.1"
-  numVolumes: -1
   driver:
     cores: 1
     memory: "512m"
@@ -422,7 +421,7 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
 
 ### Configuration Best Practices
 - **Toggleability**: Make features configurable in values.yaml when possible
-- **Platform Awareness**: Support AWS/GCP/Azure-specific configurations (storage classes, volumes)
+- **Platform Awareness**: Support AWS/GCP/Azure-specific configurations (storage classes)
 - **Documentation**: Document all values with descriptive comments in values.yaml
 - **Dynamic Values**: Use `tpl` function for templated values (e.g., DNS records, image URLs)
 - **Default Values**: Provide sensible defaults in values.yaml
@@ -464,11 +463,11 @@ Total wall time: ~12 minutes. That's the full-behavior signal you can't get from
   5. headless `Service` `<release>-spark-driver` for driver↔executor RPC (ports 7078 / 7079 / 4040)
   6. `Deployment` `<release>-dataplane`
 - **RBAC opt-out**: `dataplane.rbac.create=false` lets you BYO an existing SA when the cluster restricts ServiceAccount creation. Override SA name via `dataplane.rbac.serviceAccountName`. Annotations (e.g. `eks.amazonaws.com/role-arn` for IRSA, GCP Workload Identity) go on `dataplane.rbac.serviceAccountAnnotations`.
-- **Driver pod resources**: derived from `dataplane.driver.cores` / `dataplane.driver.memory` and the `qualytics.spark.driver.podMemoryMb` helper, which mirrors Spark's `KubernetesUtils.calculatePodMemoryOverhead`: `pod_mem = heap + max(memoryOverheadFactor * heap, 384 MiB)`. Output is `Mi` (mebibytes) so it matches what the operator-managed flow produced.
-- **Executor resources**: computed by Spark from `--conf spark.executor.cores` / `.memory`; same overhead floor formula. The chart doesn't set them on the pod template directly.
+- **Sizing**: `dataplane.{driver,executor}.resources` is the pod in Kubernetes units (`cpu` in whole cores, `memory` in Mi or Gi). The `qualytics.spark.sizing` helper derives heap = pod / (1 + `memoryOverheadFactor`) and overhead = max(pod - heap, 384 MiB), and fails the render on any other unit. While `resources` is empty the legacy `cores` / `memory` (Spark heap such as `55000m`) apply, with pod = heap + max(`memoryOverheadFactor` * heap, 384 MiB), which is Spark's own `KubernetesUtils.calculatePodMemoryOverhead`. The driver Deployment requests and limits the pod size in `Mi`.
+- **Executor resources**: computed by Spark from `--conf spark.executor.cores` / `.memory` / `.memoryOverhead`, which the chart passes from the same helper. The chart doesn't set them on the pod template directly. On legacy sizing, a `spark.executor.memoryOverhead` or `spark.executor.memoryOverheadFactor` entry in `dataplane.extraSparkConf` still decides the executor overhead, as it did before the chart passed one, so the chart omits its own `--conf` there.
 - **Dynamic Allocation**: 1-12 executors (configurable; `dataplane.dynamicAllocation.enabled` is respected, not hardcoded). Shuffle tracking and idle-timeout confs are passed unconditionally; they're inert when DA is off.
 - **Executor termination grace**: 120s, for decommission block migration. Spark 4.1+ always applies `spark.kubernetes.executor.terminationGracePeriodSeconds` (default 30s) over the pod template's `terminationGracePeriodSeconds`, so the chart passes `--conf spark.kubernetes.executor.terminationGracePeriodSeconds=120`; the template keeps 120 for older Spark. Change both together.
-- **Volumes**: Platform-specific NVMe/SSD mounts for scratch space at `/tmp/spark-local-dir-<n>`. Live in the executor pod template (the ConfigMap), not at CR level — there's no operator translating CR volumes anymore.
+- **Scratch**: Spark's default `emptyDir` on the node's ephemeral storage, on every platform; the chart mounts no host disks. `dataplane.numVolumes` is deprecated and ignored, so values files that still carry it keep rendering. [docs/cluster-sizing.md](docs/cluster-sizing.md#scratch-storage) covers backing ephemeral storage with local disks.
 - **Kerberos**: Not configured here. A Kerberized datastore carries its own keytab and krb5.conf on the connection, uploaded through the control plane; the chart mounts neither. A deployment-wide krb5.conf is worse than absent — its realm registers before any connection's, so a datastore naming that realm with a different KDC is refused and its logins go to the mounted one instead.
 - **Main Class**: `io.qualytics.dataplane.SparkMothership`
 - **Extra Packages**: Teradata + IBM DB2 JDBC drivers, passed to spark-submit via `--packages` and resolved by Ivy (`spark.jars.ivy=/tmp`) at driver startup — i.e. from Maven Central on every driver start, not from the image (vendor licensing forbids bundling them in the shadowJar/image). Mirroring container images does not cover these. Air-gapped/egress-restricted installs set `dataplane.ivy.{enabled,repositoryUrl,realm,username,password}` — the chart generates an `ivysettings.xml` (via the `qualytics.ivy.settingsXml` helper, XML-escaped, credentials element only when username+password are both set) into a release-managed `<release>-spark-ivy-settings` Secret, mounts it into the driver at `/opt/spark/conf/ivysettings.xml`, and passes `spark.jars.ivySettings`. It replaces the default resolvers entirely (Maven Central never contacted) and redirects resolution to an internal Maven repository (Artifactory/Nexus). Driver-only egress; executors get resolved jars from the driver. A `checksum/ivy-settings` pod annotation rolls the driver on any ivy value change (subPath mounts never update in-place). See [docs/custom-maven-repository.md](docs/custom-maven-repository.md).
@@ -487,9 +486,8 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 #### Pod-template invariants (do not regress)
 
-1. **Executor pod template always emits `containers[0].name: spark-kubernetes-executor`**, even when no scratch volumes are configured. Spark 4.1.1's `KubernetesUtils.selectSparkContainer` NPEs when the parsed template has no `containers` field. The `should always emit executor containers[0].name` unit test exists specifically to catch this.
+1. **Executor pod template always emits `containers[0].name: spark-kubernetes-executor`**, even though the template sets nothing else on the container. Spark 4.1.1's `KubernetesUtils.selectSparkContainer` NPEs when the parsed template has no `containers` field. The `should always emit executor containers[0].name` unit test exists specifically to catch this.
 2. **Container names `spark-kubernetes-driver` / `spark-kubernetes-executor` are magic strings** matched by `spark.kubernetes.{driver,executor}.podTemplateContainerName`. Renaming them silently breaks Spark's merge — env + volumeMounts just won't land on the executor pod.
-3. **`spark-local-dir-` prefix is no longer load-bearing**, since the chart now writes scratch volumes directly into the executor pod template (rather than relying on the operator's CR-volume translation that only matched that prefix). The prefix is still used by convention.
 
 ### Control Plane API
 - **Replicas**: Configurable via `controlplane.replicas`
@@ -586,27 +584,24 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
 
 ## Platform-Specific Configuration
 
-Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizing.md) (six tiers, per-cloud tables) — that file is the single source of truth; don't duplicate node sizes here.
+Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizing.md) (six tiers, per-cloud tables) — that file is the single source of truth; don't duplicate node sizes here. Spark scratch is the same on every platform (`emptyDir`), so the differences below are storage classes only.
 
 ### AWS
 - **Storage**: EBS gp3 volumes with IOPS/throughput settings
   - Annotations: `ebs.csi.aws.com/iops: 8000`, `ebs.csi.aws.com/throughput: 250`
 - **Storage Class**: `aws` (gp3, 8000 IOPS, 250 MB/s throughput)
-- **Spark Volumes**: `hostPath` at `/mnt/disks/nvme[1-N]n1/spark-local-dir-[1-N]` (N = `dataplane.numVolumes`)
 
 ### GCP
 - **Storage**: Persistent Disks (SSD and standard)
 - **Storage Classes**:
   - `gcp-fast` (pd-ssd, immediate binding)
   - `gcp-slow` (pd-standard, WaitForFirstConsumer)
-- **Spark Volumes**: `hostPath` at `/mnt/disks/ssd[0..N-1]/spark-local-dir-[1-N]` (0-indexed disks, 1-indexed dirs)
 
 ### Azure
 - **Storage**: Managed Disks (Premium and Standard)
 - **Storage Classes**:
   - `azure-fast` (Premium_LRS, immediate binding)
   - `azure-slow` (StandardSSD_LRS, WaitForFirstConsumer)
-- **Spark Volumes**: **`emptyDir`, not `hostPath`** — `templates/dataplane.yaml` only has `hostPath` branches for `aws` and `gcp`; every other `global.platform` (including `azure`) falls through to `emptyDir: {}`. `numVolumes` still controls how many scratch dirs are created and what lands in `spark.local.dir`, but they are backed by node ephemeral storage rather than the temp SSD.
 
 ## Configuration Files
 
@@ -773,7 +768,7 @@ helm upgrade qualytics qualytics/qualytics \
 - Check driver logs by selector (the pod has a random suffix): `kubectl logs deployment/qualytics-dataplane -n qualytics --tail=200 -f` or `kubectl logs -l spark-role=driver -n qualytics`
 - Verify executor resources: `kubectl get pods -n qualytics -l spark-role=executor`
 - Check dynamic allocation: look for executor scaling in driver logs
-- Verify volumes mounted correctly: `kubectl get cm qualytics-spark-executor-template -n qualytics -o jsonpath='{.data.executor-template\.yaml}'`
+- Inspect the executor pod template: `kubectl get cm qualytics-spark-executor-template -n qualytics -o jsonpath='{.data.executor-template\.yaml}'`
 - Verify driver SA can manage executor pods: `kubectl auth can-i create pods --as=system:serviceaccount:qualytics:qualytics-spark -n qualytics` should return `yes`
 
 ## Recent Focus Areas

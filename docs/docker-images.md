@@ -55,7 +55,7 @@ These are publicly available images used by the Qualytics data tier and utilitie
 | Component | Image | Tag | Required | Used by |
 |---|---|---|---|---|
 | RabbitMQ | `rabbitmq` | `4.3-management` | Yes | `qualytics-rabbitmq` StatefulSet |
-| Busybox (init containers) | `busybox` | `latest` | Yes | RabbitMQ init containers, and the Spark driver init container when `dataplane.numVolumes > 0` |
+| Busybox (init containers) | `busybox` | `latest` | Yes | RabbitMQ init containers |
 | PostgreSQL | `postgres` | `17` | Only when `postgres.enabled: true` | `qualytics-postgres` StatefulSet, the snapshotter and maintenance CronJobs, and the `qualytics-psql` utility Deployment (kept at 0 replicas) |
 
 > **Note:** PostgreSQL is optional. If you are using an external PostgreSQL datastore, set `postgres.enabled: false` in your `values.yaml` and skip this image. See [External PostgreSQL Setup](./external-postgres-setup.md).

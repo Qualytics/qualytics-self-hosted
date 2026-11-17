@@ -263,7 +263,7 @@ module "gke" {
       node_locations       = local.zone
       min_count            = var.executor_node_min_size
       max_count            = var.executor_node_max_size
-      local_ssd_count      = var.executor_local_ssd_count
+      local_ssd_count      = 0
       spot                 = var.executor_use_spot
       disk_size_gb         = 100
       disk_type            = "pd-ssd"
@@ -273,6 +273,8 @@ module "gke" {
       preemptible          = false
       initial_node_count   = var.executor_node_min_size
       enable_private_nodes = true
+      # Local SSDs back the node's ephemeral storage, where Spark's emptyDir scratch lands.
+      local_ssd_ephemeral_storage_count = var.executor_local_ssd_count
     }
   ]
 

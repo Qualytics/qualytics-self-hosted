@@ -1,4 +1,9 @@
 {{- if and ( eq .Values.dataplane.enabled true ) ( eq .Values.global.deploymentMode "kubernetes" ) }}
+{{- $driver := include "qualytics.spark.sizing" (dict "root" . "role" "driver") | fromJson -}}
+{{- $executor := include "qualytics.spark.sizing" (dict "root" . "role" "executor") | fromJson -}}
+{{- /* An executor overhead set through extraSparkConf predates the chart passing one, so on legacy sizing it stays in charge. */ -}}
+{{- $extraConf := .Values.dataplane.extraSparkConf | default dict -}}
+{{- $customExecutorOverhead := and (not .Values.dataplane.executor.resources) (or (hasKey $extraConf "spark.executor.memoryOverhead") (hasKey $extraConf "spark.executor.memoryOverheadFactor")) -}}
 {{- if .Values.dataplane.rbac.create }}
 # Driver ServiceAccount + Role + RoleBinding. Replaces the bundle the
 # spark-operator chart used to install (templates/spark/serviceaccount.yaml,
@@ -92,9 +97,9 @@ data:
 ---
 # Executor pod template, mounted into the driver and referenced via
 # --conf spark.kubernetes.executor.podTemplateFile. Spark merges spark-submit
-# settings (image, cores, memory) on top — node scheduling, scratch volumes,
-# and the init container have to land here. Container name
-# `spark-kubernetes-executor` is a magic string matched by the
+# settings (image, cores, memory) on top — node scheduling has to land here.
+# Scratch is Spark's default emptyDir on the node's ephemeral storage.
+# Container name `spark-kubernetes-executor` is a magic string matched by the
 # spark.kubernetes.executor.podTemplateContainerName conf; renaming it silently
 # breaks the merge.
 apiVersion: v1
@@ -124,45 +129,9 @@ data:
       tolerations:
         {{- toYaml .Values.tolerations.executorNodeTolerations | nindent 8 }}
       {{- end }}
-      {{- if gt (int .Values.dataplane.numVolumes) 0 }}
-      volumes:
-        {{- range $i := until (int .Values.dataplane.numVolumes) }}
-        - name: "spark-local-dir-{{ add1 $i }}"
-          {{- if eq $.Values.global.platform "aws" }}
-          hostPath:
-            path: "/mnt/disks/nvme{{ add1 $i }}n1/spark-local-dir-{{ add1 $i }}"
-          {{- else if eq $.Values.global.platform "gcp" }}
-          hostPath:
-            path: "/mnt/disks/ssd{{ $i }}/spark-local-dir-{{ add1 $i }}"
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
-        {{- end }}
-      {{- end }}
-      {{- if gt (int .Values.dataplane.numVolumes) 0 }}
-      initContainers:
-        - name: init-spark-local-dir
-          image: "{{ tpl .Values.busybox.image.imageUrl . }}:{{ .Values.busybox.image.imageTag }}"
-          imagePullPolicy: IfNotPresent
-          command: ['sh', '-c', 'chmod 777 /tmp/spark-local-dir-*']
-          securityContext:
-            runAsUser: 0
-          volumeMounts:
-            {{- range $i := until (int .Values.dataplane.numVolumes) }}
-            - name: "spark-local-dir-{{ add1 $i }}"
-              mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
-            {{- end }}
-      {{- end }}
       # Always emit containers stanza; Spark NPEs loading a template without it.
       containers:
         - name: spark-kubernetes-executor
-          {{- if gt (int .Values.dataplane.numVolumes) 0 }}
-          volumeMounts:
-            {{- range $i := until (int .Values.dataplane.numVolumes) }}
-            - name: "spark-local-dir-{{ add1 $i }}"
-              mountPath: "/tmp/spark-local-dir-{{ add1 $i }}"
-            {{- end }}
-          {{- end }}
 ---
 # Headless Service for driver↔executor RPC. Executors connect back to the
 # driver via spark.driver.host (= this Service's DNS name) on spark.driver.port.
@@ -312,15 +281,17 @@ spec:
                 --conf spark.driver.host={{ .Release.Name }}-spark-driver.{{ .Release.Namespace }}.svc.cluster.local \
                 --conf spark.driver.port=7078 \
                 --conf spark.driver.blockManager.port=7079 \
-                --conf spark.driver.cores={{ .Values.dataplane.driver.cores }} \
-                --conf spark.driver.memory={{ .Values.dataplane.driver.memory }} \
+                --conf spark.driver.cores={{ $driver.cores | int }} \
+                --conf spark.driver.memory={{ $driver.heapMb | int }}m \
                 --conf spark.executor.instances={{ .Values.dataplane.executor.instances }} \
-                --conf spark.executor.cores={{ .Values.dataplane.executor.cores }} \
-                --conf spark.executor.memory={{ .Values.dataplane.executor.memory }} \
+                --conf spark.executor.cores={{ $executor.cores | int }} \
+                --conf spark.executor.memory={{ $executor.heapMb | int }}m \
+                {{- if not $customExecutorOverhead }}
+                --conf spark.executor.memoryOverhead={{ $executor.overheadMb | int }}m \
+                {{- end }}
                 --conf spark.kubernetes.executor.podTemplateFile=/opt/spark/conf/executor-template.yaml \
                 --conf spark.kubernetes.executor.podTemplateContainerName=spark-kubernetes-executor \
                 --conf spark.kubernetes.executor.podNamePrefix={{ .Release.Name }}-dataplane-$(date +%s) \
-                --conf spark.kubernetes.memoryOverheadFactor={{ .Values.dataplane.memoryOverheadFactor }} \
                 --conf spark.kubernetes.submission.connectionTimeout=480000 \
                 --conf spark.kubernetes.submission.requestTimeout=480000 \
                 --conf spark.kubernetes.driver.connectionTimeout=480000 \
@@ -347,9 +318,6 @@ spec:
                 --conf spark.jars.ivy=/tmp \
                 {{- if .Values.dataplane.ivy.enabled }}
                 --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \
-                {{- end }}
-                {{- if gt (int .Values.dataplane.numVolumes) 0 }}
-                --conf spark.local.dir={{ include "qualytics.spark.localDirs" . }} \
                 {{- end }}
                 --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Dconfig.resource=prod.conf -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
                 --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
@@ -428,9 +396,9 @@ spec:
             - name: MOTHERSHIP_MAX_EXECUTORS
               value: {{ .Values.dataplane.dynamicAllocation.maxExecutors | int | quote }}
             - name: MOTHERSHIP_NUM_CORES_PER_EXECUTOR
-              value: {{ .Values.dataplane.executor.cores | int | quote }}
+              value: {{ $executor.cores | int | quote }}
             - name: MOTHERSHIP_MAX_MEMORY_PER_EXECUTOR
-              value: {{ .Values.dataplane.executor.memory | trimSuffix "m" | int | quote }}
+              value: {{ $executor.heapMb | int | quote }}
             - name: MOTHERSHIP_LIBPOSTAL_DATA_PATH
               value: {{ .Values.dataplane.libpostalDataPath | quote }}
           volumeMounts:
@@ -452,8 +420,8 @@ spec:
             {{- end }}
           resources:
             requests:
-              cpu: "{{ .Values.dataplane.driver.cores }}"
-              memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
+              cpu: "{{ $driver.cores | int }}"
+              memory: "{{ $driver.podMb | int }}Mi"
             limits:
-              memory: "{{ include "qualytics.spark.driver.podMemoryMb" . }}Mi"
+              memory: "{{ $driver.podMb | int }}Mi"
 {{- end }}

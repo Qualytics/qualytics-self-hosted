@@ -299,10 +299,10 @@ postgres:
 
 dataplane:
   enabled: true
-  numVolumes: -1
+  # Set driver and executor resources from your tier in docs/cluster-sizing.md.
 ```
 
-**Keep `dataplane.numVolumes` at `-1`.** On `global.platform: azure` the chart backs Spark scratch directories with `emptyDir` (node ephemeral storage) rather than mounting the temp SSD — see [`docs/cluster-sizing.md`](../../docs/cluster-sizing.md).
+Spark scratch needs no chart setting: the chart writes it to an `emptyDir` on the node's ephemeral storage, which this module keeps on the OS disk — see [`docs/cluster-sizing.md`](../../docs/cluster-sizing.md#scratch-storage).
 
 ---
 
