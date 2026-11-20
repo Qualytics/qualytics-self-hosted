@@ -438,6 +438,17 @@ tests:
           pattern: "--master k8s://https://kubernetes.default.svc:443"
         documentIndex: 5
 
+  - it: should disable the vulnerable Base64 intrinsic for both driver and executors
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark\.driver\.extraJavaOptions="[^"\n]* -XX:-UseBASE64Intrinsics"'
+        documentIndex: 5
+      - matchRegex:
+          path: spec.template.spec.containers[0].args[0]
+          pattern: 'spark\.executor\.extraJavaOptions="[^"\n]* -XX:-UseBASE64Intrinsics"'
+        documentIndex: 5
+
   - it: should not duplicate confs that the entrypoint adds itself
     asserts:
       - notMatchRegex:
