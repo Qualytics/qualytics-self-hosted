@@ -257,6 +257,8 @@ spec:
           image: "{{ tpl .Values.global.imageUrls.dataplaneImageUrl . }}:{{ .Values.dataplaneImage.image.dataplaneImageTag }}"
           imagePullPolicy: IfNotPresent
           command: ["/bin/bash", "-c"]
+          # -XX:-UseBASE64Intrinsics on the driver and executor JVMs mitigates CVE-2026-114938
+          # until the dataplane image ships a patched JDK.
           args:
             - |
               exec /opt/entrypoint.sh driver \
@@ -319,8 +321,8 @@ spec:
                 {{- if .Values.dataplane.ivy.enabled }}
                 --conf spark.jars.ivySettings=/opt/spark/conf/ivysettings.xml \
                 {{- end }}
-                --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Dconfig.resource=prod.conf -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
-                --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45" \
+                --conf spark.driver.extraJavaOptions="-Divy.cache.dir=/tmp -Divy.home=/tmp -Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Dconfig.resource=prod.conf -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45 -XX:-UseBASE64Intrinsics" \
+                --conf spark.executor.extraJavaOptions="-Dlog4j.configurationFile=file:/opt/spark/log4j2.properties -Djava.library.path=/opt/spark/libs/ -Duser.timezone=UTC -XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:InitiatingHeapOccupancyPercent=45 -XX:-UseBASE64Intrinsics" \
                 --conf spark.kubernetes.driver.label.spark-role=driver \
                 local:///opt/spark/jars/qualytics-dataplane.jar
           ports:
