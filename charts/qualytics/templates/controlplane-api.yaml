@@ -164,6 +164,10 @@ spec:
             value: {{ include "qualytics.global.size" . | quote }}
           - name: CORS_ORIGINS
             value: {{ tpl .Values.global.dnsRecord . | quote }}
+          {{- with .Values.controlplane.auth.mcpCorsOrigins }}
+          - name: MCP_CORS_ORIGINS
+            value: {{ . | quote }}
+          {{- end }}
           - name: POSTGRES_CONNECTION_URL
             valueFrom:
               secretKeyRef:
