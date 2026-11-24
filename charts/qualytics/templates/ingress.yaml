@@ -91,12 +91,14 @@ metadata:
     nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     # Never mark upstream pods as unavailable due to transient errors; always try a live pod.
-    # Without this, a wave of 503s from capacity-limited pods causes nginx to remove all backends,
-    # turning subsequent 503 upstreams into immediate 503s with an empty upstream list.
+    # Without this, a wave of connection errors or timeouts causes nginx to remove all backends,
+    # turning subsequent requests into immediate failures with an empty upstream list.
     nginx.ingress.kubernetes.io/upstream-max-fails: "0"
     nginx.ingress.kubernetes.io/upstream-fail-timeout: "0"
-    # Retry on upstream 503 (capacity exhaustion) before giving up
-    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_503"
+    # Retry connection errors and timeouts on another pod, never an upstream 503. A 503 is the API's own
+    # answer: the request was authenticated and its single-use DPoP proof is spent, so replaying it fails
+    # as a 401 and hides the real response.
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout"
     nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
     # Disable buffering for streaming
     nginx.ingress.kubernetes.io/proxy-buffering: "off"
@@ -158,12 +160,14 @@ metadata:
     nginx.ingress.kubernetes.io/limit-connections: {{ .Values.ingress.maxConnectionsPerIP | int | quote }}
     nginx.ingress.kubernetes.io/limit-req-status-code: "429"
     # Never mark upstream pods as unavailable due to transient errors; always try a live pod.
-    # Without this, a wave of 503s from capacity-limited pods causes nginx to remove all backends,
-    # turning subsequent 503 upstreams into immediate 503s with an empty upstream list.
+    # Without this, a wave of connection errors or timeouts causes nginx to remove all backends,
+    # turning subsequent requests into immediate failures with an empty upstream list.
     nginx.ingress.kubernetes.io/upstream-max-fails: "0"
     nginx.ingress.kubernetes.io/upstream-fail-timeout: "0"
-    # Retry on upstream 503 (capacity exhaustion) before giving up
-    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout http_503"
+    # Retry connection errors and timeouts on another pod, never an upstream 503. A 503 is the API's own
+    # answer: the request was authenticated and its single-use DPoP proof is spent, so replaying it fails
+    # as a 401 and hides the real response.
+    nginx.ingress.kubernetes.io/proxy-next-upstream: "error timeout"
     nginx.ingress.kubernetes.io/proxy-next-upstream-tries: "3"
     # Allow up to 20MB request body (aligns with ModSecurity SecRequestBodyLimit)
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
