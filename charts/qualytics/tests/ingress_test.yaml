@@ -315,6 +315,21 @@ tests:
           value: "429"
         documentIndex: 1
 
+  - it: should retry connection errors and timeouts but never an upstream 503
+    set:
+      ingress.enabled: true
+      global.dnsRecord: "test.qualytics.io"
+    asserts:
+      # A retried request that reached the API replays its single-use DPoP proof and fails as a 401.
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-next-upstream"]
+          value: "error timeout"
+        documentIndex: 0
+      - equal:
+          path: metadata.annotations["nginx.ingress.kubernetes.io/proxy-next-upstream"]
+          value: "error timeout"
+        documentIndex: 1
+
   - it: should set kubernetes.io/ingress.allow-http=false on all ingresses
     set:
       ingress.enabled: true

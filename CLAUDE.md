@@ -558,7 +558,7 @@ The dataplane image's `/opt/entrypoint.sh` does load-bearing setup before `spark
   3. `<release>-frontend-ingress` — separate, much higher rate limits for parallel asset loading
 - **ModSecurity WAF**: OWASP core rules enabled (except on the streaming ingress)
 - **Rate Limiting**: API `ingress.maxRequestsPerSecondPerIP` (default 50) × `burstMultiplier` (default 5) burst, `maxConnectionsPerIP` 250; frontend `frontendMaxRequestsPerSecondPerIP` 500 / `frontendMaxConnectionsPerIP` 1000. RPS overage returns 429, connection overage 503 (nginx limitation).
-- **Upstream resilience**: `upstream-max-fails: 0` + `upstream-fail-timeout: 0` so transient 503s never eject all backends; `proxy-next-upstream: error timeout http_503` with 3 tries.
+- **Upstream resilience**: `upstream-max-fails: 0` + `upstream-fail-timeout: 0` so transient errors never eject all backends; `proxy-next-upstream: error timeout` with 3 tries. Upstream 503s are not retried: the retry would replay the browser's single-use DPoP proof and fail as a 401.
 - **Compression**: GZIP and Brotli support
 - **SSL**: Automatic redirect to HTTPS (force-ssl-redirect)
 - **TLS**: BYO Secret. Default: single shared `ingress.tls.secretName`; falls back to legacy `api-tls-cert` + `frontend-tls-cert` split pair for backwards compatibility. See [docs/ingress-tls.md](docs/ingress-tls.md).
