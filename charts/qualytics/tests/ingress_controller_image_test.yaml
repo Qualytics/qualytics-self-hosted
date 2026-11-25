@@ -2,6 +2,7 @@ suite: test bundled ingress controller image overrides
 templates:
   - charts/nginx/templates/controller-deployment.yaml
   - charts/nginx/templates/admission-webhooks/job-patch/job-createSecret.yaml
+  - charts/nginx/templates/admission-webhooks/job-patch/job-patchWebhook.yaml
 set:
   nginx.enabled: true
 tests:
@@ -38,7 +39,6 @@ tests:
           path: spec.template.spec.imagePullSecrets
           value:
             - name: controller-registry
-        template: charts/nginx/templates/controller-deployment.yaml
       - matchRegex:
           path: spec.template.spec.containers[0].image
           pattern: '^registry\.k8s\.io/ingress-nginx/kube-webhook-certgen:.+@sha256:[0-9a-f]{64}$'
