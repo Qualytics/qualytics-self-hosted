@@ -80,6 +80,8 @@ docker pull postgres:17
 | Chroot controller (when `nginx.controller.image.chroot: true`) | `docker.io/qualyticsai/ingress-nginx-controller-chroot:v1.30.8-qualytics.1` |
 | Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9` |
 
+The controller images are private. Use your existing Qualytics Docker Hub token to pull the selected controller. The chart uses the same registry Secret as the Qualytics application, `regcred` by default. The webhook jobs pull the public certgen image.
+
 ```bash
 docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.1
 docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
@@ -87,7 +89,7 @@ docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
 
 When upgrading from `2026.11.24` or earlier, pass your original `-f values.yaml` or use `--reset-then-reuse-values` to apply stored overrides to the new chart defaults. Helm's `--reuse-values` carries the old controller image forward. If your values explicitly pin a controller, update that pin to select the Qualytics build.
 
-For a private mirror, copy the applicable Qualytics controller image to your registry before the upgrade. The webhook certificate jobs continue to use the upstream certgen image.
+For a private mirror, copy the applicable Qualytics controller image to your registry before the upgrade.
 
 To use a compatible replacement controller, set `registry`, `image`, `tag`, and the replacement image's published `digest` under `nginx.controller.image`. If your values use a full `repository` override, update it along with the tag and digest. With `chroot: true`, set `digestChroot` to the digest of the chroot build. A full `repository` override must name that build explicitly.
 
@@ -146,8 +148,6 @@ postgres:
 # Only when nginx.enabled is true. A byte-for-byte mirror keeps the pinned
 # manifest digest. If the mirror changes the manifest, set its new digest.
 nginx:
-  imagePullSecrets:
-    - name: regcred
   controller:
     image:
       registry: your-registry.example.com
@@ -159,10 +159,9 @@ nginx:
 
 Image *tags* stay in `controlplaneImage.image.controlplaneImageTag`, `dataplaneImage.image.dataplaneImageTag`, and `frontendImage.image.frontendImageTag`; mirroring does not change them.
 
-Qualytics workloads use `global.imagePullSecrets` (default `["regcred"]`). The optional ingress controller and webhook jobs use `nginx.imagePullSecrets`, a list of objects with a `name` field as shown above.
+Set `global.imagePullSecrets` to a list of Secret names for your registry. The application, optional ingress controller, and webhook jobs inherit this list. To use different credentials for ingress, set `nginx.imagePullSecrets` to a list such as `[{name: ingress-registry}]`. Set `nginx.imagePullSecrets: []` to omit pull secrets from ingress pod specs.
 
-- **Registry requires credentials**: keep the default and point the `regcred` Secret at your private registry's credentials instead of Docker Hub — or create a Secret with a different name and list it here.
-- **Registry allows unauthenticated pulls** (e.g. an anonymous internal Artifactory): set `global.imagePullSecrets: []` and leave `nginx.imagePullSecrets` empty.
+For an anonymous mirror serving all images, set the global list to empty.
 
 ```yaml
 global:
