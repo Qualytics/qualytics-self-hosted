@@ -76,14 +76,14 @@ docker pull postgres:17
 
 | Component | Image |
 |---|---|
-| Controller | `docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.1` |
-| Chroot controller (when `nginx.controller.image.chroot: true`) | `docker.io/qualyticsai/ingress-nginx-controller-chroot:v1.30.8-qualytics.1` |
+| Controller | `docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.2` |
+| Chroot controller (when `nginx.controller.image.chroot: true`) | `docker.io/qualyticsai/ingress-nginx-controller-chroot:v1.30.8-qualytics.2` |
 | Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9` |
 
 The controller images are private. Use your existing Qualytics Docker Hub token to pull the selected controller. The chart uses the same registry Secret as the Qualytics application, `regcred` by default. The webhook jobs pull the public certgen image.
 
 ```bash
-docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.1
+docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.2
 docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
 ```
 
