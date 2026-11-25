@@ -1,0 +1,59 @@
+suite: test bundled ingress controller image overrides
+templates:
+  - charts/nginx/templates/controller-deployment.yaml
+  - charts/nginx/templates/admission-webhooks/job-patch/job-createSecret.yaml
+set:
+  nginx.enabled: true
+tests:
+  - it: should pin the Qualytics controller when the bundled ingress is enabled
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^docker\.io/qualyticsai/ingress-nginx-controller:[^@]+@sha256:[0-9a-f]{64}$'
+        template: charts/nginx/templates/controller-deployment.yaml
+
+  - it: should pin the Qualytics chroot image when chroot is enabled
+    set:
+      nginx.controller.image.chroot: true
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^docker\.io/qualyticsai/ingress-nginx-controller-chroot:[^@]+@sha256:[0-9a-f]{64}$'
+        template: charts/nginx/templates/controller-deployment.yaml
+
+  - it: should pin a replacement controller without changing the webhook image
+    set:
+      nginx.controller.image.registry: registry.example.com
+      nginx.controller.image.image: team/ingress-controller
+      nginx.controller.image.tag: candidate
+      nginx.controller.image.digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+      nginx.imagePullSecrets:
+        - name: controller-registry
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/team/ingress-controller:candidate@sha256:1111111111111111111111111111111111111111111111111111111111111111
+        template: charts/nginx/templates/controller-deployment.yaml
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: controller-registry
+        template: charts/nginx/templates/controller-deployment.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^registry\.k8s\.io/ingress-nginx/kube-webhook-certgen:.+@sha256:[0-9a-f]{64}$'
+        template: charts/nginx/templates/admission-webhooks/job-patch/job-createSecret.yaml
+
+  - it: should respect an existing chroot repository and its separate digest on upgrade
+    release:
+      upgrade: true
+    set:
+      nginx.controller.image.repository: registry.example.com/team/custom-chroot
+      nginx.controller.image.chroot: true
+      nginx.controller.image.tag: candidate
+      nginx.controller.image.digestChroot: sha256:2222222222222222222222222222222222222222222222222222222222222222
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: registry.example.com/team/custom-chroot:candidate@sha256:2222222222222222222222222222222222222222222222222222222222222222
+        template: charts/nginx/templates/controller-deployment.yaml

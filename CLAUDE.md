@@ -9,7 +9,7 @@ This Helm chart deploys a single-tenant instance of the Qualytics data quality p
 - **Frontend**: Web UI
 - **Data Tier**: PostgreSQL 17 and RabbitMQ 4.3
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
-- **Dependencies**: nginx-ingress 4.15.1 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
+- **Dependencies**: Qualytics ingress-nginx 4.15.2 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
 
 The current chart and application versions are defined in `charts/qualytics/Chart.yaml`.
 
@@ -26,7 +26,7 @@ qualytics-self-hosted/
     ├── Chart.yaml                      # Chart metadata and dependencies
     ├── values.yaml                     # Complete default configuration
     ├── charts/                         # Packaged chart dependencies (.tgz)
-    │   └── ingress-nginx-4.15.1.tgz    # NGINX ingress controller
+    │   └── ingress-nginx-4.15.2.tgz    # Qualytics NGINX ingress controller
     ├── templates/                      # template files + helpers
     │   ├── _helpers.tpl                # Template helper functions
     │   ├── controlplane-api.yaml       # API deployment & service
@@ -639,9 +639,9 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **API Version**: v2
 - **Type**: application
 - **Version**: date-based (`YYYY.M.D`) — bump on every change.
-- **App Version**: same as chart version.
+- **App Version**: application release deployed by the chart. Keep the current value for chart-only releases.
 - **Dependencies**:
-  1. ingress-nginx 4.15.1 (condition: `nginx.enabled`)
+  1. Qualytics ingress-nginx 4.15.2 (condition: `nginx.enabled`)
 
 ## Authentication Configuration
 
@@ -783,7 +783,7 @@ helm upgrade qualytics qualytics/qualytics \
 ## Additional Resources
 - [Qualytics User Guide](https://userguide.qualytics.io/upgrades/qualytics-single-tenant-instance/)
 - [Spark on Kubernetes (Apache)](https://spark.apache.org/docs/latest/running-on-kubernetes.html) — for client-mode driver semantics + executor pod template
-- [NGINX Ingress Controller](https://kubernetes.github.io/ingress-nginx/)
+- [Qualytics ingress-nginx controller](https://github.com/Qualytics/ingress-nginx)
 
 ### Customer-facing docs in this repo
 Keep these in sync when chart behavior changes — image tags and version strings in particular go stale on every release.
