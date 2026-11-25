@@ -85,7 +85,9 @@ docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.1
 docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
 ```
 
-When upgrading from `2026.11.24` or earlier with a private mirror, copy the applicable Qualytics controller image to your registry before the Helm upgrade. The webhook certificate jobs continue to use the upstream certgen image.
+When upgrading from `2026.11.24` or earlier, pass your original `-f values.yaml` or use `--reset-then-reuse-values` to apply stored overrides to the new chart defaults. Helm's `--reuse-values` carries the old controller image forward. If your values explicitly pin a controller, update that pin to select the Qualytics build.
+
+For a private mirror, copy the applicable Qualytics controller image to your registry before the upgrade. The webhook certificate jobs continue to use the upstream certgen image.
 
 To use a compatible replacement controller, set `registry`, `image`, `tag`, and the replacement image's published `digest` under `nginx.controller.image`. If your values use a full `repository` override, update it along with the tag and digest. With `chroot: true`, set `digestChroot` to the digest of the chroot build. A full `repository` override must name that build explicitly.
 
