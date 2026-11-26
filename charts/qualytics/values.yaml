@@ -82,8 +82,8 @@ global:
   dnsRecord: "changeme.qualytics.io"
   # Names of the Secrets used to pull container images, applied to every pod
   # (control plane, frontend, Spark driver and executors, postgres, rabbitmq,
-  # utility pods). Defaults to the `regcred` Secret created during
-  # installation. Set to [] when your registry allows unauthenticated pulls
+  # utility pods, and bundled ingress controller and webhook jobs). Defaults to
+  # the `regcred` Secret created during installation. Set to [] for unauthenticated pulls
   # (e.g. an internal Artifactory mirror) — no imagePullSecrets are rendered
   # and the regcred Secret is not required.
   imagePullSecrets:
