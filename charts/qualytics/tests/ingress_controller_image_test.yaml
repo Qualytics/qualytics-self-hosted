@@ -46,7 +46,7 @@ tests:
       - isNull:
           path: spec.template.spec.imagePullSecrets
 
-  - it: should pin a replacement controller without changing the webhook image
+  - it: should keep the Qualytics webhook helper when replacing the controller
     set:
       nginx.controller.image.registry: registry.example.com
       nginx.controller.image.image: team/ingress-controller
@@ -65,8 +65,12 @@ tests:
             - name: controller-registry
       - matchRegex:
           path: spec.template.spec.containers[0].image
-          pattern: '^registry\.k8s\.io/ingress-nginx/kube-webhook-certgen:.+@sha256:[0-9a-f]{64}$'
+          pattern: '^docker\.io/qualyticsai/ingress-nginx-controller:kube-webhook-certgen-v[0-9.]+-qualytics\.[0-9]+@sha256:[0-9a-f]{64}$'
         template: charts/nginx/templates/admission-webhooks/job-patch/job-createSecret.yaml
+      - matchRegex:
+          path: spec.template.spec.containers[0].image
+          pattern: '^docker\.io/qualyticsai/ingress-nginx-controller:kube-webhook-certgen-v[0-9.]+-qualytics\.[0-9]+@sha256:[0-9a-f]{64}$'
+        template: charts/nginx/templates/admission-webhooks/job-patch/job-patchWebhook.yaml
 
   - it: should respect an existing chroot repository and its separate digest on upgrade
     release:

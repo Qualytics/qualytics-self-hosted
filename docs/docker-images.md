@@ -1,6 +1,6 @@
-# Qualytics Docker Images - v2026.11.25
+# Qualytics Docker Images - v2026.11.27
 
-This guide lists the images used by Qualytics chart `2026.11.25`. The chart pulls them directly by default; use the mirroring steps when your organization requires an internal registry.
+This guide lists the images used by Qualytics chart `2026.11.27`. The chart pulls them directly by default; use the mirroring steps when your organization requires an internal registry.
 
 Qualytics provides the image registry token through a secure channel. This token only grants access to private container images; it is separate from the deployment identifier and platform license described in the [installation guide](../README.md#qualytics-provided-installation-configuration).
 
@@ -76,20 +76,20 @@ docker pull postgres:17
 
 | Component | Image |
 |---|---|
-| Controller | `docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.2` |
-| Chroot controller (when `nginx.controller.image.chroot: true`) | `docker.io/qualyticsai/ingress-nginx-controller-chroot:v1.30.8-qualytics.2` |
-| Webhook Certgen | `registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9` |
+| Controller | `docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.3` |
+| Chroot controller (when `nginx.controller.image.chroot: true`) | `docker.io/qualyticsai/ingress-nginx-controller-chroot:v1.30.8-qualytics.3` |
+| Webhook Certgen | `docker.io/qualyticsai/ingress-nginx-controller:kube-webhook-certgen-v1.30.8-qualytics.3` |
 
-The controller images are private. Use your existing Qualytics Docker Hub token to pull the selected controller. The chart uses the same registry Secret as the Qualytics application, `regcred` by default. The webhook jobs pull the public certgen image.
+The controller and webhook helper images are private. The helper shares the standard controller’s repository and has its own tag. Create the registry Secret in the release namespace before running Helm so the pre-install webhook Job can pull its image. The bundled chart uses the same Secret as the Qualytics application, `regcred` by default.
 
 ```bash
-docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.2
-docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9
+docker pull docker.io/qualyticsai/ingress-nginx-controller:v1.30.8-qualytics.3
+docker pull docker.io/qualyticsai/ingress-nginx-controller:kube-webhook-certgen-v1.30.8-qualytics.3
 ```
 
-When upgrading from `2026.11.24` or earlier, pass your original `-f values.yaml` or use `--reset-then-reuse-values` to apply stored overrides to the new chart defaults. Helm's `--reuse-values` carries the old controller image forward. If your values explicitly pin a controller, update that pin to select the Qualytics build.
+When upgrading the bundled ingress controller, pass your original `-f values.yaml` or use `--reset-then-reuse-values` to apply stored overrides to the new chart defaults. Helm's `--reuse-values` carries the old controller image forward. Update any explicit controller or webhook image overrides to use the new tags and matching digests.
 
-For a private mirror, copy the applicable Qualytics controller image to your registry before the upgrade.
+For an internal or offline registry, mirror the selected controller and the webhook helper before installation or upgrade. Preserve their multi-architecture indexes and digests. If your mirror rewrites an index, set its digest under `nginx.controller.image.digest` (or `digestChroot`) and `nginx.controller.admissionWebhooks.patch.image.digest` for the helper.
 
 To use a compatible replacement controller, set `registry`, `image`, `tag`, and the replacement image's published `digest` under `nginx.controller.image`. If your values use a full `repository` override, update it along with the tag and digest. With `chroot: true`, set `digestChroot` to the digest of the chroot build. A full `repository` override must name that build explicitly.
 

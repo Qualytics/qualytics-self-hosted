@@ -24,7 +24,7 @@ Datastores are configured in the Qualytics UI after deployment. See the user gui
 
 Before deploying Qualytics, ensure you have:
 
-- A Kubernetes cluster (recommended version 1.30+)
+- A Kubernetes cluster (1.30+ recommended). The optional bundled ingress controller requires 1.35+.
 - `kubectl` configured to access your cluster
 - `helm` CLI installed (recommended version 3.12+)
 - A Qualytics-issued image registry token and a unique deployment identifier
@@ -143,7 +143,7 @@ Update these required settings:
    ```
 
 **Optional configurations:**
-- Enable `nginx` if you need an ingress controller
+- Set `nginx.enabled: true` to install the bundled ingress controller. It requires Kubernetes 1.35 or later and is tested on 1.35, 1.36, and 1.37. If your cluster already provides an ingress controller, leave this option disabled.
 - Provide a TLS Secret for the ingress (see [docs/ingress-tls.md](./docs/ingress-tls.md)).
   Recommended: a single shared `qualytics-tls-cert` Secret referenced via `ingress.tls.secretName`.
   Existing deployments with `api-tls-cert` + `frontend-tls-cert` keep working unchanged.

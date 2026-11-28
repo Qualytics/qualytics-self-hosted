@@ -104,6 +104,7 @@ executorNodeSelector:
 # to install.
 
 nginx:
+  # The bundled ingress controller requires Kubernetes 1.35 or later.
   enabled: false
   controller:
     nodeSelector:

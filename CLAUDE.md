@@ -9,7 +9,7 @@ This Helm chart deploys a single-tenant instance of the Qualytics data quality p
 - **Frontend**: Web UI
 - **Data Tier**: PostgreSQL 17 and RabbitMQ 4.3
 - **Infrastructure**: Ingress with ModSecurity WAF, BYO TLS certificates (customer-provided Secret), platform-specific storage classes (AWS/GCP/Azure)
-- **Dependencies**: Qualytics ingress-nginx 4.15.2 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
+- **Dependencies**: Qualytics ingress-nginx 4.15.3 (TLS is BYO — customer-provided `kubernetes.io/tls` Secret, see [docs/ingress-tls.md](docs/ingress-tls.md))
 
 The current chart and application versions are defined in `charts/qualytics/Chart.yaml`.
 
@@ -26,7 +26,7 @@ qualytics-self-hosted/
     ├── Chart.yaml                      # Chart metadata and dependencies
     ├── values.yaml                     # Complete default configuration
     ├── charts/                         # Packaged chart dependencies (.tgz)
-    │   └── ingress-nginx-4.15.2.tgz    # Qualytics NGINX ingress controller
+    │   └── ingress-nginx-4.15.3.tgz    # Qualytics NGINX ingress controller
     ├── templates/                      # template files + helpers
     │   ├── _helpers.tpl                # Template helper functions
     │   ├── controlplane-api.yaml       # API deployment & service
@@ -641,7 +641,7 @@ Instance-type recommendations live in [docs/cluster-sizing.md](docs/cluster-sizi
 - **Version**: date-based (`YYYY.M.D`) — bump on every change.
 - **App Version**: application release deployed by the chart. Keep the current value for chart-only releases.
 - **Dependencies**:
-  1. Qualytics ingress-nginx 4.15.2 (condition: `nginx.enabled`)
+  1. Qualytics ingress-nginx 4.15.3 (condition: `nginx.enabled`)
 
 ## Authentication Configuration
 
