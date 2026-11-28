@@ -136,6 +136,19 @@ jobs:
             --set ingress.cors=true \
             --set global.dnsRecord=test.qualytics.io > /dev/null
 
+          echo "Testing the bundled ingress controller's Kubernetes version requirement..."
+          helm template test-release charts/qualytics "${values_args[@]}" \
+            --kube-version 1.34.0 --set nginx.enabled=false > /dev/null
+          controller_args=(template test-release charts/qualytics "${values_args[@]}" --set nginx.enabled=true)
+          if output=$(helm "${controller_args[@]}" --kube-version 1.34.0 2>&1); then
+            echo "Expected the bundled controller to reject Kubernetes 1.34."
+            exit 1
+          fi
+          grep -F '>=1.35.0-0' <<< "$output"
+          for version in 1.35.0 1.36.0 1.37.0; do
+            helm "${controller_args[@]}" --kube-version "$version" > /dev/null
+          done
+
           # Test minimal configuration (customer might disable components). Existing values
           # files still carry the deprecated numVolumes key, which is ignored.
           echo "  Testing minimal configuration..."
